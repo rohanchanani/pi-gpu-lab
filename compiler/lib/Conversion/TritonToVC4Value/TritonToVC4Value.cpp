@@ -31,8 +31,9 @@
 //   masked tt.store with the same tail mask
 //   straight-line i32/f32 add/sub/mul/cmp/select compute DAGs
 //
-// Future phases should extend the semantic planners below (launch/range/pointer/
-// mask/memory/compute/reduction/dot) instead of adding kernel-name templates.
+// Future phases should extend the semantic planners below
+// (launch/range/pointer/ mask/memory/compute/reduction/dot) instead of adding
+// kernel-name templates.
 //
 //===----------------------------------------------------------------------===//
 
@@ -67,10 +68,10 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LLVM.h"
 #include "triton/Dialect/Triton/IR/Dialect.h"
-#include "llvm/ADT/DenseMap.h"
-#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
+#include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -102,6 +103,7 @@ constexpr llvm::StringLiteral kTTBroadcastOpName("tt.broadcast");
 constexpr llvm::StringLiteral kTTAddPtrOpName("tt.addptr");
 constexpr llvm::StringLiteral kTTLoadOpName("tt.load");
 constexpr llvm::StringLiteral kTTStoreOpName("tt.store");
+constexpr llvm::StringLiteral kTTCallOpName("tt.call");
 constexpr llvm::StringLiteral kTTDotOpName("tt.dot");
 constexpr llvm::StringLiteral kTTReduceOpName("tt.reduce");
 constexpr llvm::StringLiteral kTTReduceReturnOpName("tt.reduce.return");
@@ -116,9 +118,12 @@ constexpr llvm::StringLiteral kVC4ValueArgNameAttr("vc4value.arg_name");
 constexpr llvm::StringLiteral kVC4ValueDirectionAttr("vc4value.direction");
 constexpr llvm::StringLiteral kVC4ValueShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kVC4ValueFPDomainAttr("vc4value.fp_domain");
+constexpr llvm::StringLiteral
+    kVC4ValueReductionPolicyAttr("vc4value.reduction_policy");
 
 constexpr llvm::StringLiteral kVC4ValueProgramIdOpName("vc4value.program_id");
-constexpr llvm::StringLiteral kVC4ValueNumProgramsOpName("vc4value.num_programs");
+constexpr llvm::StringLiteral
+    kVC4ValueNumProgramsOpName("vc4value.num_programs");
 
 constexpr unsigned kPhase7VectorWidth = 16;
 
@@ -135,15 +140,14 @@ static LogicalResult emitStagedDiagnostic(Operation *op, const Twine &detail) {
 static LogicalResult emitStagedBodyFeatureDiagnostic(Operation *op,
                                                      const Twine &detail) {
   return op->emitOpError()
-         << detail
-         << " staged by body feature, not unsupported control flow; "
+         << detail << " staged by body feature, not unsupported control flow; "
          << "READY_FOR_TRITON remains NO";
 }
 
 static LogicalResult emitPermanentReject(Operation *op, const Twine &detail) {
-  return op->emitOpError()
-         << detail << " is rejected by the VC4 TTIR target profile. "
-         << "READY_FOR_TRITON remains NO";
+  return op->emitOpError() << detail
+                           << " is rejected by the VC4 TTIR target profile. "
+                           << "READY_FOR_TRITON remains NO";
 }
 
 static LogicalResult emitInternalError(Operation *op, const Twine &detail) {
@@ -176,10 +180,9 @@ static bool isForbiddenValueOutputDialect(StringRef dialect) {
   return dialect == "tt" || dialect == "ttg" || dialect == "triton_gpu" ||
          dialect == "nvgpu" || dialect == "nvvm" || dialect == "rocdl" ||
          dialect == "gpu" || dialect == "llvm" || dialect == "spirv" ||
-         dialect == "tensor" || dialect == "linalg" ||
-         dialect == "stablehlo" || dialect == "mhlo" || dialect == "tosa" ||
-         dialect == "iree" || dialect == "vc4kernel" ||
-         dialect == "ssavc4" || dialect == "vc4";
+         dialect == "tensor" || dialect == "linalg" || dialect == "stablehlo" ||
+         dialect == "mhlo" || dialect == "tosa" || dialect == "iree" ||
+         dialect == "vc4kernel" || dialect == "ssavc4" || dialect == "vc4";
 }
 
 static bool isAllowedValueOutputBodyDialect(StringRef dialect) {
@@ -240,6 +243,23 @@ static bool isTensor16F32(Type type) {
          shaped.getElementType().isF32();
 }
 
+static bool isRankedTensorPointer(Type type) {
+  auto shaped = llvm::dyn_cast<RankedTensorType>(type);
+  return shaped &&
+         llvm::isa<mlir::triton::PointerType>(shaped.getElementType());
+}
+
+static bool isScalarPointer(Type type) {
+  return llvm::isa<mlir::triton::PointerType>(type);
+}
+
+static bool isPublicTTFunc(Operation *op) {
+  if (!hasName(op, kTTFuncOpName))
+    return false;
+  auto visibility = op->getAttrOfType<StringAttr>("sym_visibility");
+  return !visibility || visibility.getValue() == "public";
+}
+
 static bool isOrContainsI64(Type type) {
   if (type.isSignlessInteger(64))
     return true;
@@ -251,6 +271,181 @@ static bool isOrContainsI64(Type type) {
 static bool containsRankGreaterThanOneTensor(Type type) {
   auto shaped = llvm::dyn_cast<RankedTensorType>(type);
   return shaped && shaped.getRank() > 1;
+}
+
+enum class TTIRReduceClassification {
+  NotReduceCall,
+  AddI32,
+  AddF32,
+  NonAdd,
+  RankGreaterThanOne,
+  MultiResult,
+  Unsupported
+};
+
+struct TTIRReduceCallInfo {
+  TTIRReduceClassification classification =
+      TTIRReduceClassification::NotReduceCall;
+  Operation *reduceOp = nullptr;
+};
+
+static Operation *lookupTTCallee(Operation *callOp) {
+  if (!hasName(callOp, kTTCallOpName))
+    return nullptr;
+  auto callee = callOp->getAttrOfType<SymbolRefAttr>("callee");
+  if (!callee)
+    return nullptr;
+  return SymbolTable::lookupNearestSymbolFrom(callOp, callee);
+}
+
+static Operation *getFirstReachableReturn(Operation *funcOp) {
+  if (!funcOp || funcOp->getNumRegions() != 1 || funcOp->getRegion(0).empty())
+    return nullptr;
+  Block &entry = funcOp->getRegion(0).front();
+  if (entry.empty())
+    return nullptr;
+  Operation &terminator = entry.back();
+  return hasName(&terminator, kTTReturnOpName) ? &terminator : nullptr;
+}
+
+static bool valueIsOneOfBlockArgs(Value value, Block &block) {
+  for (BlockArgument arg : block.getArguments())
+    if (value == arg)
+      return true;
+  return false;
+}
+
+static bool operationAddsTwoBlockArgs(Operation *op, Type elementType,
+                                      Block &block) {
+  if (!op || op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return false;
+  if (elementType.isF32()) {
+    if (!hasName(op, "arith.addf"))
+      return false;
+  } else if (elementType.isSignlessInteger(32)) {
+    if (!hasName(op, "arith.addi"))
+      return false;
+  } else {
+    return false;
+  }
+  return valueIsOneOfBlockArgs(op->getOperand(0), block) &&
+         valueIsOneOfBlockArgs(op->getOperand(1), block) &&
+         op->getOperand(0) != op->getOperand(1);
+}
+
+static bool functionReturnsAddOfArgs(Operation *funcOp, Type elementType) {
+  Operation *ret = getFirstReachableReturn(funcOp);
+  if (!ret || ret->getNumOperands() != 1 || funcOp->getRegion(0).empty())
+    return false;
+  Block &entry = funcOp->getRegion(0).front();
+  if (entry.getNumArguments() != 2)
+    return false;
+  Operation *def = ret->getOperand(0).getDefiningOp();
+  return operationAddsTwoBlockArgs(def, elementType, entry);
+}
+
+static TTIRReduceClassification classifyReduceReturnValue(Value returned,
+                                                          Block &reduceBlock,
+                                                          Type elementType) {
+  Operation *def = returned.getDefiningOp();
+  if (operationAddsTwoBlockArgs(def, elementType, reduceBlock))
+    return elementType.isF32() ? TTIRReduceClassification::AddF32
+                               : TTIRReduceClassification::AddI32;
+  if (hasName(def, kTTCallOpName)) {
+    if (def->getNumOperands() != 2 || def->getNumResults() != 1)
+      return TTIRReduceClassification::Unsupported;
+    if (!valueIsOneOfBlockArgs(def->getOperand(0), reduceBlock) ||
+        !valueIsOneOfBlockArgs(def->getOperand(1), reduceBlock) ||
+        def->getOperand(0) == def->getOperand(1))
+      return TTIRReduceClassification::Unsupported;
+    Operation *callee = lookupTTCallee(def);
+    if (functionReturnsAddOfArgs(callee, elementType))
+      return elementType.isF32() ? TTIRReduceClassification::AddF32
+                                 : TTIRReduceClassification::AddI32;
+    return TTIRReduceClassification::NonAdd;
+  }
+  return TTIRReduceClassification::NonAdd;
+}
+
+static TTIRReduceCallInfo classifyTTIRReduceCall(Operation *callOp) {
+  TTIRReduceCallInfo info;
+  Operation *callee = lookupTTCallee(callOp);
+  if (!callee || !hasName(callee, kTTFuncOpName) ||
+      callee->getNumRegions() != 1 || callee->getRegion(0).empty())
+    return info;
+
+  Operation *ret = getFirstReachableReturn(callee);
+  if (!ret || ret->getNumOperands() != 1)
+    return info;
+  Operation *reduce = ret->getOperand(0).getDefiningOp();
+  if (!hasName(reduce, kTTReduceOpName))
+    return info;
+
+  info.reduceOp = reduce;
+  if (reduce->getNumOperands() != 1 || reduce->getNumResults() != 1 ||
+      callOp->getNumResults() != 1) {
+    info.classification = TTIRReduceClassification::MultiResult;
+    return info;
+  }
+
+  auto axisAttr = reduce->getAttrOfType<IntegerAttr>("axis");
+  if (!axisAttr) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+  if (axisAttr.getInt() != 0) {
+    info.classification = TTIRReduceClassification::RankGreaterThanOne;
+    return info;
+  }
+
+  auto inputTensor =
+      llvm::dyn_cast<RankedTensorType>(reduce->getOperand(0).getType());
+  if (!inputTensor) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+  if (inputTensor.getRank() > 1 ||
+      containsRankGreaterThanOneTensor(callOp->getResult(0).getType())) {
+    info.classification = TTIRReduceClassification::RankGreaterThanOne;
+    return info;
+  }
+  if (inputTensor.getRank() != 1 || inputTensor.getDimSize(0) != 16) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+
+  Type elementType = inputTensor.getElementType();
+  if (!elementType.isF32() && !elementType.isSignlessInteger(32)) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+  if (reduce->getResult(0).getType() != elementType ||
+      callOp->getResult(0).getType() != elementType) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+  if (reduce->getNumRegions() != 1 || reduce->getRegion(0).empty()) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+
+  Block &combiner = reduce->getRegion(0).front();
+  if (combiner.getNumArguments() != 2 ||
+      combiner.getArgument(0).getType() != elementType ||
+      combiner.getArgument(1).getType() != elementType || combiner.empty()) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+  Operation &terminator = combiner.back();
+  if (!hasName(&terminator, kTTReduceReturnOpName) ||
+      terminator.getNumOperands() != 1) {
+    info.classification = TTIRReduceClassification::Unsupported;
+    return info;
+  }
+
+  info.classification = classifyReduceReturnValue(terminator.getOperand(0),
+                                                  combiner, elementType);
+  return info;
 }
 
 enum class TTIRScalarElementKind { I1, I32, F32, Unsupported };
@@ -289,8 +484,9 @@ public:
       elementType = tensor.getElementType();
     info.pointeeKind = classifyScalarElement(elementType);
     info.isSupportedPhase75Element =
-        !info.isTensorPointer && (info.pointeeKind == TTIRScalarElementKind::I32 ||
-                                  info.pointeeKind == TTIRScalarElementKind::F32);
+        !info.isTensorPointer &&
+        (info.pointeeKind == TTIRScalarElementKind::I32 ||
+         info.pointeeKind == TTIRScalarElementKind::F32);
     return info;
   }
 
@@ -326,7 +522,8 @@ public:
     return VectorType::get({kPhase7VectorWidth}, elem);
   }
 
-  Type getValueElementType(TTIRScalarElementKind kind, OpBuilder &builder) const {
+  Type getValueElementType(TTIRScalarElementKind kind,
+                           OpBuilder &builder) const {
     switch (kind) {
     case TTIRScalarElementKind::I1:
       return builder.getI1Type();
@@ -572,7 +769,8 @@ static bool isZeroLikeConstant(Operation *op) {
 
 static AffineMap getRank1IdentityMap(MLIRContext *ctx) {
   Builder b(ctx);
-  return AffineMap::get(/*dimCount=*/1, /*symbolCount=*/0, b.getAffineDimExpr(0));
+  return AffineMap::get(/*dimCount=*/1, /*symbolCount=*/0,
+                        b.getAffineDimExpr(0));
 }
 
 static Operation *createGenericOp(OpBuilder &builder, Location loc,
@@ -591,7 +789,8 @@ static Value createGenericOpWithResult(OpBuilder &builder, Location loc,
                                        StringRef name, ValueRange operands,
                                        ArrayRef<NamedAttribute> attrs,
                                        Type resultType) {
-  Operation *op = createGenericOp(builder, loc, name, operands, attrs, resultType);
+  Operation *op =
+      createGenericOp(builder, loc, name, operands, attrs, resultType);
   return op->getResult(0);
 }
 
@@ -617,17 +816,17 @@ static Value createVectorStep(OpBuilder &builder, Location loc) {
       VectorType::get({16}, builder.getIndexType()));
 }
 
-static Value createVectorBroadcast(OpBuilder &builder, Location loc, Value value,
-                                   Type resultType) {
+static Value createVectorBroadcast(OpBuilder &builder, Location loc,
+                                   Value value, Type resultType) {
   return createGenericOpWithResult(builder, loc, "vector.broadcast", value, {},
                                    resultType);
 }
 
 static Value createVectorCreateMask(OpBuilder &builder, Location loc,
                                     Value activeCount) {
-  return createGenericOpWithResult(
-      builder, loc, "vector.create_mask", activeCount, {},
-      VectorType::get({16}, builder.getI1Type()));
+  return createGenericOpWithResult(builder, loc, "vector.create_mask",
+                                   activeCount, {},
+                                   VectorType::get({16}, builder.getI1Type()));
 }
 
 static Value createVectorTransferRead(OpBuilder &builder, Location loc,
@@ -667,6 +866,13 @@ static void createVectorTransferWrite(OpBuilder &builder, Location loc,
   createGenericOp(builder, loc, "vector.transfer_write", operands, attrs);
 }
 
+static Value createVectorAddReduction(OpBuilder &builder, Location loc,
+                                      Value vectorValue) {
+  return builder
+      .create<vector::ReductionOp>(loc, vector::CombiningKind::ADD, vectorValue)
+      .getResult();
+}
+
 struct TTIRArgInfo {
   BlockArgument sourceArg;
   std::string valueName;
@@ -685,6 +891,7 @@ struct PointerExpr {
   Value offsetValue;
   TTIRScalarElementKind element = TTIRScalarElementKind::Unsupported;
   bool hasCanonicalOffset = false;
+  bool isScalarOffset = false;
 };
 
 struct CommonPlan {
@@ -709,7 +916,8 @@ public:
       if (fnType && !fnType.getResults().empty())
         return emitStagedDiagnostic(funcOp, "TTIR functions with results");
     } else {
-      return funcOp->emitOpError("expected tt.func to implement FunctionOpInterface");
+      return funcOp->emitOpError(
+          "expected tt.func to implement FunctionOpInterface");
     }
     if (funcOp->getNumRegions() != 1 || funcOp->getRegion(0).empty())
       return emitStagedDiagnostic(funcOp, "tt.func without a body region");
@@ -761,13 +969,16 @@ public:
     return &args[it->second];
   }
 
-  Operation *lookupDef(Value value) const {
-    return value.getDefiningOp();
-  }
+  Operation *lookupDef(Value value) const { return value.getDefiningOp(); }
 
-  bool isTailMaskValue(Value value) const { return value == common.tailMaskValue; }
-  bool isRequiredDataValue(Value value) const { return requiredDataValues.contains(value); }
-  const SmallVector<Value, 4> *lookupContiguousOffsetScalarTerms(Value value) const {
+  bool isTailMaskValue(Value value) const {
+    return value == common.tailMaskValue;
+  }
+  bool isRequiredDataValue(Value value) const {
+    return requiredDataValues.contains(value);
+  }
+  const SmallVector<Value, 4> *
+  lookupContiguousOffsetScalarTerms(Value value) const {
     auto it = contiguousOffsetScalarTerms.find(value);
     if (it == contiguousOffsetScalarTerms.end())
       return nullptr;
@@ -802,6 +1013,17 @@ public:
     if (auto found = pointerExprs.find(ptrValue); found != pointerExprs.end())
       return found->second;
 
+    if (auto blockArg = llvm::dyn_cast<BlockArgument>(ptrValue)) {
+      auto it = argIndex.find(blockArg);
+      if (it == argIndex.end() || !args[it->second].isPointer)
+        return emitStagedDiagnostic(
+            funcOp, "scalar pointer base not backed by a pointer argument");
+      PointerExpr expr;
+      expr.sourcePointerArg = blockArg;
+      expr.element = args[it->second].pointerElement;
+      return expr;
+    }
+
     Operation *def = ptrValue.getDefiningOp();
     if (!def)
       return failure();
@@ -812,11 +1034,23 @@ public:
       FailureOr<PointerExpr> base = classifyPointer(def->getOperand(0));
       if (failed(base))
         return failure();
-      if (!contiguousOffsetScalarTerms.contains(def->getOperand(1)))
-        return emitStagedDiagnostic(def, "non-canonical pointer offset");
+      bool scalarPointerResult = isScalarPointer(def->getResult(0).getType());
+      bool tensorPointerResult =
+          isRankedTensorPointer(def->getResult(0).getType());
+      if (scalarPointerResult) {
+        if (!contiguousOffsetScalarTerms.contains(def->getOperand(1)))
+          return emitStagedDiagnostic(def,
+                                      "non-canonical scalar pointer offset");
+      } else if (tensorPointerResult) {
+        if (!contiguousOffsetScalarTerms.contains(def->getOperand(1)))
+          return emitStagedDiagnostic(def, "non-canonical pointer offset");
+      } else {
+        return emitStagedDiagnostic(def, "unsupported pointer expression");
+      }
       PointerExpr expr = *base;
       expr.offsetValue = def->getOperand(1);
       expr.hasCanonicalOffset = true;
+      expr.isScalarOffset = scalarPointerResult;
       return expr;
     }
 
@@ -824,10 +1058,12 @@ public:
       Value scalar = def->getOperand(0);
       auto blockArg = llvm::dyn_cast<BlockArgument>(scalar);
       if (!blockArg)
-        return emitStagedDiagnostic(def, "pointer base not formed from scalar pointer argument splat");
+        return emitStagedDiagnostic(
+            def, "pointer base not formed from scalar pointer argument splat");
       auto it = argIndex.find(blockArg);
       if (it == argIndex.end() || !args[it->second].isPointer)
-        return emitStagedDiagnostic(def, "tt.splat pointer base not backed by a pointer argument");
+        return emitStagedDiagnostic(
+            def, "tt.splat pointer base not backed by a pointer argument");
       PointerExpr expr;
       expr.sourcePointerArg = blockArg;
       expr.element = args[it->second].pointerElement;
@@ -855,9 +1091,11 @@ private:
           makeUniqueMetadataName(inferSourceArgName(arg, index), usedArgNames);
       if (auto pointer = typeAdapter.classifyPointerType(arg.getType())) {
         if (pointer->isTensorPointer)
-          return emitStagedDiagnostic(funcOp, "block pointer or tensor pointer argument");
+          return emitStagedDiagnostic(
+              funcOp, "block pointer or tensor pointer argument");
         if (!pointer->isSupportedPhase75Element)
-          return emitStagedDiagnostic(funcOp, "unsupported pointer argument element type");
+          return emitStagedDiagnostic(
+              funcOp, "unsupported pointer argument element type");
         info.isPointer = true;
         info.pointerElement = pointer->pointeeKind;
       } else if (isScalarI32(arg.getType()) || isScalarF32(arg.getType())) {
@@ -865,8 +1103,10 @@ private:
                                                : TTIRArgumentRole::ScalarI32;
       } else {
         if (typeAdapter.classifyTensorPointerElement(arg.getType()))
-          return emitStagedDiagnostic(funcOp, "unsupported pointer argument element type");
-        return emitStagedDiagnostic(funcOp, "unsupported TTIR function argument type");
+          return emitStagedDiagnostic(
+              funcOp, "unsupported pointer argument element type");
+        return emitStagedDiagnostic(funcOp,
+                                    "unsupported TTIR function argument type");
       }
       argIndex[arg] = args.size();
       args.push_back(info);
@@ -906,26 +1146,55 @@ private:
     // shape diagnostics.  This keeps future dot/reduction tests from being
     // masked by their rank-2 operands or helper constants.
     Operation *stagedBodyFeature = nullptr;
+    TTIRReduceClassification stagedReduceClassification =
+        TTIRReduceClassification::NotReduceCall;
     funcOp->walk([&](Operation *op) {
       if (stagedBodyFeature)
         return WalkResult::interrupt();
+      if (hasName(op, kTTCallOpName)) {
+        TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
+        if (reduceInfo.classification ==
+                TTIRReduceClassification::RankGreaterThanOne ||
+            reduceInfo.classification == TTIRReduceClassification::NonAdd ||
+            reduceInfo.classification ==
+                TTIRReduceClassification::MultiResult ||
+            reduceInfo.classification ==
+                TTIRReduceClassification::Unsupported) {
+          stagedBodyFeature = op;
+          stagedReduceClassification = reduceInfo.classification;
+          return WalkResult::interrupt();
+        }
+      }
       if (hasName(op, kTTDotOpName) || hasName(op, kTTReduceOpName) ||
           hasName(op, kTTReduceReturnOpName) ||
-          hasName(op, kTTMakeBlockPtrOpName) ||
-          hasName(op, kTTAdvanceOpName)) {
+          hasName(op, kTTMakeBlockPtrOpName) || hasName(op, kTTAdvanceOpName)) {
         stagedBodyFeature = op;
         return WalkResult::interrupt();
       }
       return WalkResult::advance();
     });
     if (stagedBodyFeature) {
+      if (hasName(stagedBodyFeature, kTTCallOpName)) {
+        if (stagedReduceClassification ==
+            TTIRReduceClassification::RankGreaterThanOne)
+          return stagedBodyFeature->emitOpError()
+                 << "rank>1 tt.reduce is staged; READY_FOR_TRITON remains NO";
+        if (stagedReduceClassification == TTIRReduceClassification::NonAdd)
+          return stagedBodyFeature->emitOpError()
+                 << "non-add tt.reduce is staged; READY_FOR_TRITON remains NO";
+        if (stagedReduceClassification == TTIRReduceClassification::MultiResult)
+          return stagedBodyFeature->emitOpError()
+                 << "unsupported tt.reduce combiner; READY_FOR_TRITON remains "
+                    "NO";
+        return stagedBodyFeature->emitOpError()
+               << "unsupported tt.reduce combiner; READY_FOR_TRITON remains NO";
+      }
       if (hasName(stagedBodyFeature, kTTDotOpName))
         return emitStagedBodyFeatureDiagnostic(stagedBodyFeature,
                                                "tt.dot / contract");
       if (hasName(stagedBodyFeature, kTTReduceOpName) ||
           hasName(stagedBodyFeature, kTTReduceReturnOpName))
-        return emitStagedBodyFeatureDiagnostic(stagedBodyFeature,
-                                               "tt.reduce");
+        return emitStagedBodyFeatureDiagnostic(stagedBodyFeature, "tt.reduce");
       return emitStagedBodyFeatureDiagnostic(stagedBodyFeature,
                                              "block-pointer TTIR op");
     }
@@ -956,8 +1225,7 @@ private:
       }
       for (Type type : op->getResultTypes()) {
         if (containsRankGreaterThanOneTensor(type)) {
-          (void)emitStagedDiagnostic(op,
-                                     "rank-2 or higher TTIR tensor result");
+          (void)emitStagedDiagnostic(op, "rank-2 or higher TTIR tensor result");
           sawFailure = true;
           return WalkResult::interrupt();
         }
@@ -990,7 +1258,8 @@ private:
                                   "TTIR functions without 1..3 program_id ops");
     DenseSet<int64_t> seenProgramIdAxes;
     for (Operation *programId : programIds) {
-      FailureOr<TTIRProgramAxis> axis = attrAdapter.classifyProgramAxis(programId);
+      FailureOr<TTIRProgramAxis> axis =
+          attrAdapter.classifyProgramAxis(programId);
       if (failed(axis))
         return failure();
       int64_t axisValue = static_cast<int64_t>(*axis);
@@ -1017,11 +1286,13 @@ private:
 
     if (ranges.size() != 1)
       return emitStagedDiagnostic(funcOp, "tt.make_range other than 0..16");
-    FailureOr<TTIRRangeInfo> range = attrAdapter.classifyMakeRange(ranges.front());
+    FailureOr<TTIRRangeInfo> range =
+        attrAdapter.classifyMakeRange(ranges.front());
     if (failed(range))
       return failure();
     if (range->start != 0 || range->end != 16 || range->width != 16)
-      return emitStagedDiagnostic(ranges.front(), "tt.make_range other than 0..16");
+      return emitStagedDiagnostic(ranges.front(),
+                                  "tt.make_range other than 0..16");
     common.makeRange = ranges.front();
 
     if (stores.empty())
@@ -1031,9 +1302,15 @@ private:
 
     for (Operation *addptr : addptrs) {
       if (addptr->getNumOperands() != 2)
-        return emitStagedDiagnostic(addptr, "tt.addptr without pointer and offset operands");
-      if (failed(verifyContiguousOffset(addptr->getOperand(1))))
-        return failure();
+        return emitStagedDiagnostic(
+            addptr, "tt.addptr without pointer and offset operands");
+      if (isScalarPointer(addptr->getResult(0).getType())) {
+        if (failed(verifyScalarOffset(addptr->getOperand(1))))
+          return failure();
+      } else {
+        if (failed(verifyContiguousOffset(addptr->getOperand(1))))
+          return failure();
+      }
     }
 
     Value mask;
@@ -1076,6 +1353,18 @@ private:
         if (operands != 3)
           return emitStagedDiagnostic(memoryOp,
                                       "tt.store without pointer, value, mask");
+        if (!llvm::isa<RankedTensorType>(memoryOp->getOperand(1).getType())) {
+          if (!memoryOp->getOperand(2).getType().isInteger(1))
+            return emitStagedDiagnostic(memoryOp,
+                                        "scalar tt.store mask is not i1");
+          FailureOr<PointerExpr> ptr = classifyPointer(memoryOp->getOperand(0));
+          if (failed(ptr))
+            return failure();
+          if (!ptr->isScalarOffset)
+            return emitStagedDiagnostic(memoryOp,
+                                        "scalar tt.store pointer offset");
+          continue;
+        }
         Value candidateMask = memoryOp->getOperand(2);
         if (!matchesCanonicalTailMask(candidateMask))
           return emitStagedDiagnostic(memoryOp,
@@ -1112,9 +1401,9 @@ private:
                                             visiting)))
       return failure();
     if (!sawRange)
-      return emitStagedDiagnostic(offset.getDefiningOp() ? offset.getDefiningOp()
-                                                         : funcOp,
-                                  "pointer offset missing tt.make_range lanes");
+      return emitStagedDiagnostic(
+          offset.getDefiningOp() ? offset.getDefiningOp() : funcOp,
+          "pointer offset missing tt.make_range lanes");
     for (Value term : scalarTerms)
       markRequiredValue(term);
     contiguousOffsetScalarTerms[offset] = std::move(scalarTerms);
@@ -1122,9 +1411,29 @@ private:
     return success();
   }
 
-  LogicalResult collectContiguousOffsetTerms(
-      Value value, SmallVectorImpl<Value> &scalarTerms, bool &sawRange,
-      DenseSet<Value> &visiting) {
+  LogicalResult verifyScalarOffset(Value offset) {
+    if (contiguousOffsetScalarTerms.contains(offset))
+      return success();
+    if (!offset || (!offset.getType().isSignlessInteger(32) &&
+                    !offset.getType().isIndex()))
+      return emitStagedDiagnostic(
+          offset.getDefiningOp() ? offset.getDefiningOp() : funcOp,
+          "non-canonical scalar pointer offset");
+    if (valueDependsOnMakeRange(offset))
+      return emitStagedDiagnostic(
+          offset.getDefiningOp() ? offset.getDefiningOp() : funcOp,
+          "scalar pointer offset depends on lanes");
+    SmallVector<Value, 1> scalarTerms;
+    scalarTerms.push_back(offset);
+    markRequiredValue(offset);
+    contiguousOffsetScalarTerms[offset] = std::move(scalarTerms);
+    canonicalInfrastructureValues.insert(offset);
+    return success();
+  }
+
+  LogicalResult
+  collectContiguousOffsetTerms(Value value, SmallVectorImpl<Value> &scalarTerms,
+                               bool &sawRange, DenseSet<Value> &visiting) {
     if (!value)
       return emitStagedDiagnostic(funcOp, "non-canonical pointer offset");
     if (value == common.makeRange->getResult(0)) {
@@ -1144,14 +1453,16 @@ private:
     Operation *def = value.getDefiningOp();
     if (!def) {
       visiting.erase(value);
-      return emitStagedDiagnostic(funcOp, "pointer offset missing tt.make_range lanes");
+      return emitStagedDiagnostic(funcOp,
+                                  "pointer offset missing tt.make_range lanes");
     }
 
     if (hasName(def, kTTSplatOpName) && def->getNumOperands() == 1) {
       Value scalar = def->getOperand(0);
       if (!isScalarI32(scalar.getType()) && !scalar.getType().isIndex()) {
         visiting.erase(value);
-        return emitStagedDiagnostic(def, "pointer scalar base is not i32/index");
+        return emitStagedDiagnostic(def,
+                                    "pointer scalar base is not i32/index");
       }
       scalarTerms.push_back(scalar);
       canonicalInfrastructureValues.insert(value);
@@ -1227,7 +1538,7 @@ private:
       return std::nullopt;
     const SmallVector<Value, 4> *maskTerms =
         lookupContiguousOffsetScalarTerms(cmpi.getOperand(0));
-    if (!maskTerms || maskTerms->empty())
+    if (!maskTerms)
       return std::nullopt;
 
     Operation *rhsSplat = cmpi.getOperand(1).getDefiningOp();
@@ -1263,6 +1574,12 @@ private:
         lookupContiguousOffsetScalarTerms(pointerOffset);
     if (!maskTerms || !pointerTerms)
       return false;
+    if (maskTerms->empty()) {
+      for (Value term : *pointerTerms)
+        if (!isRowStrideBaseTerm(term))
+          return false;
+      return true;
+    }
     DenseSet<Value> pointerTermSet;
     for (Value term : *pointerTerms)
       pointerTermSet.insert(term);
@@ -1272,21 +1589,41 @@ private:
     return true;
   }
 
+  bool isRowStrideBaseTerm(Value term) const {
+    Operation *def = term.getDefiningOp();
+    if (!hasName(def, "arith.muli") || def->getNumOperands() != 2)
+      return false;
+    auto isLaunch = [&](Value value) {
+      return plannerLaunchIdentityValue(value);
+    };
+    auto isDynamicStride = [&](Value value) {
+      return llvm::isa<BlockArgument>(value);
+    };
+    return (isLaunch(def->getOperand(0)) &&
+            isDynamicStride(def->getOperand(1))) ||
+           (isLaunch(def->getOperand(1)) &&
+            isDynamicStride(def->getOperand(0)));
+  }
+
+  bool plannerLaunchIdentityValue(Value value) const {
+    Operation *def = value.getDefiningOp();
+    return def && common.launchIdentityAxes.contains(def);
+  }
+
   LogicalResult recordCanonicalTailMask(Value mask) {
-    std::optional<BlockArgument> matchedSizeArg =
-        matchCanonicalTailMask(mask);
+    std::optional<BlockArgument> matchedSizeArg = matchCanonicalTailMask(mask);
     if (!matchedSizeArg)
-      return emitStagedDiagnostic(mask.getDefiningOp() ? mask.getDefiningOp()
-                                                       : funcOp,
-                                  "tail mask not formed by canonical offsets < bound");
+      return emitStagedDiagnostic(
+          mask.getDefiningOp() ? mask.getDefiningOp() : funcOp,
+          "tail mask not formed by canonical offsets < bound");
     Operation *cmp = mask.getDefiningOp();
     Operation *rhsSplat =
         llvm::cast<arith::CmpIOp>(cmp).getOperand(1).getDefiningOp();
     BlockArgument sizeArg = *matchedSizeArg;
     auto it = argIndex.find(sizeArg);
     if (it == argIndex.end())
-      return emitInternalError(rhsSplat,
-                               "tail mask size argument missing from arg table");
+      return emitInternalError(
+          rhsSplat, "tail mask size argument missing from arg table");
     args[it->second].role = TTIRArgumentRole::ScalarTailBound;
     common.sizeArg = sizeArg;
     canonicalInfrastructureValues.insert(rhsSplat->getResult(0));
@@ -1313,7 +1650,8 @@ private:
       }
       auto it = argIndex.find(ptr->sourcePointerArg);
       if (it == argIndex.end()) {
-        (void)emitInternalError(op, "pointer base argument missing from arg table");
+        (void)emitInternalError(op,
+                                "pointer base argument missing from arg table");
         sawFailure = true;
         return WalkResult::interrupt();
       }
@@ -1402,8 +1740,12 @@ private:
 
   void markRequiredDataflow() {
     funcOp->walk([&](Operation *op) {
-      if (hasName(op, kTTStoreOpName) && op->getNumOperands() >= 2)
+      if (hasName(op, kTTStoreOpName) && op->getNumOperands() >= 2) {
         markRequiredValue(op->getOperand(1));
+        if (op->getNumOperands() == 3 &&
+            !llvm::isa<RankedTensorType>(op->getOperand(1).getType()))
+          markRequiredValue(op->getOperand(2));
+      }
       if (op->getName().getDialectNamespace() == "scf" ||
           op->getName().getDialectNamespace() == "cf") {
         for (Value operand : op->getOperands())
@@ -1436,7 +1778,8 @@ public:
     if (failed(emitCommonPrefix()))
       return failure();
 
-    if (failed(lowerBlock(planner.getEntryBlock(), valueFunc.getBody().front())))
+    if (failed(
+            lowerBlock(planner.getEntryBlock(), valueFunc.getBody().front())))
       return failure();
 
     if (valueFunc.getBody().front().empty() ||
@@ -1451,12 +1794,14 @@ private:
     Operation *sourceFunc = planner.getFuncOp();
     auto fn = llvm::dyn_cast<FunctionOpInterface>(sourceFunc);
     if (!fn)
-      return sourceFunc->emitOpError("expected tt.func to implement FunctionOpInterface");
+      return sourceFunc->emitOpError(
+          "expected tt.func to implement FunctionOpInterface");
 
     SmallVector<Type, 8> argTypes;
     for (const TTIRArgInfo &arg : planner.getArgs()) {
       if (arg.isPointer) {
-        Type elemType = typeAdapter.getValueElementType(arg.pointerElement, builder);
+        Type elemType =
+            typeAdapter.getValueElementType(arg.pointerElement, builder);
         if (!elemType)
           return sourceFunc->emitOpError("unsupported pointer element type");
         auto memorySpace = mlir::vc4value::GlobalMemorySpaceAttr::get(ctx);
@@ -1480,8 +1825,12 @@ private:
     valueFunc->setAttr(kVC4ValueKernelAttr, builder.getUnitAttr());
     valueFunc->setAttr(kVC4ValueGridRankAttr,
                        builder.getI32IntegerAttr(planner.getGridRank()));
-    if (functionNeedsFiniteFPDomain())
-      valueFunc->setAttr(kVC4ValueFPDomainAttr, builder.getStringAttr("finite"));
+    if (functionNeedsFiniteFPDomain() || functionNeedsFiniteReductionPolicy())
+      valueFunc->setAttr(kVC4ValueFPDomainAttr,
+                         builder.getStringAttr("finite"));
+    if (functionNeedsFiniteReductionPolicy())
+      valueFunc->setAttr(kVC4ValueReductionPolicyAttr,
+                         builder.getStringAttr("finite_tree"));
 
     Block *entry = valueFunc.addEntryBlock();
     for (auto [index, arg] : llvm::enumerate(planner.getArgs())) {
@@ -1499,9 +1848,8 @@ private:
                              builder.getStringAttr(direction));
         if (planner.getCommonPlan().sizeArg) {
           valueFunc.setArgAttr(index, kVC4ValueShapeArgsAttr,
-                               builder.getArrayAttr(
-                                   {builder.getStringAttr(
-                                       planner.getTailBoundArgName())}));
+                               builder.getArrayAttr({builder.getStringAttr(
+                                   planner.getTailBoundArgName())}));
         }
       }
       bindValue(arg.sourceArg, entry->getArgument(index));
@@ -1528,16 +1876,32 @@ private:
     return needs;
   }
 
+  bool functionNeedsFiniteReductionPolicy() const {
+    bool needs = false;
+    planner.getEntryBlock().walk([&](Operation *op) {
+      if (needs || !hasName(op, kTTCallOpName))
+        return WalkResult::advance();
+      TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
+      if (reduceInfo.classification == TTIRReduceClassification::AddF32) {
+        needs = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    return needs;
+  }
+
   LogicalResult emitCommonPrefix() {
     const CommonPlan &common = planner.getCommonPlan();
     for (Operation *programId : common.programIds) {
       std::optional<int64_t> axis = planner.getLaunchIdentityAxis(programId);
       if (!axis)
-        return emitInternalError(programId, "program_id axis missing from plan");
+        return emitInternalError(programId,
+                                 "program_id axis missing from plan");
       Location loc = programId->getLoc();
       Value pidIndex = createVC4ValueProgramId(builder, loc, *axis);
-      Value pidI32 =
-          builder.create<arith::IndexCastOp>(loc, builder.getI32Type(), pidIndex);
+      Value pidI32 = builder.create<arith::IndexCastOp>(
+          loc, builder.getI32Type(), pidIndex);
       bindValue(programId->getResult(0), pidI32);
     }
     return success();
@@ -1566,10 +1930,10 @@ private:
       return;
     if (!pointerScopes.empty()) {
       auto found = pointerValues.find(source);
-      pointerScopes.back().push_back({source, found == pointerValues.end()
-                                                  ? std::optional<PointerExpr>()
-                                                  : std::optional<PointerExpr>(
-                                                        found->second)});
+      pointerScopes.back().push_back(
+          {source, found == pointerValues.end()
+                       ? std::optional<PointerExpr>()
+                       : std::optional<PointerExpr>(found->second)});
     }
     pointerValues[source] = mapped;
   }
@@ -1589,7 +1953,8 @@ private:
     }
     valueScopes.pop_back();
 
-    for (auto it = pointerScopes.back().rbegin(), e = pointerScopes.back().rend();
+    for (auto it = pointerScopes.back().rbegin(),
+              e = pointerScopes.back().rend();
          it != e; ++it) {
       if (it->oldValue)
         pointerValues[it->source] = *it->oldValue;
@@ -1617,15 +1982,14 @@ private:
       return success();
     case LoweringOutcome::LoweredZeroResult:
       if (op->getNumResults() != 0)
-        return emitInternalError(
-            op, Twine("result-producing ") + op->getName().getStringRef() +
-                    " reported zero-result lowering");
+        return emitInternalError(op, Twine("result-producing ") +
+                                         op->getName().getStringRef() +
+                                         " reported zero-result lowering");
       return success();
     case LoweringOutcome::IgnoredDeadProofOp:
       if (!planner.canIgnoreAsDeadProofOp(op))
-        return emitInternalError(
-            op, Twine("ignored-dead proof failed for ") +
-                    op->getName().getStringRef());
+        return emitInternalError(op, Twine("ignored-dead proof failed for ") +
+                                         op->getName().getStringRef());
       return success();
     case LoweringOutcome::StagedUnsupported:
       return emitStagedDiagnostic(op, op->getName().getStringRef());
@@ -1684,6 +2048,8 @@ private:
       return lowerTTLoad(op);
     if (hasName(op, kTTStoreOpName))
       return lowerTTStore(op);
+    if (hasName(op, kTTCallOpName))
+      return lowerTTCall(op);
     if (hasName(op, kTTGetNumProgramsOpName))
       return lowerTTGetNumPrograms(op);
 
@@ -1731,8 +2097,8 @@ private:
     for (int64_t lane = 0; lane < kPhase7VectorWidth; ++lane)
       values.push_back(APInt(32, lane));
     auto attr = DenseIntElementsAttr::get(vectorType, values);
-    bindValue(op->getResult(0),
-              builder.create<arith::ConstantOp>(op->getLoc(), vectorType, attr));
+    bindValue(op->getResult(0), builder.create<arith::ConstantOp>(
+                                    op->getLoc(), vectorType, attr));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
@@ -1747,9 +2113,9 @@ private:
       return emitStagedDiagnostic(op, "num_programs axis outside 0..2");
     Value numProgramsIndex =
         createVC4ValueNumPrograms(builder, op->getLoc(), axisValue);
-    bindValue(op->getResult(0), builder.create<arith::IndexCastOp>(
-                                      op->getLoc(), builder.getI32Type(),
-                                      numProgramsIndex));
+    bindValue(op->getResult(0),
+              builder.create<arith::IndexCastOp>(
+                  op->getLoc(), builder.getI32Type(), numProgramsIndex));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
@@ -1767,13 +2133,14 @@ private:
       }
     }
 
-    Type resultType =
-        typeAdapter.convertTensorToValueVector(op->getResult(0).getType(), builder);
+    Type resultType = typeAdapter.convertTensorToValueVector(
+        op->getResult(0).getType(), builder);
     if (!resultType)
       return emitStagedDiagnostic(op, "tt.splat result type");
     Value scalar = lookup(src);
     if (!scalar)
-      return emitStagedDiagnostic(op, "tt.splat source not available in value IR");
+      return emitStagedDiagnostic(op,
+                                  "tt.splat source not available in value IR");
     bindValue(op->getResult(0),
               createVectorBroadcast(builder, op->getLoc(), scalar, resultType));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
@@ -1790,8 +2157,10 @@ private:
   }
 
   LogicalResult lowerTTLoad(Operation *op) {
-    if (op->getNumResults() == 1 && !planner.isRequiredDataValue(op->getResult(0)))
-      return emitStagedDiagnostic(op, "dead tt.load outside ignored-dead proof whitelist");
+    if (op->getNumResults() == 1 &&
+        !planner.isRequiredDataValue(op->getResult(0)))
+      return emitStagedDiagnostic(
+          op, "dead tt.load outside ignored-dead proof whitelist");
     if ((op->getNumOperands() != 1 && op->getNumOperands() != 3) ||
         op->getNumResults() != 1)
       return emitStagedDiagnostic(op, "tt.load without pointer, mask, other=0");
@@ -1805,10 +2174,11 @@ private:
     if (failed(ptr))
       return failure();
     if (!ptr->hasCanonicalOffset)
-      return emitStagedDiagnostic(op, "tt.load pointer without canonical addptr offset");
+      return emitStagedDiagnostic(
+          op, "tt.load pointer without canonical addptr offset");
 
-    Type resultType =
-        typeAdapter.convertTensorToValueVector(op->getResult(0).getType(), builder);
+    Type resultType = typeAdapter.convertTensorToValueVector(
+        op->getResult(0).getType(), builder);
     auto vectorType = llvm::dyn_cast_or_null<VectorType>(resultType);
     if (!vectorType)
       return emitStagedDiagnostic(op, "tt.load result type");
@@ -1819,8 +2189,8 @@ private:
       return failure();
     Value mask;
     if (op->getNumOperands() == 3) {
-      FailureOr<Value> maybeMask = ensureTailMask(op->getOperand(1), op,
-                                                  "sparse or unknown tt.load memory mask");
+      FailureOr<Value> maybeMask = ensureTailMask(
+          op->getOperand(1), op, "sparse or unknown tt.load memory mask");
       if (failed(maybeMask))
         return failure();
       mask = *maybeMask;
@@ -1838,14 +2208,40 @@ private:
     if (failed(ptr))
       return failure();
     if (!ptr->hasCanonicalOffset)
-      return emitStagedDiagnostic(op, "tt.store pointer without canonical addptr offset");
+      return emitStagedDiagnostic(
+          op, "tt.store pointer without canonical addptr offset");
     Value value = lookup(op->getOperand(1));
     if (!value)
-      return emitStagedDiagnostic(op, "tt.store value was not produced by supported compute DAG");
+      return emitStagedDiagnostic(
+          op, "tt.store value was not produced by supported compute DAG");
     Value memref = pointerValues[ptr->sourcePointerArg].valueMemref;
     FailureOr<Value> transferIndex = ensureTransferIndex(ptr->offsetValue, op);
     if (failed(transferIndex))
       return failure();
+    if (!llvm::isa<RankedTensorType>(op->getOperand(1).getType())) {
+      if (!isScalarI32(value.getType()) && !isScalarF32(value.getType()))
+        return emitStagedDiagnostic(op,
+                                    "scalar tt.store unsupported value type");
+      if (!ptr->isScalarOffset)
+        return emitStagedDiagnostic(op, "scalar tt.store pointer offset");
+      auto createStore = [&]() {
+        builder.create<memref::StoreOp>(op->getLoc(), value, memref,
+                                        ValueRange{*transferIndex});
+      };
+      if (op->getNumOperands() == 3) {
+        Value mask = lookup(op->getOperand(2));
+        if (!mask || !mask.getType().isInteger(1))
+          return emitStagedDiagnostic(op, "scalar tt.store mask not available");
+        auto ifOp = builder.create<scf::IfOp>(op->getLoc(), mask,
+                                              /*withElseRegion=*/false);
+        builder.setInsertionPointToStart(&ifOp.getThenRegion().front());
+        createStore();
+        builder.setInsertionPointAfter(ifOp);
+      } else {
+        createStore();
+      }
+      return finishLowering(op, LoweringOutcome::LoweredZeroResult);
+    }
     Value mask;
     if (op->getNumOperands() == 3) {
       FailureOr<Value> maybeMask = ensureTailMask(
@@ -1857,6 +2253,52 @@ private:
     createVectorTransferWrite(builder, op->getLoc(), value, memref,
                               *transferIndex, mask);
     return finishLowering(op, LoweringOutcome::LoweredZeroResult);
+  }
+
+  LogicalResult lowerTTCall(Operation *op) {
+    TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
+    switch (reduceInfo.classification) {
+    case TTIRReduceClassification::AddI32:
+    case TTIRReduceClassification::AddF32:
+      break;
+    case TTIRReduceClassification::RankGreaterThanOne:
+      return op->emitOpError()
+             << "rank>1 tt.reduce is staged; READY_FOR_TRITON remains NO";
+    case TTIRReduceClassification::NonAdd:
+      return op->emitOpError()
+             << "non-add tt.reduce is staged; READY_FOR_TRITON remains NO";
+    case TTIRReduceClassification::MultiResult:
+    case TTIRReduceClassification::Unsupported:
+      return op->emitOpError()
+             << "unsupported tt.reduce combiner; READY_FOR_TRITON remains NO";
+    case TTIRReduceClassification::NotReduceCall:
+      return emitStagedDiagnostic(op, "unsupported tt.call");
+    }
+
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return op->emitOpError()
+             << "unsupported tt.reduce combiner; READY_FOR_TRITON remains NO";
+    Value input = lookup(op->getOperand(0));
+    if (!input)
+      return emitStagedDiagnostic(op, "tt.reduce input not available");
+    auto vectorType = llvm::dyn_cast<VectorType>(input.getType());
+    if (!vectorType || vectorType.getRank() != 1 ||
+        vectorType.getDimSize(0) != kPhase7VectorWidth)
+      return op->emitOpError()
+             << "rank>1 tt.reduce is staged; READY_FOR_TRITON remains NO";
+    Type elementType = vectorType.getElementType();
+    if (!elementType.isF32() && !elementType.isSignlessInteger(32))
+      return op->emitOpError()
+             << "unsupported tt.reduce combiner; READY_FOR_TRITON remains NO";
+    if (reduceInfo.classification == TTIRReduceClassification::AddF32) {
+      valueFunc->setAttr(kVC4ValueFPDomainAttr,
+                         builder.getStringAttr("finite"));
+      valueFunc->setAttr(kVC4ValueReductionPolicyAttr,
+                         builder.getStringAttr("finite_tree"));
+    }
+    bindValue(op->getResult(0),
+              createVectorAddReduction(builder, op->getLoc(), input));
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerArith(Operation *op) {
@@ -1884,18 +2326,16 @@ private:
                                              "arith.andi required use staged");
     if (hasName(op, "arith.cmpi") &&
         op->getResult(0) == planner.getCommonPlan().tailMaskValue) {
-      FailureOr<Value> mask =
-          ensureTailMask(op->getResult(0), op,
-                         "sparse or unknown TTIR memory mask");
-      return failed(mask) ? failure()
-                          : finishLowering(
-                                op, LoweringOutcome::LoweredWithResultsBound);
+      FailureOr<Value> mask = ensureTailMask(
+          op->getResult(0), op, "sparse or unknown TTIR memory mask");
+      return failed(mask)
+                 ? failure()
+                 : finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     }
 
     static constexpr StringRef supportedArithOps[] = {
-        "arith.addf", "arith.subf", "arith.mulf", "arith.addi",
-        "arith.subi", "arith.muli", "arith.cmpf", "arith.cmpi",
-        "arith.select"};
+        "arith.addf", "arith.subf", "arith.mulf", "arith.addi",  "arith.subi",
+        "arith.muli", "arith.cmpf", "arith.cmpi", "arith.select"};
     if (!hasAnyName(op, supportedArithOps))
       return emitStagedDiagnostic(op, op->getName().getStringRef());
 
@@ -1904,7 +2344,8 @@ private:
     for (Value operand : op->getOperands()) {
       Value mapped = lookup(operand);
       if (!mapped)
-        return emitStagedDiagnostic(op, "arith operand not available in supported value dataflow");
+        return emitStagedDiagnostic(
+            op, "arith operand not available in supported value dataflow");
       operands.push_back(mapped);
     }
 
@@ -1922,7 +2363,8 @@ private:
     for (NamedAttribute attr : op->getAttrs())
       state.addAttribute(attr.getName(), attr.getValue());
     Operation *created = builder.create(state);
-    for (auto [oldResult, newResult] : llvm::zip(op->getResults(), created->getResults()))
+    for (auto [oldResult, newResult] :
+         llvm::zip(op->getResults(), created->getResults()))
       bindValue(oldResult, newResult);
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
@@ -1947,9 +2389,8 @@ private:
     auto typedAttr = llvm::dyn_cast<TypedAttr>(attr);
     if (!typedAttr)
       return emitStagedDiagnostic(op, "arith.constant without typed attr");
-    bindValue(op.getResult(),
-              builder.create<arith::ConstantOp>(op.getLoc(), resultType,
-                                                typedAttr));
+    bindValue(op.getResult(), builder.create<arith::ConstantOp>(
+                                  op.getLoc(), resultType, typedAttr));
     return finishLowering(op.getOperation(),
                           LoweringOutcome::LoweredWithResultsBound);
   }
@@ -2016,22 +2457,23 @@ private:
       return lowerGenericTerminator(op);
     if (hasName(op, "scf.condition")) {
       if (op->getNumOperands() < 1 || !op->getOperand(0).getType().isInteger(1))
-        return emitPermanentReject(op, "vector/per-lane branch condition as CFG");
+        return emitPermanentReject(op,
+                                   "vector/per-lane branch condition as CFG");
       return lowerGenericTerminator(op);
     }
     if (!hasAnyName(op, {"scf.if", "scf.for", "scf.while"}))
       return emitStagedDiagnostic(op, op->getName().getStringRef());
 
-    if (hasName(op, "scf.if") &&
-        (op->getNumOperands() != 1 ||
-         !op->getOperand(0).getType().isInteger(1)))
+    if (hasName(op, "scf.if") && (op->getNumOperands() != 1 ||
+                                  !op->getOperand(0).getType().isInteger(1)))
       return emitPermanentReject(op, "vector/per-lane branch condition as CFG");
 
     SmallVector<Value, 8> operands;
     for (Value operand : op->getOperands()) {
       Value mapped = lookup(operand);
       if (!mapped)
-        return emitStagedDiagnostic(op, "SCF operand not available in value map");
+        return emitStagedDiagnostic(op,
+                                    "SCF operand not available in value map");
       operands.push_back(mapped);
     }
 
@@ -2083,20 +2525,20 @@ private:
 
   LogicalResult lowerCF(Operation *op) {
     if (hasName(op, "cf.switch"))
-      return emitStagedDiagnostic(op,
-                                  "cf.switch was not emitted by Phase85a2 TTIR");
+      return emitStagedDiagnostic(
+          op, "cf.switch was not emitted by Phase85a2 TTIR");
     if (!hasAnyName(op, {"cf.br", "cf.cond_br"}))
       return emitStagedDiagnostic(op, op->getName().getStringRef());
     if (hasName(op, "cf.cond_br") &&
-        (op->getNumOperands() < 1 ||
-         !op->getOperand(0).getType().isInteger(1)))
+        (op->getNumOperands() < 1 || !op->getOperand(0).getType().isInteger(1)))
       return emitPermanentReject(op, "vector/per-lane branch condition as CFG");
 
     SmallVector<Value, 8> operands;
     for (Value operand : op->getOperands()) {
       Value mapped = lookup(operand);
       if (!mapped)
-        return emitStagedDiagnostic(op, "CF operand not available in value map");
+        return emitStagedDiagnostic(op,
+                                    "CF operand not available in value map");
       operands.push_back(mapped);
     }
 
@@ -2105,7 +2547,8 @@ private:
     for (Block *successor : op->getSuccessors()) {
       auto it = blockMap.find(successor);
       if (it == blockMap.end())
-        return emitInternalError(op, "CF successor block missing from block map");
+        return emitInternalError(op,
+                                 "CF successor block missing from block map");
       state.addSuccessors(it->second);
     }
     if (failed(copyValueSafeAttrs(op, state)))
@@ -2132,8 +2575,9 @@ private:
         return emitStagedDiagnostic(user,
                                     "pointer scalar base is not i32/index");
       transferIndex = transferIndex
-                          ? builder.create<arith::AddIOp>(user->getLoc(),
-                                                          transferIndex, mapped)
+                          ? builder
+                                .create<arith::AddIOp>(user->getLoc(),
+                                                       transferIndex, mapped)
                                 .getResult()
                           : mapped;
     }
@@ -2164,15 +2608,17 @@ private:
 
   Value createZeroPadding(Location loc, Type elementType) {
     if (elementType.isF32())
-      return builder.create<arith::ConstantOp>(loc, elementType,
-                                               builder.getFloatAttr(elementType, 0.0));
+      return builder.create<arith::ConstantOp>(
+          loc, elementType, builder.getFloatAttr(elementType, 0.0));
     if (elementType.isSignlessInteger(32))
-      return builder.create<arith::ConstantOp>(loc, elementType,
-                                               builder.getIntegerAttr(elementType, 0));
+      return builder.create<arith::ConstantOp>(
+          loc, elementType, builder.getIntegerAttr(elementType, 0));
     return {};
   }
 
-  TTIRArgInfo *lookupSourceArg(BlockArgument arg) { return planner.lookupArg(arg); }
+  TTIRArgInfo *lookupSourceArg(BlockArgument arg) {
+    return planner.lookupArg(arg);
+  }
 
   struct ScopedValueBinding {
     Value source;
@@ -2220,7 +2666,8 @@ static LogicalResult validateInputModuleAttrs(ModuleOp inputModule) {
   if (inputModule->getAttrs().empty())
     return success();
 
-  InFlightDiagnostic diag = inputModule.emitError()
+  InFlightDiagnostic diag =
+      inputModule.emitError()
       << "TTIR module attributes are not Phase 7.5 C++ TTIR-to-VC4Value "
          "lowerable; unknown module attrs are staged until a value-safe module "
          "attribute policy is implemented. READY_FOR_TRITON remains NO";
@@ -2252,10 +2699,10 @@ static bool isValueOutputType(Type type) {
 
 static LogicalResult emitForbiddenValueOutputOp(Operation *op,
                                                 StringRef detail = {}) {
-  InFlightDiagnostic diag = op->emitOpError()
-      << "forbidden operation in TTIR-to-VC4Value output: "
-      << op->getName().getStringRef() << " dialect '"
-      << op->getName().getDialectNamespace() << "'";
+  InFlightDiagnostic diag =
+      op->emitOpError() << "forbidden operation in TTIR-to-VC4Value output: "
+                        << op->getName().getStringRef() << " dialect '"
+                        << op->getName().getDialectNamespace() << "'";
   if (!detail.empty())
     diag << " (" << detail << ")";
   return failure();
@@ -2264,11 +2711,13 @@ static LogicalResult emitForbiddenValueOutputOp(Operation *op,
 static LogicalResult verifyValueOutputTypes(Operation *op) {
   for (Type type : op->getOperandTypes()) {
     if (!isValueOutputType(type))
-      return emitForbiddenValueOutputOp(op, "operand type is outside the value surface");
+      return emitForbiddenValueOutputOp(
+          op, "operand type is outside the value surface");
   }
   for (Type type : op->getResultTypes()) {
     if (!isValueOutputType(type))
-      return emitForbiddenValueOutputOp(op, "result type is outside the value surface");
+      return emitForbiddenValueOutputOp(
+          op, "result type is outside the value surface");
   }
   for (Region &region : op->getRegions()) {
     for (Block &block : region) {
@@ -2329,8 +2778,7 @@ static LogicalResult verifyValueOutputModule(ModuleOp outputModule) {
       sawIllegal = true;
       return WalkResult::interrupt();
     }
-    if (dialect == "func" &&
-        !llvm::isa<func::FuncOp, func::ReturnOp>(op)) {
+    if (dialect == "func" && !llvm::isa<func::FuncOp, func::ReturnOp>(op)) {
       (void)emitForbiddenValueOutputOp(
           op, "only func.func and func.return are allowed");
       sawIllegal = true;
@@ -2389,20 +2837,22 @@ struct ConvertTritonToVC4ValuePass
 
   Option<bool> testValueOutputBoundary{
       *this, "test-value-output-boundary",
-      llvm::cl::desc("Test-only: verify the input module as TTIR-to-VC4Value output"),
+      llvm::cl::desc(
+          "Test-only: verify the input module as TTIR-to-VC4Value output"),
       llvm::cl::init(false)};
 
   StringRef getArgument() const final { return "convert-triton-to-vc4-value"; }
 
   StringRef getDescription() const final {
-    return "Lower the Phase 7.5 real TTIR elementwise subset to the VC4 value surface";
+    return "Lower the Phase 7.5 real TTIR elementwise subset to the VC4 value "
+           "surface";
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
-    registry.insert<arith::ArithDialect, cf::ControlFlowDialect,
-                    func::FuncDialect, math::MathDialect,
-                    memref::MemRefDialect, scf::SCFDialect,
-                    vector::VectorDialect, mlir::vc4value::VC4ValueDialect>();
+    registry
+        .insert<arith::ArithDialect, cf::ControlFlowDialect, func::FuncDialect,
+                math::MathDialect, memref::MemRefDialect, scf::SCFDialect,
+                vector::VectorDialect, mlir::vc4value::VC4ValueDialect>();
   }
 
   void runOnOperation() final {
@@ -2414,6 +2864,7 @@ struct ConvertTritonToVC4ValuePass
     }
 
     SmallVector<Operation *, 4> ttFuncs;
+    SmallVector<Operation *, 4> publicTTFuncs;
     SmallVector<Operation *, 4> illegalTopLevelOps;
 
     if (failed(validateInputModuleAttrs(inputModule))) {
@@ -2424,6 +2875,8 @@ struct ConvertTritonToVC4ValuePass
     for (Operation &op : inputModule.getBody()->getOperations()) {
       if (hasName(&op, kTTFuncOpName)) {
         ttFuncs.push_back(&op);
+        if (isPublicTTFunc(&op))
+          publicTTFuncs.push_back(&op);
         continue;
       }
       // Non-operation location aliases are not module body ops.  Any real
@@ -2432,10 +2885,11 @@ struct ConvertTritonToVC4ValuePass
       illegalTopLevelOps.push_back(&op);
     }
 
-    if (ttFuncs.empty()) {
-      inputModule.emitError("expected at least one tt.func; C++ TTIR-to-VC4Value "
-                            "lowering remains Phase 7.5 elementwise V1 only. "
-                            "READY_FOR_TRITON remains NO");
+    if (ttFuncs.empty() || publicTTFuncs.empty()) {
+      inputModule.emitError(
+          "expected at least one public tt.func; C++ TTIR-to-VC4Value "
+          "lowering remains Phase 7.5 elementwise V1 only. "
+          "READY_FOR_TRITON remains NO");
       signalPassFailure();
       return;
     }
@@ -2447,14 +2901,13 @@ struct ConvertTritonToVC4ValuePass
       return;
     }
 
-    OwningOpRef<ModuleOp> outputModule =
-        ModuleOp::create(inputModule.getLoc());
+    OwningOpRef<ModuleOp> outputModule = ModuleOp::create(inputModule.getLoc());
 
     {
       SmallVector<std::unique_ptr<FunctionPlanner>, 4> planners;
       std::set<std::string> valueFunctionNames;
 
-      for (Operation *ttFunc : ttFuncs) {
+      for (Operation *ttFunc : publicTTFuncs) {
         auto planner = std::make_unique<FunctionPlanner>(ttFunc);
         if (failed(planner->analyze())) {
           signalPassFailure();
@@ -2463,7 +2916,8 @@ struct ConvertTritonToVC4ValuePass
 
         auto fn = llvm::dyn_cast<FunctionOpInterface>(ttFunc);
         if (!fn) {
-          ttFunc->emitOpError("expected tt.func to implement FunctionOpInterface");
+          ttFunc->emitOpError(
+              "expected tt.func to implement FunctionOpInterface");
           signalPassFailure();
           return;
         }

@@ -74,6 +74,10 @@ def main() -> None:
         "scf::IfOp",
         "scf::ForOp",
         "scf::WhileOp",
+    ):
+        if needle in value_code:
+            custom_scf_hits.append(needle)
+    for needle in (
         "populateSCFToControlFlowConversionPatterns",
         "createSCFToControlFlowPass",
     ):

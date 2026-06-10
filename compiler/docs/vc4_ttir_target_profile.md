@@ -771,3 +771,29 @@ multi-axis launch identity, and Phase 10 full/empty/tail masks on hardware.
 This profile does not claim gather, column-slice, rank-2 tile, block-pointer,
 reduction, dot, GEMV, or GEMM support. It also does not introduce hidden memref
 descriptor ABI behavior or broad Triton readiness.
+
+## 26. Phase 12.7 reduction importer profile
+
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_TL_SUM_ADD_LOWERING=YES
+TTIR_SCALAR_REDUCTION_STORE_LOWERING=YES
+TTIR_F32_REDUCTION_FINITE_TREE_POLICY=YES
+TTIR_NON_ADD_REDUCTIONS_REJECT=PASS
+TTIR_DOT_GEMV_STAGED_FOR_PHASE13=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE12_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The Phase 12.7 TTIR profile accepts the controlled real Triton add-reduction
+forms emitted as public `tt.call` operations to private helper functions whose
+bodies contain `tt.reduce` axis 0. The importer resolves those symbols and
+classifies the reducer structurally from operand/result types, reducer block
+arguments, `tt.reduce.return`, and the add combiner operation. Accepted f32
+reductions attach `vc4value.fp_domain = "finite"` and
+`vc4value.reduction_policy = "finite_tree"` to the value function.
+
+Scalar `tt.store` of the reduction result to a scalar rank-1 output pointer is
+lowered to value-layer `memref.store`, with scalar masks represented as value
+control flow. Rank>1 reductions, non-add reductions, dot/GEMV/GEMM, scans,
+atomics, and generalized math remain staged. `READY_FOR_TRITON=NO` remains
+locked.

@@ -139,3 +139,23 @@ TTIR_RANK_INFERENCE_FROM_NAMES=NO
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
+
+## Phase 12.7 Reduction Importer Audit Extension
+
+The Phase 12.7 importer audit locks structural TTIR reduction classification
+for controlled real Triton `tl.sum` snapshots. The accepted classifier resolves
+private helper symbols and inspects `tt.reduce` regions, reducer block
+arguments, `tt.reduce.return`, and typed `arith.addi` / `arith.addf`
+combiners. It does not parse printed TTIR, use regexes, special-case fixture
+names, infer semantics from source paths or public names, or emit lower-half IR
+directly.
+
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_TL_SUM_ADD_LOWERING=YES
+TTIR_SCALAR_REDUCTION_STORE_LOWERING=YES
+TTIR_F32_REDUCTION_FINITE_TREE_POLICY=YES
+TTIR_NON_ADD_REDUCTIONS_REJECT=PASS
+TTIR_DOT_GEMV_STAGED_FOR_PHASE13=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE12_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO

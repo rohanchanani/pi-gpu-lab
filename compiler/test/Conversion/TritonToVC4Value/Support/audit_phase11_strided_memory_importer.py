@@ -55,10 +55,9 @@ def main() -> int:
         if needle not in source:
             fail(f"required Phase 11 structural marker missing: {needle}")
 
-    pointer_section = source[
-        source.find("LogicalResult collectContiguousOffsetTerms"):
-        source.find("std::optional<BlockArgument> matchCanonicalTailMask")
-    ]
+    pointer_start = source.find("collectContiguousOffsetTerms(Value value")
+    pointer_end = source.find("std::optional<BlockArgument> matchCanonicalTailMask")
+    pointer_section = source[pointer_start:pointer_end]
     if not pointer_section:
         fail("could not locate Phase 11 pointer classifier section")
     for needle in ("valueName", "inferSourceArgName", "arg_name", "loc("):

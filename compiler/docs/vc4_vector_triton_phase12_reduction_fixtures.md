@@ -139,3 +139,28 @@ masks and compute-mask select, Phase 11 row-strided memory, i32 and finite-tree
 f32 add reductions, and scalar reduction-output stores. The full mixed suite
 passes on hardware with `active_qpus=12` where applicable. Dot, GEMV, GEMM,
 non-add reductions, and rank>1 reductions remain unclaimed and staged.
+
+## Phase 12.7 TTIR Importer Static
+
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_TL_SUM_ADD_LOWERING=YES
+TTIR_SCALAR_REDUCTION_STORE_LOWERING=YES
+TTIR_F32_REDUCTION_FINITE_TREE_POLICY=YES
+TTIR_NON_ADD_REDUCTIONS_REJECT=PASS
+TTIR_DOT_GEMV_STAGED_FOR_PHASE13=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE12_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 12.7 lowers the controlled real Triton `tl.sum` / `tt.reduce` add
+snapshots through the C++ TTIR importer into the already-proven value forms:
+`vector.reduction <add>` over `vector<16xi32>` or `vector<16xf32>`, scalar
+`memref.store` for rank-1 reduction outputs, and explicit finite-tree policy
+metadata for f32 reductions. Private Triton helper functions are inspected
+structurally through symbol resolution, SSA operands, reducer regions, and
+typed MLIR operations; fixture names, paths, public names, and printed TTIR
+text are not semantic.
+
+Non-add reducers and rank>1 reducers remain staged with exact diagnostics.
+Dot, GEMV, GEMM, scans, atomics, custom reductions, and generalized math remain
+outside Phase 12. `READY_FOR_TRITON=NO` remains locked.

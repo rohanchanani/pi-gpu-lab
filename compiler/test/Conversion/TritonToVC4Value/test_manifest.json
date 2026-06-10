@@ -99,6 +99,62 @@
       "input_kind": "static source/test audit",
       "feature_claim": "semantic string matching and argument-name semantic role heuristics are absent from the C++ TTIR importer path",
       "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/ttir-reduce-sum-f32-lowers.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_f32_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "controlled f32 tl.sum TTIR lowers structurally to value vector.reduction add with finite-tree policy and scalar memref.store",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/ttir-reduce-sum-i32-lowers.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_i32_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "controlled i32 tl.sum TTIR lowers structurally to value vector.reduction add and scalar memref.store",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/ttir-reduce-tail-scalar-store-lowers.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_tail_scalar_store_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "controlled tail reduction TTIR lowers inactive-zero input lanes and scalar masked tt.store to value control flow plus memref.store",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/ttir-reduce-row-strided-sum-lowers.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_row_strided_sum_f32_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "controlled row-strided tl.sum TTIR lowers through Phase 11 row-slice memory plus Phase 12 reduction",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/ttir-reduce-mixed-axes-mask-cf-strided-lowers.mlir",
+      "input": "examples/triton/phase12_reductions/generated/mixed_ttir_reduction_axes_mask_cf_strided_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "controlled mixed TTIR combines axes, masks, control flow, strided memory, tl.sum, and scalar reduction store in value output",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/invalid-ttir-reduce-max-nonadd.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_max_reject_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "non-add tt.reduce remains staged with exact diagnostic",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "Reductions/invalid-ttir-reduce-rank2-axis.mlir",
+      "input": "examples/triton/phase12_reductions/generated/ttir_reduce_rank2_axis_reject_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "rank>1 tt.reduce remains staged with exact diagnostic",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "phase12-reduction-importer-audit.test",
+      "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
+      "input_kind": "static source audit",
+      "feature_claim": "Phase 12 reduction classification is structural and does not use fixture names, paths, printed TTIR, regexes, or lower-half output",
+      "cpp_importer_only": true
     }
   ],
   "unavailable_negative_forms": [

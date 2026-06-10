@@ -16,7 +16,7 @@
 # FIRST: vc4value.program_id
 # FIRST: vector.transfer_write
 
-# SECOND: expected at least one tt.func
+# SECOND: expected at least one public tt.func
 # SECOND: READY_FOR_TRITON remains NO
 # SECOND-NOT: assertion
 # SECOND-NOT: crash
