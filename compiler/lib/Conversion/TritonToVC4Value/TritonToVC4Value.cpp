@@ -1072,17 +1072,13 @@ public:
 
     if (hasName(def, kTTSplatOpName) && def->getNumOperands() == 1) {
       Value scalar = def->getOperand(0);
-      auto blockArg = llvm::dyn_cast<BlockArgument>(scalar);
-      if (!blockArg)
-        return emitStagedDiagnostic(
-            def, "pointer base not formed from scalar pointer argument splat");
-      auto it = argIndex.find(blockArg);
-      if (it == argIndex.end() || !args[it->second].isPointer)
-        return emitStagedDiagnostic(
-            def, "tt.splat pointer base not backed by a pointer argument");
-      PointerExpr expr;
-      expr.sourcePointerArg = blockArg;
-      expr.element = args[it->second].pointerElement;
+      if (!isScalarPointer(scalar.getType()) ||
+          !isRankedTensorPointer(def->getResult(0).getType()))
+        return emitStagedDiagnostic(def, "unsupported pointer splat");
+      FailureOr<PointerExpr> expr = classifyPointer(scalar);
+      if (failed(expr))
+        return failure();
+      pointerExprs[ptrValue] = *expr;
       return expr;
     }
 
@@ -2139,16 +2135,22 @@ private:
     if (op->getNumOperands() != 1 || op->getNumResults() != 1)
       return emitStagedDiagnostic(op, "non-unary tt.splat");
 
-    Value src = op->getOperand(0);
-    if (auto blockArg = llvm::dyn_cast<BlockArgument>(src)) {
-      auto sourceArg = lookupSourceArg(blockArg);
-      if (sourceArg && sourceArg->isPointer) {
-        PointerExpr ptr = pointerValues[blockArg];
-        bindPointer(op->getResult(0), ptr);
-        return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
-      }
+    if (isScalarPointer(op->getOperand(0).getType()) &&
+        isRankedTensorPointer(op->getResult(0).getType())) {
+      FailureOr<PointerExpr> ptr = planner.classifyPointer(op->getResult(0));
+      if (failed(ptr))
+        return failure();
+      PointerExpr lowered = *ptr;
+      auto found = pointerValues.find(ptr->sourcePointerArg);
+      if (found == pointerValues.end())
+        return emitInternalError(op,
+                                 "pointer splat source memref not available");
+      lowered.valueMemref = found->second.valueMemref;
+      bindPointer(op->getResult(0), lowered);
+      return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     }
 
+    Value src = op->getOperand(0);
     Type resultType = typeAdapter.convertTensorToValueVector(
         op->getResult(0).getType(), builder);
     if (!resultType)

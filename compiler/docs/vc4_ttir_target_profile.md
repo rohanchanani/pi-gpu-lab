@@ -839,3 +839,37 @@ elementwise operations, scalar control flow, multi-axis launch identity, tail
 masks, row-strided memory, scalar stores, and strict hardware checks. Non-add
 reducers, rank>1 reducers, dot/GEMV/GEMM, scans, atomics, and exact/default
 f32 reductions remain staged.
+
+## 28. Accelerated Phase 13 GEMV Demo Static Profile
+
+PHASE13_DEMO_IMPORTER_STATIC=LOCKED
+TTIR_GEMV_DEMO_IMPORTER_STATIC=PASS
+TTIR_GEMV_DEMO_STATIC_PIPELINE=PASS
+TTIR_GEMV_DEMO_PRODUCT_REDUCTION_LOWERING=YES
+TTIR_GEMV_DEMO_INDEPENDENT_POINTER_PLANNING=YES
+TTIR_GEMV_DEMO_F32_FINITE_REDUCTION_POLICY=YES
+TTIR_GEMV_DEMO_TT_DOT_STAGED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE13_DEMO_2_HARDWARE_LOCK=YES
+FULL_PHASE13_LOCK=NO
+READY_FOR_TRITON=NO
+
+The accelerated Phase 13 demo profile accepts only the exact source-controlled
+GEMV-v0 snapshot shape:
+
+```text
+A + row * LDA + arange(0, 16)
+X + arange(0, 16)
+mask = arange(0, 16) < K
+tl.sum(load(A) * load(X), axis=0)
+store Y[row]
+```
+
+This static profile is implemented through structural composition of the
+Phase 11 row-strided pointer planner, Phase 12 add-reduction importer, and a
+local pointer-splat planning repair for scalar pointer expressions. It does
+not infer roles from source names or paths, does not parse printed TTIR, and
+does not emit lower-half IR from the importer.
+
+`tl.dot`, `tt.dot`, `vector.contract`, multi-block K accumulation, atomics,
+f16/casts, SFU/math, and full Phase 13 GEMV support remain staged.
