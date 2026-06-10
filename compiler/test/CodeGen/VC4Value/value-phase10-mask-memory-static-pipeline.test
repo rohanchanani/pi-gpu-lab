@@ -1,0 +1,15 @@
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: vc4-opt %S/Emit/value_mask_tail_full_empty_vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/value_mask_tail_full_empty.vc4kernel.mlir
+# RUN: vc4-opt %t/value_mask_tail_full_empty.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/value_mask_tail_full_empty.ssavc4.mlir
+# RUN: vc4-opt %t/value_mask_tail_full_empty.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/value_mask_tail_full_empty.vc4.mlir
+# RUN: vc4-opt %S/Emit/value_mask_compute_select_tail_vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/value_mask_compute_select_tail.vc4kernel.mlir
+# RUN: vc4-opt %t/value_mask_compute_select_tail.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/value_mask_compute_select_tail.ssavc4.mlir
+# RUN: vc4-opt %t/value_mask_compute_select_tail.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/value_mask_compute_select_tail.vc4.mlir
+# RUN: vc4-opt %S/Emit/value_mask_memory_policy_other_zero_vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/value_mask_memory_policy_other_zero.vc4kernel.mlir
+# RUN: vc4-opt %t/value_mask_memory_policy_other_zero.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/value_mask_memory_policy_other_zero.ssavc4.mlir
+# RUN: vc4-opt %t/value_mask_memory_policy_other_zero.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/value_mask_memory_policy_other_zero.vc4.mlir
+# RUN: vc4-opt %S/Emit/mixed_value_mask_memory_axis_cf_vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/mixed_value_mask_memory_axis_cf.vc4kernel.mlir
+# RUN: vc4-opt %t/mixed_value_mask_memory_axis_cf.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/mixed_value_mask_memory_axis_cf.ssavc4.mlir
+# RUN: vc4-opt %t/mixed_value_mask_memory_axis_cf.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/mixed_value_mask_memory_axis_cf.vc4.mlir
+
+Phase 10.4 static VC4Value mask/memory candidates lower to scheduled VC4.

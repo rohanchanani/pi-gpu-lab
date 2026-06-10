@@ -106,3 +106,18 @@ block pointers, subword/f16 memory, boundary-check/padding-option producer
 semantics, and vector rank greater than 1 remain staged.
 
 `READY_FOR_TRITON=NO` remains locked.
+
+## Phase 10.4 Static Value Lowering Status
+
+The value mask classifier and memory legality classifier are implemented in
+`VC4ValueToVC4Kernel`. This is a value static pipeline lock only; hardware
+is reserved for Phase 10.5.
+
+VALUE_MASK_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MEMORY_LEGALITY_CLASSIFIER_IMPLEMENTED=YES
+SPARSE_TRANSFER_WRITE_REJECTS=PASS
+SPARSE_TRANSFER_READ_REJECTS=PASS
+NONZERO_LOAD_OTHER_REJECTS=PASS
+VALUE_MASK_MEMORY_STATIC=PASS
+READY_FOR_PHASE10_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO

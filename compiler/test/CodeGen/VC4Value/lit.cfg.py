@@ -5,7 +5,7 @@ import lit.formats
 
 config.name = "VC4Value codegen"
 config.test_format = lit.formats.ShTest(True)
-config.suffixes = [".test"]
+config.suffixes = [".mlir", ".test"]
 config.excludes = ["Hardware", "Support", "Output"]
 config.test_source_root = os.path.dirname(__file__)
 

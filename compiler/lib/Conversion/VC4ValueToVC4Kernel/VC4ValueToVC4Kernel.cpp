@@ -95,10 +95,6 @@ constexpr llvm::StringLiteral kFragmentSelectOpName("vc4kernel.fragment_select")
 constexpr llvm::StringLiteral kTMULoadFragmentOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreFragmentOpName("vc4kernel.vdw_store_fragment");
 
-static bool hasName(Operation *op, StringRef name) {
-  return op && op->getName().getStringRef() == name;
-}
-
 static bool hasStringAttr(Operation *op, StringRef name, StringRef expected) {
   auto attr = llvm::dyn_cast_or_null<StringAttr>(op->getAttr(name));
   return attr && attr.getValue() == expected;
@@ -371,6 +367,38 @@ static LogicalResult emitRawSCFDiagnostic(Operation *op) {
          << "--convert-vc4-value-to-vc4kernel. READY_FOR_TRITON remains NO";
 }
 
+enum class MemoryMaskKind {
+  Full,
+  Empty,
+  Tail,
+  SparseOrUnknown,
+  Unsupported
+};
+
+struct ClassifiedMemoryMask {
+  MemoryMaskKind kind = MemoryMaskKind::Unsupported;
+  Value start;
+  Value count;
+  Operation *source = nullptr;
+  std::string reason;
+  Value predicate;
+};
+
+enum class TransferAccessKind { Read, Write };
+
+struct ClassifiedMemoryTransfer {
+  TransferAccessKind access = TransferAccessKind::Read;
+  Value memref;
+  Value baseIndex;
+  Value vectorValue;
+  Value padding;
+  Type vectorType;
+  int64_t elemBytes = 4;
+  ClassifiedMemoryMask mask;
+  std::string acceptedPath;
+  std::string stagedReason;
+};
+
 struct LoweringState {
   explicit LoweringState(Operation *sourceKernel) : sourceKernel(sourceKernel) {}
 
@@ -378,6 +406,7 @@ struct LoweringState {
   DenseMap<Block *, Block *> blocks;
   DenseMap<Value, Value> values;
   DenseMap<Value, Value> predicates;
+  DenseMap<Value, ClassifiedMemoryMask> memoryMasks;
 };
 
 class KernelLowerer {
@@ -504,6 +533,14 @@ private:
       if (!isRank1IdentityGlobalMemref(type)) {
         InFlightDiagnostic diag =
             arg.getOwner()->getParentOp()->emitOpError();
+        bool rank1IdentityGlobal =
+            memrefType.getRank() == 1 && memrefType.getLayout().isIdentity() &&
+            llvm::isa_and_nonnull<mlir::vc4value::GlobalMemorySpaceAttr>(
+                memrefType.getMemorySpace());
+        if (rank1IdentityGlobal)
+          diag << "unsupported transfer element type; ";
+        else
+          diag << "ranked or strided memory beyond Phase 10; ";
         diag << "expected rank-1 contiguous i32/f32 #vc4value.global memref "
              << "for Phase 5 argument " << arg.getArgNumber()
              << "; not Phase 5 lowerable; staged value-surface feature. "
@@ -949,25 +986,84 @@ private:
     return success();
   }
 
+  Value createClampedMaskCount(Location loc, Value count, Value zero,
+                               Value sixteen) {
+    Value belowZero =
+        builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt, count, zero);
+    Value nonNegative =
+        builder.create<arith::SelectOp>(loc, belowZero, zero, count);
+    Value aboveSixteen = builder.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::sgt, nonNegative, sixteen);
+    return builder.create<arith::SelectOp>(loc, aboveSixteen, sixteen,
+                                           nonNegative);
+  }
+
+  void rememberMemoryMask(Value source, const ClassifiedMemoryMask &mask) {
+    state.memoryMasks[source] = mask;
+    if (mask.predicate)
+      state.predicates[source] = mask.predicate;
+  }
+
+  ClassifiedMemoryMask makeFullMask(Operation *source) {
+    ClassifiedMemoryMask mask;
+    mask.kind = MemoryMaskKind::Full;
+    mask.start = createI32Constant(builder, source->getLoc(), 0);
+    mask.count = createI32Constant(builder, source->getLoc(), 16);
+    mask.source = source;
+    mask.reason = "full transfer mask";
+    mask.predicate = createPredFull(builder, source->getLoc());
+    return mask;
+  }
+
+  ClassifiedMemoryMask makeEmptyMask(Operation *source) {
+    ClassifiedMemoryMask mask;
+    mask.kind = MemoryMaskKind::Empty;
+    mask.start = createI32Constant(builder, source->getLoc(), 0);
+    mask.count = createI32Constant(builder, source->getLoc(), 0);
+    mask.source = source;
+    mask.reason = "empty transfer mask";
+    mask.predicate = createPredEmpty(builder, source->getLoc());
+    return mask;
+  }
+
+  ClassifiedMemoryMask makeTailMask(Operation *source, Value start,
+                                    Value clampedCount) {
+    ClassifiedMemoryMask mask;
+    mask.kind = MemoryMaskKind::Tail;
+    mask.start = start;
+    mask.count = clampedCount;
+    mask.source = source;
+    mask.reason = "vector.create_mask tail transfer mask";
+    mask.predicate = createPredTail(builder, source->getLoc(), mask.start,
+                                    clampedCount);
+    return mask;
+  }
+
+  FailureOr<ClassifiedMemoryMask> classifyCreateMask(Operation *op) {
+    Value count = lookupValue(op, op->getOperand(0));
+    if (!count)
+      return failure();
+
+    std::optional<int64_t> constantCount = getIntegerConstant(op->getOperand(0));
+    if (constantCount && *constantCount <= 0)
+      return makeEmptyMask(op);
+    if (constantCount && *constantCount >= 16)
+      return makeFullMask(op);
+
+    Value zero = createI32Constant(builder, op->getLoc(), 0);
+    Value sixteen = createI32Constant(builder, op->getLoc(), 16);
+    Value clamped = createClampedMaskCount(op->getLoc(), count, zero, sixteen);
+    return makeTailMask(op, zero, clamped);
+  }
+
   LogicalResult lowerCreateMask(Operation *op) {
     if (op->getNumOperands() != 1 || op->getNumResults() != 1 ||
         !isVector16I1(op->getResult(0).getType()))
       return emitStagedDiagnostic(op, "vector.create_mask shape other than vector<16xi1>");
-    Value limit = lookupValue(op, op->getOperand(0));
-    if (!limit)
+    FailureOr<ClassifiedMemoryMask> mask = classifyCreateMask(op);
+    if (failed(mask))
       return failure();
-    Value zero = createI32Constant(builder, op->getLoc(), 0);
-    Value sixteen = createI32Constant(builder, op->getLoc(), 16);
-    Value belowZero = builder.create<arith::CmpIOp>(
-        op->getLoc(), arith::CmpIPredicate::slt, limit, zero);
-    Value nonNegative = builder.create<arith::SelectOp>(
-        op->getLoc(), belowZero, zero, limit);
-    Value aboveSixteen = builder.create<arith::CmpIOp>(
-        op->getLoc(), arith::CmpIPredicate::sgt, nonNegative, sixteen);
-    Value clamped = builder.create<arith::SelectOp>(
-        op->getLoc(), aboveSixteen, sixteen, nonNegative);
-    state.predicates[op->getResult(0)] =
-        createPredTail(builder, op->getLoc(), zero, clamped);
+    rememberMemoryMask(op->getResult(0), *mask);
     return success();
   }
 
@@ -1009,8 +1105,9 @@ private:
       }
       if (sawTrue && sawFalse)
         return emitStagedDiagnostic(op.getOperation(), "sparse boolean vector constant mask");
-      state.predicates[op.getResult()] = sawTrue ? createPredFull(builder, loc)
-                                                 : createPredEmpty(builder, loc);
+      ClassifiedMemoryMask mask =
+          sawTrue ? makeFullMask(op.getOperation()) : makeEmptyMask(op.getOperation());
+      rememberMemoryMask(op.getResult(), mask);
       return success();
     }
 
@@ -1248,13 +1345,162 @@ private:
     return success();
   }
 
-  FailureOr<Value> lowerMaskOperand(Operation *op, std::optional<Value> mask) {
-    if (!mask)
-      return createPredFull(builder, op->getLoc());
-    Value pred = lookupPredicate(op, *mask);
-    if (!pred)
+  ClassifiedMemoryMask classifyTransferMask(Operation *op,
+                                            std::optional<Value> maskValue) {
+    if (!maskValue)
+      return makeFullMask(op);
+
+    auto it = state.memoryMasks.find(*maskValue);
+    if (it != state.memoryMasks.end())
+      return it->second;
+
+    ClassifiedMemoryMask mask;
+    mask.kind = MemoryMaskKind::SparseOrUnknown;
+    mask.source = (*maskValue).getDefiningOp();
+    mask.reason = "sparse or unknown transfer mask";
+    return mask;
+  }
+
+  LogicalResult diagnoseTransferMemref(Operation *op, Value memref,
+                                       StringRef accessName) {
+    auto memrefType = llvm::dyn_cast<MemRefType>(memref.getType());
+    if (!memrefType) {
+      return emitStagedDiagnostic(
+          op, Twine("ranked or strided memory beyond Phase 10; ") +
+                  accessName +
+                  " memref outside rank-1 contiguous i32/f32 #vc4value.global");
+    }
+
+    bool hasGlobalSpace =
+        llvm::isa_and_nonnull<mlir::vc4value::GlobalMemorySpaceAttr>(
+            memrefType.getMemorySpace());
+    if (memrefType.getRank() != 1 || !hasGlobalSpace ||
+        !memrefType.getLayout().isIdentity()) {
+      return emitStagedDiagnostic(
+          op, Twine("ranked or strided memory beyond Phase 10; ") +
+                  accessName +
+                  " memref outside rank-1 contiguous i32/f32 #vc4value.global");
+    }
+
+    Type elementType = memrefType.getElementType();
+    if (!elementType.isSignlessInteger(32) && !elementType.isF32()) {
+      return emitStagedDiagnostic(
+          op, Twine("unsupported transfer element type; ") + accessName +
+                  " memref outside rank-1 contiguous i32/f32 #vc4value.global");
+    }
+    return success();
+  }
+
+  LogicalResult diagnoseVectorType(Operation *op, Type vectorType,
+                                   StringRef accessName) {
+    if (isVector16I32(vectorType) || isVector16F32(vectorType))
+      return success();
+    if (accessName == "transfer_read")
+      return emitStagedDiagnostic(
+          op, "unsupported transfer element type; transfer_read result type "
+              "outside vector<16xi32/f32>");
+    return emitStagedDiagnostic(
+        op, "unsupported transfer element type; transfer_write value outside "
+            "vector<16xi32/f32>");
+  }
+
+  LogicalResult checkTransferElementMatch(Operation *op, Value memref,
+                                          Type vectorType) {
+    auto memrefType = llvm::dyn_cast<MemRefType>(memref.getType());
+    auto typedVector = llvm::dyn_cast<VectorType>(vectorType);
+    if (!memrefType || !typedVector)
+      return success();
+    if (memrefType.getElementType() != typedVector.getElementType()) {
+      return emitStagedDiagnostic(
+          op, "unsupported transfer element type; memref element type and "
+              "vector element type must match");
+    }
+    return success();
+  }
+
+  FailureOr<ClassifiedMemoryTransfer>
+  classifyTransferRead(Operation *op) {
+    ClassifiedMemoryTransfer transfer;
+    transfer.access = TransferAccessKind::Read;
+
+    if (op->getNumResults() != 1)
+      return emitPhase5Diagnostic(op, "transfer_read result count");
+    transfer.vectorType = op->getResult(0).getType();
+    if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_read")))
       return failure();
-    return pred;
+
+    Value memref = op->getOperand(0);
+    if (failed(diagnoseTransferMemref(op, memref, "transfer_read")))
+      return failure();
+    if (failed(checkTransferElementMatch(op, memref, transfer.vectorType)))
+      return failure();
+    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
+      return emitStagedDiagnostic(op, "transfer_read rank or mask form");
+    if (!isRank1IdentityTransferMap(op)) {
+      return emitStagedDiagnostic(
+          op, "transfer_read permutation map beyond rank-1 identity");
+    }
+
+    transfer.memref = memref;
+    transfer.baseIndex = op->getOperand(1);
+    transfer.padding = op->getOperand(2);
+    if (!isScalarI32OrIndex(transfer.baseIndex.getType()))
+      return emitStagedDiagnostic(op, "transfer base index must be scalar");
+    if (!isZeroConstant(transfer.padding)) {
+      return emitPhase5Diagnostic(
+          op, "transfer_read nonzero padding value; transfer_read padding must "
+              "be zero for inactive_load<zero>");
+    }
+
+    std::optional<Value> maskValue;
+    if (op->getNumOperands() == 4)
+      maskValue = op->getOperand(3);
+    transfer.mask = classifyTransferMask(op, maskValue);
+    if (transfer.mask.kind == MemoryMaskKind::SparseOrUnknown)
+      return emitStagedDiagnostic(op, "sparse or unknown transfer_read mask");
+    if (transfer.mask.kind == MemoryMaskKind::Unsupported)
+      return emitStagedDiagnostic(op, "unsupported transfer_read mask");
+    transfer.acceptedPath = "tmu safe-offset inactive-zero";
+    return transfer;
+  }
+
+  FailureOr<ClassifiedMemoryTransfer>
+  classifyTransferWrite(Operation *op) {
+    ClassifiedMemoryTransfer transfer;
+    transfer.access = TransferAccessKind::Write;
+
+    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
+      return emitStagedDiagnostic(op, "transfer_write rank or mask form");
+    transfer.vectorValue = op->getOperand(0);
+    transfer.vectorType = transfer.vectorValue.getType();
+    if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_write")))
+      return failure();
+
+    Value memref = op->getOperand(1);
+    if (failed(diagnoseTransferMemref(op, memref, "transfer_write")))
+      return failure();
+    if (failed(checkTransferElementMatch(op, memref, transfer.vectorType)))
+      return failure();
+    if (!isRank1IdentityTransferWriteMap(op)) {
+      return emitStagedDiagnostic(
+          op, "transfer_write permutation map beyond rank-1 identity");
+    }
+
+    transfer.memref = memref;
+    transfer.baseIndex = op->getOperand(2);
+    if (!isScalarI32OrIndex(transfer.baseIndex.getType()))
+      return emitStagedDiagnostic(op, "transfer base index must be scalar");
+
+    std::optional<Value> maskValue;
+    if (op->getNumOperands() == 4)
+      maskValue = op->getOperand(3);
+    transfer.mask = classifyTransferMask(op, maskValue);
+    if (transfer.mask.kind == MemoryMaskKind::SparseOrUnknown)
+      return emitStagedDiagnostic(op, "sparse or unknown transfer_write mask");
+    if (transfer.mask.kind == MemoryMaskKind::Unsupported)
+      return emitStagedDiagnostic(op, "unsupported transfer_write mask");
+    transfer.acceptedPath = "vdw preserve inactive-store";
+    return transfer;
   }
 
   FailureOr<Value> createByteOffsets(Operation *op, Value elemIndex,
@@ -1288,85 +1534,54 @@ private:
   }
 
   LogicalResult lowerTransferRead(Operation *op) {
-    if (op->getNumResults() != 1)
-      return emitPhase5Diagnostic(op, "transfer_read result count");
-    Type resultType = op->getResult(0).getType();
-    if (!isVector16I32(resultType) && !isVector16F32(resultType))
-      return emitStagedDiagnostic(op, "transfer_read result type outside vector<16xi32/f32>");
-    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
-      return emitStagedDiagnostic(op, "transfer_read rank or mask form");
-    if (!isRank1IdentityTransferMap(op))
-      return emitStagedDiagnostic(op, "transfer_read permutation map beyond rank-1 identity");
+    FailureOr<ClassifiedMemoryTransfer> legality = classifyTransferRead(op);
+    if (failed(legality))
+      return failure();
 
-    Value memref = op->getOperand(0);
-    Value index = op->getOperand(1);
-    Value padding = op->getOperand(2);
-    std::optional<Value> mask;
-    if (op->getNumOperands() == 4)
-      mask = op->getOperand(3);
-
-    if (!isRank1IdentityGlobalMemref(memref.getType()))
-      return emitStagedDiagnostic(op, "transfer_read memref outside rank-1 contiguous i32/f32 #vc4value.global");
-    if (!isZeroConstant(padding))
-      return emitPhase5Diagnostic(op, "transfer_read padding must be zero for inactive_load<zero>");
-
-    Value base = lookupValue(op, memref);
-    FailureOr<Value> pred = lowerMaskOperand(op, mask);
-    if (!base || failed(pred))
+    Value base = lookupValue(op, legality->memref);
+    if (!base)
       return failure();
     int64_t elemBytes = 4;
+    std::optional<Value> offsetMask;
+    if (legality->mask.kind != MemoryMaskKind::Full)
+      offsetMask = legality->mask.predicate;
     FailureOr<Value> byteOffsets =
-        createByteOffsets(op, index, elemBytes,
-                          mask ? std::optional<Value>(*pred) : std::nullopt);
+        createByteOffsets(op, legality->baseIndex, elemBytes, offsetMask);
     if (failed(byteOffsets))
       return failure();
     Value safeOffset = createI32Constant(builder, op->getLoc(), 0);
     Value result = createOpWithResult(
         builder, op->getLoc(), kTMULoadFragmentOpName,
-        {base, *byteOffsets, *pred, safeOffset},
+        {base, *byteOffsets, legality->mask.predicate, safeOffset},
         {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                 ctx, mlir::vc4kernel::MemoryPath::tmu_global_read)),
          builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(
                                              ctx, mlir::vc4kernel::Coherency::readonly_tmu)),
          builder.getNamedAttr("inactive_load", mlir::vc4kernel::InactiveLoadAttr::get(
                                                  ctx, mlir::vc4kernel::InactiveLoad::zero))},
-        resultType);
+        legality->vectorType);
     state.values[op->getResult(0)] = result;
     return success();
   }
 
   LogicalResult lowerTransferWrite(Operation *op) {
-    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
-      return emitStagedDiagnostic(op, "transfer_write rank or mask form");
-    Value vector = op->getOperand(0);
-    Value memref = op->getOperand(1);
-    Value index = op->getOperand(2);
-    std::optional<Value> mask;
-    if (op->getNumOperands() == 4)
-      mask = op->getOperand(3);
+    FailureOr<ClassifiedMemoryTransfer> legality = classifyTransferWrite(op);
+    if (failed(legality))
+      return failure();
 
-    if (!isVector16I32(vector.getType()) && !isVector16F32(vector.getType()))
-      return emitStagedDiagnostic(op, "transfer_write value outside vector<16xi32/f32>");
-    if (!isRank1IdentityGlobalMemref(memref.getType()))
-      return emitStagedDiagnostic(op, "transfer_write memref outside rank-1 contiguous i32/f32 #vc4value.global");
-    if (!isRank1IdentityTransferWriteMap(op))
-      return emitStagedDiagnostic(op, "transfer_write permutation map beyond rank-1 identity");
-    if (mask && !hasName((*mask).getDefiningOp(), "vector.create_mask"))
-      return emitStagedDiagnostic(op, "sparse or unknown transfer_write mask");
-
-    Value value = lookupValue(op, vector);
-    Value base = lookupValue(op, memref);
-    FailureOr<Value> pred = lowerMaskOperand(op, mask);
-    if (!value || !base || failed(pred))
+    Value value = lookupValue(op, legality->vectorValue);
+    Value base = lookupValue(op, legality->memref);
+    if (!value || !base)
       return failure();
     int64_t elemBytes = 4;
     // Do not poison store offsets.  Inactive preservation is the VDW policy;
     // sparse/unknown masks must be rejected before reaching this path.
-    FailureOr<Value> byteOffsets = createByteOffsets(op, index, elemBytes, std::nullopt);
+    FailureOr<Value> byteOffsets =
+        createByteOffsets(op, legality->baseIndex, elemBytes, std::nullopt);
     if (failed(byteOffsets))
       return failure();
     createOp(builder, op->getLoc(), kVDWStoreFragmentOpName,
-             {base, *byteOffsets, value, *pred},
+             {base, *byteOffsets, value, legality->mask.predicate},
              {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                      ctx, mlir::vc4kernel::MemoryPath::vdw_global_store)),
               builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(

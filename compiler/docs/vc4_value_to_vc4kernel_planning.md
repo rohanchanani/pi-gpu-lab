@@ -689,3 +689,39 @@ unless a later proof explicitly classifies a specific form as impossible.
 Phase 8 does not add TTIR control-flow import. TTIR control flow remains
 staged_future_ttir_import, and `READY_FOR_TRITON=NO` remains true.
 READY_FOR_TRITON remains NO.
+
+## 24. Phase 10.4 value mask/memory classifier
+
+Phase 10.4 implements the value-layer executable classifier for the locked
+Phase 10 mask and memory legality contract. Transfer masks now pass through a
+central structural classifier before either `vector.transfer_read` or
+`vector.transfer_write` can lower.
+
+Accepted transfer masks are:
+
+- full: no transfer mask, or clean all-active canonical mask;
+- empty: clean zero-active canonical mask;
+- tail: `vector.create_mask` for `vector<16xi1>` with the active count clamped
+  to `[0, 16]` and a lane-zero start.
+
+Compute masks produced by vector comparisons remain valid for
+`arith.select`/fragment select, but they are not accepted as memory transfer
+predicates. Sparse or unknown transfer masks reject deterministically in the
+value-to-VC4Kernel pass.
+
+The central memory legality classifier accepts only rank-1 identity
+`#vc4value.global` memrefs with `i32` or `f32` elements, `vector<16xi32>` or
+`vector<16xf32>` transfer values, scalar base indices, rank-1 identity transfer
+maps, zero `transfer_read` padding, inactive-zero TMU loads, and
+inactive-preserve VDW stores. Rank-2, strided, sparse, gather/scatter,
+block-pointer, nonzero-other, subword/f16, and non-identity map forms remain
+staged.
+
+VALUE_MASK_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MEMORY_LEGALITY_CLASSIFIER_IMPLEMENTED=YES
+SPARSE_TRANSFER_WRITE_REJECTS=PASS
+SPARSE_TRANSFER_READ_REJECTS=PASS
+NONZERO_LOAD_OTHER_REJECTS=PASS
+VALUE_MASK_MEMORY_STATIC=PASS
+READY_FOR_PHASE10_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
