@@ -477,6 +477,19 @@ When a mixed fixture fails:
    - compare host/device intermediate values if feasible.
 6. If the bug appears to be in a lower layer than the current phase, stop and report it. Do not paper over it.
 
+### 9.1 Fixture debugging stop rule
+
+When working on a fixture, distinguish fixture bugs from compiler or lower-half bugs.
+
+- If the fixture itself is wrong, incomplete, or under-specified, fix the fixture
+  and keep working.
+- If there is any evidence that the failure is caused by compiler behavior below
+  the layer you are actively changing, stop trying to make the fixture avoid the
+  problem. Inspect enough artifacts to name the likely failing layer and root
+  cause, then flag it as a blocker.
+- Do not rewrite, simplify, rename, reshape, or weaken a natural fixture to avoid
+  a suspected lower-layer bug. A fixture that exposes a real bug is doing its job.
+
 You may inspect and locally instrument lower-half code while debugging a higher-layer phase. But if a true lower-half bug is found, report it as a blocker unless the current prompt explicitly authorizes fixing that layer.
 
 Do not reshape kernels to hide compiler/lower-half bugs. GEMV, GEMM, natural loops, spills, branches, VPM reuse, and tails are intentional stressors.
