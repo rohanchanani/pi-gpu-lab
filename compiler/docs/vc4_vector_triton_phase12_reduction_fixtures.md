@@ -124,3 +124,18 @@ reductions with inactive-zero tail loads, finite-tree f32 add reductions with
 finite inputs, scalar reduction-output stores under control-flow guards, and
 Phase 11 row-strided row-slice reductions. CPU oracles, sentinels, expected
 JSON checks, and saw-claim audits remain strict.
+
+## Phase 12.6 Value Mixed Acceptance
+
+VALUE_REDUCTION_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE12_7_TTIR_IMPORTER_REDUCTION_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 12.6 extends the cumulative VC4Value mixed hardware suite with
+`mixed_value_reduction_axes_mask_cf_strided_vc4value`. The fixture combines
+Phase 9 multi-axis launch identity, Phase 8 scalar control flow, Phase 10 tail
+masks and compute-mask select, Phase 11 row-strided memory, i32 and finite-tree
+f32 add reductions, and scalar reduction-output stores. The full mixed suite
+passes on hardware with `active_qpus=12` where applicable. Dot, GEMV, GEMM,
+non-add reductions, and rank>1 reductions remain unclaimed and staged.

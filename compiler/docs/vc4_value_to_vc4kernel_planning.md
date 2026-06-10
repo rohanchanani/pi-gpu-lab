@@ -1063,3 +1063,19 @@ fixtures. The accepted executable subset remains `vector.reduction <add>` over
 tail inputs from Phase 10 loads, scalar rank-1 reduction-output stores, and
 Phase 11 row-strided row-slice inputs. Non-add reductions, rank>1 reductions,
 dot/GEMV/GEMM, scans, atomics, and default/exact f32 reductions remain staged.
+
+## 34. Phase 12.6 value mixed acceptance lock
+
+VALUE_REDUCTION_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE12_7_TTIR_IMPORTER_REDUCTION_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 12.6 adds `mixed_value_reduction_axes_mask_cf_strided_vc4value` to the
+VC4Value mixed hardware acceptance suite. The fixture combines Phase 9
+multi-axis launch identity, Phase 8 scalar control flow, Phase 10 tail masks
+and compute-mask selects, Phase 11 row-strided memory, Phase 12 i32 and
+finite-tree f32 add reductions, and scalar reduction-output stores. The suite
+passes with strict CPU oracles, sentinels, expected JSON checks, active QPU
+requirements, and claim audits. Dot, GEMV, GEMM, non-add reductions, and
+rank>1 reductions remain staged.

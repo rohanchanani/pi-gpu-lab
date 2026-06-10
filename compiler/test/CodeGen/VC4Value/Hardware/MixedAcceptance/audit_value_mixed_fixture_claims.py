@@ -231,8 +231,13 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(runner, "after-scf-to-cf", "saw_scf_to_cf_boundary runner")
 
     if "saw_value_control_flow" in claim_names:
-        for marker in ("cf.br ^loop", "cf.cond_br", "arith.cmpi ult"):
-            require_marker(mlir, marker, "saw_value_control_flow input")
+        require_marker(mlir, "cf.cond_br", "saw_value_control_flow input")
+        require_marker(mlir, "arith.cmpi ult", "saw_value_control_flow input")
+        if "cf.br ^loop" in mlir:
+            require_marker(mlir, "cf.br ^loop", "saw_value_control_flow input")
+        else:
+            for marker in ("cf.cond_br %inside", "cf.cond_br %use_i32"):
+                require_marker(mlir, marker, "saw_value_control_flow input")
         for marker in ("trip", "use_i32_path"):
             require_marker(harness, marker, "saw_value_control_flow harness")
         if (
@@ -337,6 +342,54 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             if marker in mlir:
                 fail(f"saw_no_hidden_memref_descriptor input uses forbidden marker {marker}")
         require_marker(mlir, "vc4value.shape_args", "saw_no_hidden_memref_descriptor input")
+
+    if "saw_value_row_strided_memory" in claim_names:
+        for marker in (
+            "memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>",
+            "memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>",
+            "vector.transfer_read %rank_i[%pid1, %col]",
+            "vector.transfer_read %rank_f[%pid1, %col]",
+        ):
+            require_marker(mlir, marker, "saw_value_row_strided_memory input")
+        for marker in ("r * cfg->lda + c", "rank_i_value", "rank_f_value", "row padding"):
+            require_marker(harness, marker, "saw_value_row_strided_memory harness")
+
+    if "saw_value_reduction_i32_add" in claim_names:
+        require_marker(mlir, "vector.reduction <add>, %reduce_i : vector<16xi32> into i32", "saw_value_reduction_i32_add input")
+        for marker in ("row_sum_i += expected_tail_i[index]", "verify_row_reductions"):
+            require_marker(harness, marker, "saw_value_reduction_i32_add harness")
+
+    if "saw_value_reduction_f32_finite_add" in claim_names:
+        for marker in (
+            'vc4value.fp_domain = "finite"',
+            'vc4value.reduction_policy = "finite_tree"',
+            "vector.reduction <add>, %reduce_f : vector<16xf32> into f32",
+        ):
+            require_marker(mlir, marker, "saw_value_reduction_f32_finite_add input")
+        for marker in ("row_sum_f += expected_tail_f[index]", "EPSILON", "max_abs_diff"):
+            require_marker(harness, marker, "saw_value_reduction_f32_finite_add harness")
+
+    if "saw_value_scalar_reduction_store" in claim_names:
+        for marker in (
+            "memref.store %row_sum_i, %row_out_i[%pid1]",
+            "memref.store %row_sum_f, %row_out_f[%pid1]",
+        ):
+            require_marker(mlir, marker, "saw_value_scalar_reduction_store input")
+        for marker in ("row_out_i", "row_out_f", "verify_row_reductions", "verify_sentinels"):
+            require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
+
+    if "saw_f32_finite_tree_policy" in claim_names:
+        for marker in ('vc4value.fp_domain = "finite"', 'vc4value.reduction_policy = "finite_tree"'):
+            require_marker(mlir, marker, "saw_f32_finite_tree_policy input")
+        require_marker(harness, "EPSILON", "saw_f32_finite_tree_policy harness")
+
+    if "saw_no_dot_gemv" in claim_names:
+        lowered = mlir.lower()
+        for marker in ("vector.contract", "linalg.", "dot", "gemv", "gemm"):
+            if marker in lowered:
+                fail(f"saw_no_dot_gemv input uses forbidden marker {marker}")
+        for marker in ("saw_no_dot_gemv=1", "row_sum_f += expected_tail_f[index]"):
+            require_marker(harness, marker, "saw_no_dot_gemv harness")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

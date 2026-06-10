@@ -1,0 +1,27 @@
+{
+  "name": "mixed_value_reduction_axes_mask_cf_strided_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "elements_checked": 236,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "saw_value_multi_axis": 1,
+    "saw_value_control_flow": 1,
+    "saw_value_mask_tail": 1,
+    "saw_value_compute_mask_select": 1,
+    "saw_value_row_strided_memory": 1,
+    "saw_value_reduction_i32_add": 1,
+    "saw_value_reduction_f32_finite_add": 1,
+    "saw_value_scalar_reduction_store": 1,
+    "saw_f32_finite_tree_policy": 1,
+    "saw_no_dot_gemv": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.001
+  }
+}

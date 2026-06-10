@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase11_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase12_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -554,6 +554,86 @@
               "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-hidden-memref-descriptor-dim.mlir",
               "compiler/test/ValueSurface/invalid-value-surface-hidden-memref-descriptor.mlir"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_reduction_axes_mask_cf_strided_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_reduction_axes_mask_cf_strided_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_reduction_axes_mask_cf_strided_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_reduction_axes_mask_cf_strided_vc4value/candidate/mixed_value_reduction_axes_mask_cf_strided_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses grid_rank=2 with axis0/axis1 program_id and axis0 num_programs; the harness derives row slices from the same 2D grid and checks row/tail outputs for every launched case."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir guards inactive rows and branches on use_i32_path; the harness varies trip and use_i32_path and checks both i32-predicate and f32-predicate output paths."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask for row-tail loads and stores; expected.json requires sentinel_mismatches=0 and the harness checks inactive row-tail and row-output sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses i32 and finite f32 comparisons to select vector values before reduction; the harness CPU oracle checks the selected tail output and row sums."
+          }
+        },
+        {
+          "claim": "saw_value_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads rank-2 strided row slices; the harness fills rows with lda padding, checks row padding sentinels, and verifies outputs by r * lda + c indexing."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_i32_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reduces selected vector<16xi32> rows with vector.reduction <add>; the harness accumulates expected_tail_i values into row_sum_i and checks row_out_i."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reduces selected vector<16xf32> rows under finite-tree policy; the harness uses finite inputs, row_sum_f CPU oracle, and a documented tolerance."
+          }
+        },
+        {
+          "claim": "saw_value_scalar_reduction_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores scalar i32/f32 reduction results to rank-1 row outputs; the harness checks row_out_i/row_out_f values and row-output sentinels."
+          }
+        },
+        {
+          "claim": "saw_f32_finite_tree_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir carries vc4value.fp_domain=\"finite\" and vc4value.reduction_policy=\"finite_tree\"; audit_value_mixed_fixture_claims.py rejects the claim if either marker is missing."
+          }
+        },
+        {
+          "claim": "saw_no_dot_gemv",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "audit_value_mixed_fixture_claims.py rejects vector.contract, linalg, dot, GEMV, and GEMM markers; the harness oracle sums selected row elements without vector multiplication-plus-reduction."
           }
         }
       ]

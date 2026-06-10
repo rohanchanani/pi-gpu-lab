@@ -50,6 +50,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_multi_axis_cf_tail_vc4value",
     "mixed_value_mask_memory_axis_cf_vc4value",
     "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
+    "mixed_value_reduction_axes_mask_cf_strided_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -92,6 +93,12 @@ REQUIRED_FEATURES = {
     "value_memref_dim_metadata",
     "value_no_gather_lane_stride",
     "value_no_hidden_memref_descriptor",
+    "value_row_strided_memory",
+    "value_vector_reduction_add_i32",
+    "value_vector_reduction_add_f32_finite",
+    "value_scalar_reduction_store",
+    "value_f32_finite_tree_policy",
+    "value_no_dot_gemv",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -217,6 +224,11 @@ def validate_fixture(repo_root, fixture):
         "value_rank2_row_slice_strided": "strided<[?, 1], offset: 0>",
         "value_stride_args_metadata": "vc4value.stride_args",
         "value_memref_dim_metadata": "memref.dim",
+        "value_row_strided_memory": "strided<[?, 1], offset: 0>",
+        "value_vector_reduction_add_i32": "vector.reduction <add>",
+        "value_vector_reduction_add_f32_finite": "vector.reduction <add>",
+        "value_scalar_reduction_store": "memref.store",
+        "value_f32_finite_tree_policy": "vc4value.reduction_policy = \"finite_tree\"",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -261,6 +273,10 @@ def validate_fixture(repo_root, fixture):
         for marker in sparse_memory_uses:
             if marker in mlir:
                 fail(f"{name} claims no sparse memory mask but input uses {marker}")
+    if "value_no_dot_gemv" in tags:
+        for marker in ("vector.contract", "linalg.", "dot", "gemv", "gemm"):
+            if marker in mlir.lower():
+                fail(f"{name} claims no dot/GEMV/GEMM but input uses {marker}")
 
 
 def validate_manifest(repo_root, manifest):
@@ -272,7 +288,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase11_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase12_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -344,7 +360,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 
