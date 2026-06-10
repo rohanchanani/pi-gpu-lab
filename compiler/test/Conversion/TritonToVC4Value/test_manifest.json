@@ -41,14 +41,14 @@
       "test": "ttir-program-id-axes-staged-reject.test",
       "input": "generated from examples/triton/phase6/generated/vector_add_b16.ttir.mlir by Support/make_staged_ttir.py",
       "input_kind": "parser-valid staged TTIR profile probe derived from a real generated TTIR snapshot",
-      "feature_claim": "program_id axes 1 and 2 remain staged/rejected",
+      "feature_claim": "program_id axes 1 and 2 lower structurally after Phase 9; out-of-range axes remain rejected",
       "cpp_importer_only": true
     },
     {
       "test": "ttir-attrs-staged-reject.test",
-      "input": "generated make_range 1..17 probe plus compiler/test/Conversion/TritonToVC4Value/Inputs/num-programs-axis-y.ttir.mlir and Inputs/num-programs-axis-z.ttir.mlir",
+      "input": "generated make_range 1..17 probe plus compiler/test/Conversion/TritonToVC4Value/Inputs/num-programs-axis-out-of-range.ttir.mlir",
       "input_kind": "parser-valid staged TTIR attr/range probes",
-      "feature_claim": "non-V1 make_range forms and num_programs axes 1/2 remain staged/rejected through exact structured classification",
+      "feature_claim": "non-V1 make_range forms and out-of-range num_programs axes remain staged/rejected through exact structured classification",
       "cpp_importer_only": true
     },
     {

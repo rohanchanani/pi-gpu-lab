@@ -245,3 +245,42 @@ The importer lowers this to flattened rank-1 value transfers with scalar
 general mask classifier. Noncanonical masks, sparse masks, rank-2 memory,
 block pointers, dot, reduce, gather/scatter, `arith.sitofp`, and
 `arith.fptosi` remain staged or rejected according to the target profile.
+
+## Phase 9.8 TTIR Hardware Isolation Lock
+
+Phase 9.8 proves the controlled real Triton multi-axis TTIR snapshots on real
+VC4 hardware through the full path:
+
+```text
+TTIR_MULTI_AXIS_HARDWARE_ISOLATION=PASS
+TTIR_MULTI_AXIS_PID2D_HARDWARE=PASS
+TTIR_MULTI_AXIS_PID3D_HARDWARE=PASS
+TTIR_MULTI_AXIS_NUM_PROGRAMS_HARDWARE=PASS
+TTIR_MULTI_AXIS_CF_TAIL_HARDWARE=PASS
+TTIR_MULTI_AXIS_ACTIVE_QPUS_12_COVERAGE=YES
+TTIR_MULTI_AXIS_ISOLATION_CLAIM_AUDIT=PASS
+READY_FOR_PHASE9_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO
+```
+
+The hardware fixtures consume source-controlled TTIR snapshots copied exactly
+from `examples/triton/phase9_multi_axis_launch/generated/`. They do not
+regenerate TTIR and do not use Python semantic lowering or hand-written value IR
+as proof. The runner imports each snapshot through the C++ TTIR importer and
+then lowers through value IR, VC4Kernel, SSAVC4, scheduled VC4, generated
+artifacts, and the existing VC4 hardware runner.
+
+The isolation suite covers:
+
+- `program_id` axes 0/1 with `num_programs(0)` in a 2D logical grid;
+- `program_id` axes 0/1/2 with `num_programs(0/1)` in a 3D logical grid;
+- `num_programs` axes 0/1/2 returning `grid.x/y/z`;
+- multi-axis launch identity combined with Phase 8.5 scalar control flow and
+  canonical linearized tail load/store.
+
+Every accepted fixture requires `active_qpus=12`, `lanes=16`,
+`total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, and a
+nonzero output hash. The claim audit checks the real Triton source and real TTIR
+snapshot provenance, exact fixture input copies, C++ importer result fields,
+multi-axis TTIR op forms, output-backed hardware claims, and absence of TTIR
+regeneration or Phase 10 mask/rank-2 memory scope creep.

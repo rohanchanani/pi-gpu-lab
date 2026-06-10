@@ -1,0 +1,78 @@
+{
+  "phase": "Phase9.8",
+  "fixtures": [
+    {
+      "name": "ttir_multi_axis_pid2d_b16_vc4triton",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid2d_b16.py",
+      "snapshot": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid2d_b16.ttir.mlir",
+      "program_id_axes": ["x", "y"],
+      "num_programs_axes": ["x"],
+      "expected_ops": ["tt.get_program_id x", "tt.get_program_id y", "tt.get_num_programs x", "tt.store"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "program_id_axes_0_1", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "num_programs_axis_0", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_multi_axis_lowering", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_multi_axis_pid3d_b16_vc4triton",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid3d_b16.py",
+      "snapshot": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid3d_b16.ttir.mlir",
+      "program_id_axes": ["x", "y", "z"],
+      "num_programs_axes": ["x", "y"],
+      "expected_ops": ["tt.get_program_id x", "tt.get_program_id y", "tt.get_program_id z", "tt.get_num_programs x", "tt.get_num_programs y", "tt.store"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "program_id_axes_0_1_2", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "num_programs_axes_0_1", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_multi_axis_lowering", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_multi_axis_num_programs_b16_vc4triton",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_num_programs_b16.py",
+      "snapshot": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_num_programs_b16.ttir.mlir",
+      "program_id_axes": ["x", "y", "z"],
+      "num_programs_axes": ["x", "y", "z"],
+      "expected_ops": ["tt.get_program_id x", "tt.get_program_id y", "tt.get_program_id z", "tt.get_num_programs x", "tt.get_num_programs y", "tt.get_num_programs z", "tt.store"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "program_id_axes_0_1_2", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "num_programs_axes_0_1_2", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_multi_axis_lowering", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_multi_axis_cf_tail_b16_vc4triton",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_cf_tail_b16.py",
+      "snapshot": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_cf_tail_b16.ttir.mlir",
+      "program_id_axes": ["x", "y"],
+      "num_programs_axes": ["x"],
+      "expected_ops": ["tt.get_program_id x", "tt.get_program_id y", "tt.get_num_programs x", "tt.load", "scf.if", "tt.store"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "program_id_axes_0_1", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "num_programs_axis_0", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "canonical_tail_and_control_flow", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_multi_axis_lowering", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ]
+}

@@ -41,6 +41,12 @@ def mutate(base: str, kind: str) -> str:
         )
     if kind == "axis_y":
         return base.replace("tt.get_program_id x : i32", "tt.get_program_id y : i32", 1)
+    if kind == "axis_out_of_range":
+        return base.replace(
+            "tt.get_program_id x : i32",
+            '"tt.get_program_id"() {axis = 3 : i32} : () -> i32',
+            1,
+        )
     if kind == "store_scatter":
         return base.replace(
             "tt.addptr %0, %offsets_22 : tensor<16x!tt.ptr<f32>>, tensor<16xi32>",

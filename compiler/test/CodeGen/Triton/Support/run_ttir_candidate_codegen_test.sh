@@ -279,18 +279,23 @@ PY_VALIDATE_VERIFIED
 validate_value_file() {
   local path="$1"
   require_file "$path"
-  python3 - "$path" <<'PY_VALIDATE_VALUE'
+  local ttir_paths=()
+  mapfile -t ttir_paths < <(ttir_input_paths)
+  python3 - "$path" "${ttir_paths[@]}" <<'PY_VALIDATE_VALUE'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8", errors="replace")
+ttir_text = "\n".join(Path(arg).read_text(encoding="utf-8", errors="replace")
+                      for arg in sys.argv[2:])
 for required in ("func.func", "vc4value.kernel", "vc4value.program_id",
-                 "vector.create_mask",
-                 "vector.transfer_read", "vector.transfer_write"):
+                 "vector.create_mask", "vector.transfer_write"):
     if required not in text:
         raise SystemExit(f"{path}: lowered value file missing {required}")
+if re.search(r'(?<![A-Za-z0-9_])"?tt\.load\b', ttir_text) and "vector.transfer_read" not in text:
+    raise SystemExit(f"{path}: lowered value file missing vector.transfer_read for TTIR tt.load")
 for dialect in ("tt", "ttg", "gpu", "nvgpu", "nvvm", "rocdl", "llvm",
                 "vc4kernel", "ssavc4"):
     if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):

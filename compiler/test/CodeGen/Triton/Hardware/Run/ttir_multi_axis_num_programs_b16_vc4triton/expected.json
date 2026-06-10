@@ -1,0 +1,30 @@
+{
+  "name": "ttir_multi_axis_num_programs_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "elements_checked": 592,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_grid_blocks": 18,
+    "max_elements": 288,
+    "buffer_n": 352,
+    "output_hash": 3032465249,
+    "saw_nonzero_output_hash": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_multi_axis_launch": 1,
+    "saw_ttir_program_id_axis0": 1,
+    "saw_ttir_program_id_axis1": 1,
+    "saw_ttir_program_id_axis2": 1,
+    "saw_ttir_num_programs_axis0": 1,
+    "saw_ttir_num_programs_axis1": 1,
+    "saw_ttir_num_programs_axis2": 1,
+    "saw_value_multi_axis_launch": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 4
+  }
+}

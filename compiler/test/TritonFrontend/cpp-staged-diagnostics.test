@@ -5,8 +5,8 @@
 # RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind make_range_end8 --out %t/make_range_end8.ttir.mlir
 # RUN: not %vc4_triton_opt %t/make_range_end8.ttir.mlir --convert-triton-to-vc4-value -o %t/make_range_end8.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=MAKE-RANGE
 
-# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis_y --out %t/axis_y.ttir.mlir
-# RUN: not %vc4_triton_opt %t/axis_y.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_y.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis_out_of_range --out %t/axis_out_of_range.ttir.mlir
+# RUN: not %vc4_triton_opt %t/axis_out_of_range.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_out_of_range.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS
 
 # RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-reduce-staged.ttir.mlir" --convert-triton-to-vc4-value -o %t/reduce.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=REDUCE
 
@@ -32,9 +32,8 @@
 # MAKE-RANGE: staged TTIR target-profile feature
 # MAKE-RANGE: READY_FOR_TRITON remains NO
 
-# AXIS: program_id axis 1/2 is staged until value grid-rank >1 lowering
-# AXIS: staged TTIR target-profile feature
-# AXIS: READY_FOR_TRITON remains NO
+# AXIS: 'tt.get_program_id' op attribute 'axis' failed to satisfy constraint
+# AXIS: allowed 32-bit signless integer cases: 0, 1, 2
 
 # REDUCE: tt.reduce
 # REDUCE: staged by body feature, not unsupported control flow
