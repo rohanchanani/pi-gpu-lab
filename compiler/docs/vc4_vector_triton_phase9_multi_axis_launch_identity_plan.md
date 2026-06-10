@@ -61,3 +61,43 @@ VC4Value -> vc4kernel -> ssavc4 -> scheduled vc4
 
 No direct lowering from TTIR or value IR to scheduled `vc4` is allowed, and
 `READY_FOR_TRITON=NO` remains true.
+
+## Controlled Fixture Designs
+
+Phase 9 controlled TTIR fixtures live under:
+
+```text
+examples/triton/phase9_multi_axis_launch/sources/
+examples/triton/phase9_multi_axis_launch/generated/
+examples/triton/phase9_multi_axis_launch/manifest.json
+```
+
+They are scoped to multi-axis logical launch identity plus already accepted
+elementwise, canonical tail, linearized load/store, and Phase 8.5
+scalar/coherent control-flow forms. They must not introduce mask classifier,
+rank-2 memory, gather/scatter, block pointer, dot, reduction, SFU, or numeric
+cast feature work.
+
+The corresponding value fixture designs for later prompts are:
+
+- `value_multi_axis_pid2d_i32_vc4value`: a `vc4value.kernel` function with
+  `grid_rank = 2`, `vc4value.program_id` axes 0 and 1, axis-0
+  `vc4value.num_programs`, flattened block id, `vector.step`, canonical
+  `idx < n` tail mask, and i32 stores encoding pid0, pid1, and lane.
+- `value_multi_axis_pid3d_i32_vc4value`: a `grid_rank = 3` value kernel using
+  program-id axes 0, 1, and 2 plus num-programs axes 0 and 1 to form
+  `(pid2 * num_programs(1) + pid1) * num_programs(0) + pid0`, then storing
+  an i32 lane encoding through a canonical linearized tail.
+- `value_multi_axis_num_programs_axes_vc4value`: a `grid_rank = 3` value
+  kernel that reads `vc4value.num_programs` axes 0, 1, and 2 and stores
+  grid-dimension identity values through the same rank-1 linearized memory
+  contract.
+- `value_multi_axis_tail_cf_vc4value`: a `grid_rank = 2` value kernel combining
+  multi-axis launch identity with already supported scalar coherent
+  control-flow and a canonical tail-masked rank-1 transfer.
+- `mixed_value_multi_axis_cf_tail_vc4value`: a cumulative value mixed fixture
+  combining elementwise arithmetic, canonical tail masks, rank-1 load/store,
+  scalar coherent control-flow, and axes 1/2 launch identity.
+
+These designs are source-facing contracts only in Phase 9.2. They are not
+implemented until later Phase 9 prompts.

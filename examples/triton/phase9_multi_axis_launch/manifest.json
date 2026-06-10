@@ -1,0 +1,128 @@
+{
+  "phase": "phase9_multi_axis_launch_identity",
+  "triton_pinned_version": "3.7.0",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "ready_for_triton": "NO",
+  "fixtures_are_acceptance_inputs": true,
+  "accepted_fixture_exclusions": {
+    "arith_sitofp": false,
+    "fptosi": false,
+    "dot": false,
+    "reduce": false,
+    "gather": false,
+    "scatter": false,
+    "block_pointer": false,
+    "rank_2_tensor": false,
+    "sfu_or_math_expansion": false,
+    "mask_classifier_features": false
+  },
+  "fixtures": [
+    {
+      "name": "ttir_multi_axis_pid2d_b16",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid2d_b16.py",
+      "generated_ttir": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid2d_b16.ttir.mlir",
+      "kernel_name": "ttir_multi_axis_pid2d_b16_kernel",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid2d_b16.py --kernel-name ttir_multi_axis_pid2d_b16_kernel --signature '*i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid2d_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase9_2_controlled_fixtures/metadata/ttir_multi_axis_pid2d_b16.json",
+      "triton_version": "3.7.0",
+      "expected_axes_used": {
+        "program_id": [0, 1],
+        "num_programs": [0]
+      },
+      "expected_grid_rank": 2,
+      "expected_body_feature_set": [
+        "i32 launch arithmetic",
+        "tt.make_range 0..16",
+        "canonical rank-1 tail mask",
+        "masked rank-1 i32 store"
+      ],
+      "contains_forbidden_or_staged_features": false
+    },
+    {
+      "name": "ttir_multi_axis_pid3d_b16",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid3d_b16.py",
+      "generated_ttir": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid3d_b16.ttir.mlir",
+      "kernel_name": "ttir_multi_axis_pid3d_b16_kernel",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_pid3d_b16.py --kernel-name ttir_multi_axis_pid3d_b16_kernel --signature '*i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid3d_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase9_2_controlled_fixtures/metadata/ttir_multi_axis_pid3d_b16.json",
+      "triton_version": "3.7.0",
+      "expected_axes_used": {
+        "program_id": [0, 1, 2],
+        "num_programs": [0, 1]
+      },
+      "expected_grid_rank": 3,
+      "expected_body_feature_set": [
+        "i32 launch arithmetic",
+        "tt.make_range 0..16",
+        "canonical rank-1 tail mask",
+        "masked rank-1 i32 store"
+      ],
+      "contains_forbidden_or_staged_features": false
+    },
+    {
+      "name": "ttir_multi_axis_num_programs_b16",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_num_programs_b16.py",
+      "generated_ttir": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_num_programs_b16.ttir.mlir",
+      "kernel_name": "ttir_multi_axis_num_programs_b16_kernel",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_num_programs_b16.py --kernel-name ttir_multi_axis_num_programs_b16_kernel --signature '*i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_num_programs_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase9_2_controlled_fixtures/metadata/ttir_multi_axis_num_programs_b16.json",
+      "triton_version": "3.7.0",
+      "expected_axes_used": {
+        "program_id": [0, 1, 2],
+        "num_programs": [0, 1, 2]
+      },
+      "expected_grid_rank": 3,
+      "expected_body_feature_set": [
+        "i32 launch arithmetic",
+        "tt.make_range 0..16",
+        "canonical rank-1 tail mask",
+        "masked rank-1 i32 store"
+      ],
+      "contains_forbidden_or_staged_features": false
+    },
+    {
+      "name": "ttir_multi_axis_cf_tail_b16",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_cf_tail_b16.py",
+      "generated_ttir": "examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_cf_tail_b16.ttir.mlir",
+      "kernel_name": "ttir_multi_axis_cf_tail_b16_kernel",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase9_multi_axis_launch/sources/ttir_multi_axis_cf_tail_b16.py --kernel-name ttir_multi_axis_cf_tail_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_cf_tail_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase9_2_controlled_fixtures/metadata/ttir_multi_axis_cf_tail_b16.json",
+      "triton_version": "3.7.0",
+      "expected_axes_used": {
+        "program_id": [0, 1],
+        "num_programs": [0]
+      },
+      "expected_grid_rank": 2,
+      "expected_body_feature_set": [
+        "i32 launch arithmetic",
+        "tt.make_range 0..16",
+        "canonical rank-1 tail mask",
+        "masked rank-1 f32 load",
+        "scf.if",
+        "f32 add/sub",
+        "masked rank-1 f32 store"
+      ],
+      "contains_forbidden_or_staged_features": false
+    },
+    {
+      "name": "mixed_ttir_multi_axis_cf_tail_b16",
+      "source": "examples/triton/phase9_multi_axis_launch/sources/mixed_ttir_multi_axis_cf_tail_b16.py",
+      "generated_ttir": "examples/triton/phase9_multi_axis_launch/generated/mixed_ttir_multi_axis_cf_tail_b16.ttir.mlir",
+      "kernel_name": "mixed_ttir_multi_axis_cf_tail_b16_kernel",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase9_multi_axis_launch/sources/mixed_ttir_multi_axis_cf_tail_b16.py --kernel-name mixed_ttir_multi_axis_cf_tail_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,fp32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase9_multi_axis_launch/generated/mixed_ttir_multi_axis_cf_tail_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase9_2_controlled_fixtures/metadata/mixed_ttir_multi_axis_cf_tail_b16.json",
+      "triton_version": "3.7.0",
+      "expected_axes_used": {
+        "program_id": [0, 1, 2],
+        "num_programs": [0, 1]
+      },
+      "expected_grid_rank": 3,
+      "expected_body_feature_set": [
+        "i32 launch arithmetic",
+        "tt.make_range 0..16",
+        "canonical rank-1 tail mask",
+        "masked rank-1 f32 loads",
+        "scf.while",
+        "scf.if",
+        "f32 add/sub/mul/cmp/select",
+        "masked rank-1 f32 store"
+      ],
+      "contains_forbidden_or_staged_features": false
+    }
+  ]
+}
