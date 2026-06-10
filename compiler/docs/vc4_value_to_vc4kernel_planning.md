@@ -1,5 +1,13 @@
 # VC4 Value-to-VC4Kernel Planning Guide
 
+PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
+PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
+SPARSE_MEMORY_MASKS_STAGED=YES
+NONZERO_LOAD_OTHER_STAGED=YES
+RANK2_STRIDED_MEMORY_STAGED=YES
+READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
+READY_FOR_TRITON=NO
+
 ## 1. Purpose and non-goals
 
 This document specifies how later lowering phases should plan standard
@@ -223,6 +231,58 @@ Required decisions:
   loads depending on the selected path.
 
 Sparse and unknown stores must not silently lower to sparse VDW stores.
+
+Phase 10 refines this into the locked value mask classifier contract:
+
+- `FULL`: no transfer mask, or `vector.create_mask` active count at least 16
+  after clamping.
+- `EMPTY`: `vector.create_mask` active count at most 0 after clamping.
+- `TAIL_0_TO_16`: `vector.create_mask %count : vector<16xi1>`, clamped to
+  `[0, 16]`, with active lanes starting at lane 0.
+- `COMPUTE_MASK`: `vector<16xi1>` compare/logical masks used only by compute
+  operations such as `arith.select`. These are accepted as compute masks, not
+  as memory transfer predicates.
+- `SPARSE_OR_UNKNOWN_MEMORY_MASK`: any transfer mask not classified as full,
+  empty, or tail. Stores deterministically stage/reject; loads remain staged
+  unless a later phase implements exact support.
+- `RECT`: staged until rank-2/tile memory planning.
+
+The classifier must be structural: typed operation classes, exact operation
+names, attributes, and SSA use-defs decide semantics. It must not parse printed
+IR or special-case fixture names, paths, public names, or generated-output
+locations.
+
+## 6.1 Phase 10 memory legality
+
+The accepted Phase 10 value memory legality subset is:
+
+- rank-1 memrefs in `#vc4value.global`;
+- identity layout;
+- element type `i32` or `f32`;
+- `vector<16xi32>` or `vector<16xf32>` transfers;
+- rank-1 identity transfer permutation maps;
+- scalar index base;
+- load padding/`other` exactly zero;
+- transfer-read inactive lanes through safe-offset inactive-zero;
+- transfer-write inactive lanes through inactive preserve.
+
+The staged or rejected Phase 10 memory forms are:
+
+- nonzero load padding/`other`;
+- non-identity transfer maps;
+- rank greater than 1 memrefs;
+- strided layouts;
+- tensor/block pointer memory;
+- gather/scatter;
+- sparse or unknown store masks;
+- subword or f16 memory;
+- boundary-check/padding-option producer semantics;
+- vector rank greater than 1.
+
+Phase 10.3 is a contract lock only. Planned Phase 10.4 static coverage must
+cover full/unmasked transfers, empty masks, clamped tails, compute-mask selects
+that are not memory masks, sparse transfer read/write staging, nonzero `other`
+staging, and non-identity map staging before any hardware claim.
 
 ## 7. Elementwise arithmetic/cmp/select planning
 

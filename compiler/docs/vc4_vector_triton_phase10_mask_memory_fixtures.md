@@ -2,8 +2,14 @@ PHASE10_CONTROLLED_TRITON_MASK_MEMORY_FIXTURES=YES
 REAL_TRITON_MASK_MEMORY_SOURCES=YES
 REAL_TTIR_MASK_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
+PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
+PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
+SPARSE_MEMORY_MASKS_STAGED=YES
+NONZERO_LOAD_OTHER_STAGED=YES
+RANK2_STRIDED_MEMORY_STAGED=YES
 SPARSE_STORE_MASK_FIXTURE_STAGED=YES
 NONZERO_OTHER_LOAD_FIXTURE_STAGED=YES
+READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE10_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
 
@@ -77,5 +83,26 @@ yet.
 
 The staged snapshots produce precise staged diagnostics for sparse memory masks
 and nonzero load `other`.
+
+## Value Contract Delta
+
+Phase 10.3 locks the corresponding value-surface contract before executable
+classifier implementation:
+
+- `FULL`, `EMPTY`, and `TAIL_0_TO_16` memory masks are the accepted transfer
+  mask classes.
+- `COMPUTE_MASK` is accepted only when the mask feeds compute operations such
+  as `arith.select`, not transfer memory predicates.
+- `SPARSE_OR_UNKNOWN_MEMORY_MASK` transfer masks are staged for loads and
+  deterministic staged/reject for stores.
+- `RECT` is staged until rank-2/tile memory phases.
+
+Accepted value memory legality is rank-1 identity `#vc4value.global` memory
+with `i32`/`f32`, `vector<16xi32>`/`vector<16xf32>` transfers, scalar base
+indices, zero load `other`, inactive-zero loads, and inactive-preserve stores.
+
+Nonzero load `other`, non-identity maps, rank-2/strided memory, gather/scatter,
+block pointers, subword/f16 memory, boundary-check/padding-option producer
+semantics, and vector rank greater than 1 remain staged.
 
 `READY_FOR_TRITON=NO` remains locked.

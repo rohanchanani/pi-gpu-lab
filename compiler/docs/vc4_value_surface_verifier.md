@@ -1,5 +1,13 @@
 # VC4 Value Surface Verifier Contract
 
+PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
+PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
+SPARSE_MEMORY_MASKS_STAGED=YES
+NONZERO_LOAD_OTHER_STAGED=YES
+RANK2_STRIDED_MEMORY_STAGED=YES
+READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
+READY_FOR_TRITON=NO
+
 ## 1. Purpose
 
 `--vc4-verify-value-surface` verifies value-surface admissibility, not current
@@ -210,6 +218,67 @@ vector.compressstore
 
 Future support requires a hardware-proven or explicitly emulated design and an
 updated source contract.
+
+## 11.1 Phase 10 mask classifier contract
+
+Phase 10 locks the value-level mask categories that the later
+value-to-VC4Kernel planner must classify before memory lowering. The
+value-surface verifier remains an admissibility checker: it may accept staged
+standard value IR forms so later passes can emit precise diagnostics.
+
+The central Phase 10 mask classifier categories are:
+
+- `FULL`: no transfer mask, or a `vector.create_mask` active count proven to be
+  at least 16 after clamping to `[0, 16]`.
+- `EMPTY`: a `vector.create_mask` active count proven to be at most 0 after
+  clamping.
+- `TAIL_0_TO_16`: `vector.create_mask %count : vector<16xi1>`, with `%count`
+  clamped to `[0, 16]` and active lanes forming a prefix starting at lane 0.
+- `COMPUTE_MASK`: `vector<16xi1>` masks from compare/logical value forms used
+  only by compute operations such as `arith.select`. Phase 10 accepts these as
+  compute masks only; they are not accepted as transfer memory predicates.
+- `SPARSE_OR_UNKNOWN_MEMORY_MASK`: any `vector<16xi1>` transfer mask not
+  classified as `FULL`, `EMPTY`, or `TAIL_0_TO_16`. Phase 10 stages these for
+  loads unless a later phase implements exact support, and deterministically
+  stages/rejects them for stores.
+- `RECT`: staged until the rank-2/tile memory phase.
+
+Triton and value IR may contain unrelated proof or overflow guards. The Phase
+10 semantic memory-mask classification is based on the SSA value used by
+`vector.transfer_read` or `vector.transfer_write`, not on fixture names,
+printed IR substrings, or surrounding decorative operations.
+
+## 11.2 Phase 10 memory legality contract
+
+Phase 10 accepted value transfer legality is:
+
+- memref rank 1;
+- `#vc4value.global` memory space;
+- identity layout;
+- element type `i32` or `f32`;
+- `vector<16xi32>` or `vector<16xf32>` transfer vector;
+- rank-1 identity permutation map;
+- scalar index base;
+- `vector.transfer_read` padding/`other` exactly zero;
+- transfer-read inactive lanes use safe offset and inactive-zero semantics;
+- transfer-write inactive lanes preserve old output.
+
+Phase 10 staged or rejected value transfer forms are:
+
+- nonzero load `other` / padding;
+- non-identity transfer map;
+- rank greater than 1 memref;
+- strided layout;
+- tensor or block pointer memory;
+- gather or scatter;
+- store with sparse or unknown mask;
+- subword or f16 memory;
+- `boundary_check` / padding-option style producer semantics;
+- vector rank greater than 1.
+
+This contract does not add executable lowering. Phase 10.4 owns the static
+classifier/lowering implementation and diagnostics. Hardware proof remains for
+later Phase 10 hardware prompts.
 
 ## 12. Control-flow boundary
 
