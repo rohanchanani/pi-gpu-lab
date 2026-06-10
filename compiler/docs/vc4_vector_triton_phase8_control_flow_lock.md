@@ -40,6 +40,11 @@ TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
 PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
 VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
 IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+PHASE8R_SCF_WHILE_STATIC=PASS
+PHASE8R_NESTED_STRUCTURED_CF_STATIC=PASS
+PHASE8R_TL_RANGE_STYLE_LOOP_STATIC=PASS
+PHASE8R_PERSISTENT_LOOP_SKELETON_STATIC=PASS
+READY_FOR_PHASE8RD_SWITCH_MULTI_EXIT_PROBE=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -101,6 +106,26 @@ contain accepted VC4Kernel operations, accepted scalar `arith`, and standard
 `cf.br`/scalar-i1 `cf.cond_br`.
 
 Phase 8R wording: verified VC4Kernel contains no raw scf or producer dialects.
+
+## Phase 8Rc Static SCF While And Loop Skeletons
+
+Phase 8Rc proved that upstream `--convert-scf-to-cf` lowers `scf.while`,
+nested structured control flow, tl.range-style loop skeletons, and
+persistent-loop skeletons into explicit `cf.br`/`cf.cond_br` CFG with block
+arguments. The existing value-to-VC4Kernel path then lowers those shapes to
+verified VC4Kernel, SSAVC4, and scheduled VC4 statically.
+
+```text
+PHASE8R_SCF_WHILE_STATIC=PASS
+PHASE8R_NESTED_STRUCTURED_CF_STATIC=PASS
+PHASE8R_TL_RANGE_STYLE_LOOP_STATIC=PASS
+PHASE8R_PERSISTENT_LOOP_SKELETON_STATIC=PASS
+READY_FOR_PHASE8RD_SWITCH_MULTI_EXIT_PROBE=YES
+READY_FOR_TRITON=NO
+```
+
+This is static proof only. Phase 8Rc did not add TTIR control-flow import and
+did not run hardware.
 
 ## Runner Policy
 
