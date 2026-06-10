@@ -628,6 +628,13 @@ Temporary “not implemented yet” is allowed during staging but must shrink ov
 
 ## 13. Phase/package style
 
+For new user-visible value/TTIR features, the detailed workflow in
+`compiler/docs/vc4_feature_driven_vertical_workflow.md` is the controlling
+phase-package template. The older generic package shape below is still valid for
+repairs, docs-only phases, and small lower-half fixes, but feature phases should
+use the fixture-first vertical template unless the user explicitly says
+otherwise.
+
 Real implementation phases should be split into manageable prompt packages. Do not make one prompt design, implement, hardware-prove, audit, and final-accept a major feature family all at once.
 
 Typical package shape:
@@ -771,13 +778,16 @@ The staged roadmap after P13 is:
 30 Optimization and broadening
 ```
 
-Near-term focus:
+Roadmap note:
 
-- Phase 5 proves handwritten value elementwise kernels on hardware.
-- Phase 6 inventories real TTIR and importer shape.
-- Phase 7 proves real Triton elementwise smoke to hardware.
-
-Do not skip Phase 5 and jump to TTIR.
+The numbered roadmap above is historical/staged context. Do not use it to run
+many value phases ahead of TTIR or to treat exploratory probes as acceptance
+targets. Current and future user-visible feature work should follow the
+feature-driven vertical workflow in
+`compiler/docs/vc4_feature_driven_vertical_workflow.md`: design controlled
+Triton fixtures for the feature, inspect real emitted TTIR, lock and prove the
+needed value surface on hardware, then lower the controlled TTIR fixtures to
+hardware and mixed acceptance.
 
 ### Vertical value/TTIR increment workflow
 
@@ -1000,3 +1010,191 @@ Use `FAILURE` or `BLOCKED` when:
 - a source foundation issue is found during a later phase.
 
 Final responses must name exact blockers and next actions. Do not claim success with hidden caveats that make the next phase unsafe.
+
+
+---
+
+## 18. Feature-driven vertical workflow for future phases
+
+For all future user-visible value/TTIR features, use the fixture-first vertical
+workflow specified in:
+
+```text
+compiler/docs/vc4_feature_driven_vertical_workflow.md
+```
+
+This section is a compact standing summary for agents. The specification
+document is the detailed source of truth for prompt package generation.
+
+### 18.1 Core idea
+
+A phase should not begin by implementing whatever an exploratory Triton probe
+happened to emit. A phase begins by naming the natural feature it intends to
+support, then writing controlled fixtures that exercise that feature and avoid
+unrelated staged features.
+
+Correct feature-phase order:
+
+```text
+1. Pick the source-visible feature or feature band.
+2. Design controlled Triton isolation and mixed fixtures for that feature.
+3. Generate real TTIR snapshots from those controlled fixtures.
+4. Inspect the emitted TTIR to determine the required value-surface delta.
+5. Lock the additional value-surface contract.
+6. Implement value -> vc4kernel for the additional value forms.
+7. Prove value support on real hardware with isolation fixtures.
+8. Prove value support in value mixed acceptance.
+9. Implement TTIR -> value for the controlled TTIR forms.
+10. Prove TTIR support on real hardware with isolation fixtures.
+11. Prove TTIR support in TTIR mixed acceptance and layered regressions.
+12. Final-lock the feature or stop with exact blockers.
+```
+
+This is the default for features such as mask legality, memory expansion,
+reductions, math/SFU policy, subword support, transpose/shuffle/rotate,
+contracts/dot, block pointers, and later frontier-style Triton kernels.
+
+### 18.2 Exploratory probes versus controlled fixtures
+
+Keep exploratory probes and controlled fixtures separate.
+
+Exploratory probes:
+
+- answer “what does real Triton emit?”;
+- may include unrelated body features;
+- are useful for taxonomy, future planning, and finding emitted TTIR shapes;
+- normally live under `.vc4_auto` until promoted;
+- are not acceptance fixtures merely because they were generated from real
+  Triton.
+
+Controlled fixtures:
+
+- are hand-designed for the phase feature;
+- are real Triton sources when testing TTIR/Triton;
+- have source-controlled emitted TTIR snapshots when used as frontend evidence;
+- deliberately avoid unrelated staged body features unless the phase explicitly
+  includes those features;
+- drive hardware proof and mixed acceptance;
+- must not be special-cased in compiler code.
+
+If an exploratory probe emits an unrelated staged feature, classify it as
+inventory evidence, not as a reason to broaden the current phase automatically.
+Either revise the controlled fixture to isolate the intended feature or start a
+separate phase for the newly discovered body feature.
+
+### 18.3 Feature-driven prompt template
+
+A normal user-visible feature phase should be split into these prompt families.
+Some small phases may merge adjacent static/doc steps, but hardware-affecting
+feature phases should preserve the order and the gates.
+
+```text
+Phase X0  Rebaseline and feature selection
+Phase Xa  Exploratory probe / controlled fixture design and TTIR inventory
+Phase Xb  Value-surface delta contract
+Phase Xc  Value -> vc4kernel static implementation
+Phase Xd  Value hardware isolation
+Phase Xe  Value mixed acceptance
+Phase Xf  TTIR -> value static implementation
+Phase Xg  TTIR hardware isolation
+Phase Xh  TTIR mixed acceptance and layered regression
+Phase Xi  Final lock and next-phase readiness
+Phase Xx  Failure triage / repair prompts
+```
+
+The detailed responsibilities for each prompt family are in
+`compiler/docs/vc4_feature_driven_vertical_workflow.md`.
+
+### 18.4 Dynamic prompt-package protocol
+
+Prompt packages are allowed, and expected, to be dynamic.
+
+Early prompts produce facts:
+
+```text
+real Triton emitted TTIR forms
+value-surface forms needed
+unexpected body features
+lower-layer blockers
+toolchain/generator availability
+hardware failures
+audit failures
+```
+
+After those facts are reported, later prompts may need addenda, prepends, or
+replacement prompts. Do not blindly run later prompts if an earlier prompt
+changes the feature contract, fixture set, touched-layer classification, or
+required hardware plan.
+
+A prompt may say “run D onward unmodified” only if the preceding reports still
+match D’s prerequisites exactly. If the reports diverge, stop and ask for a
+revision.
+
+### 18.5 Anti-special-casing safeguards
+
+Fixture-driven development is powerful but dangerous. Every feature phase must
+counterbalance it with broad fixtures and audits.
+
+Required safeguards:
+
+- isolation fixtures must cover the meaningful variety of the new feature, not
+  just one happy path;
+- mixed fixtures must combine the new feature with all currently supported
+  feature families over time;
+- source audits must reject fixture-name, path, public-name, candidate-name, or
+  status-string semantics;
+- semantic lowering must be driven by typed MLIR ops, exact attrs, types,
+  regions, blocks, SSA use-defs, verifier contracts, and hardware facts;
+- printed IR/type/attribute substring parsing is not acceptable for semantics;
+- claim audits must prove every `saw_*` or `no_*` field using checked output,
+  checked audits, or explicit phase guards.
+
+Controlled fixtures guide implementation. Audits prevent fixture-specific
+implementation.
+
+### 18.6 Scope-control rule
+
+Do not broaden a phase just because a probe exposed an adjacent feature.
+
+Example policy:
+
+```text
+Phase feature: control flow
+Probe body emits arith.sitofp
+Correct action: classify arith.sitofp as staged body feature or write a
+controlled fixture whose body avoids it.
+Incorrect action: silently implement numeric casts inside the control-flow phase.
+```
+
+A phase may add adjacent support only when the user explicitly agrees that the
+phase scope has changed and the package is extended to include value fixtures,
+TTIR fixtures, hardware proof, mixed acceptance, docs, and audits for that
+adjacent feature.
+
+### 18.7 Source-to-TTIR generation policy
+
+For TTIR phases:
+
+- accepted TTIR evidence must come from real Triton source through the locked
+  generator path;
+- source-controlled snapshots are the durable input to implementation and
+  hardware phases;
+- implementation and hardware prompts must consume source-controlled snapshots
+  and must not regenerate TTIR unless explicitly scoped as a generation phase;
+- do not create venvs, pip install Triton, clone Triton, build Triton, or build
+  LLVM in implementation/hardware/final-lock prompts;
+- default `check-vc4` should not require hard Triton regeneration when possible.
+
+### 18.8 Relationship to existing rules
+
+This workflow refines, not replaces, the existing hard rules:
+
+- preserve the layer path `TTIR -> value -> vc4kernel -> ssavc4 -> vc4 ->
+  artifacts/runtime/hardware`;
+- keep `vc4value` tiny;
+- keep `vc4kernel` free of producer ops;
+- hardware is the proof for executable semantics;
+- use layered mixed regression at final acceptance based on the lowest layer
+  touched during the phase;
+- `READY_FOR_TRITON` remains `NO` until a future explicit global readiness phase
+  changes it.
