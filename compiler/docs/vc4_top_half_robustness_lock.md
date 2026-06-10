@@ -7,6 +7,12 @@ ARG_NAME_REWRITES_REMOVED=YES
 ARG_NAME_COLLISIONS_DISAMBIGUATED=YES
 SHAPE_ARGS_DERIVED_FROM_STRUCTURAL_BOUND_VALUE=YES
 READY_FOR_TOP_HALF3_OUTPUT_BOUNDARY_HARDENING=YES
+VALUE_OUTPUT_BOUNDARY_HARDENED=YES
+UNREALIZED_CONVERSION_CAST_REJECTS=PASS
+PRODUCER_BACKEND_LOWER_DIALECT_OUTPUT_REJECTS=PASS
+TOP_HALF_FRONTEND_ROBUSTNESS_AUDIT_SCRIPT=YES
+NO_STRINGLY_SEMANTIC_CLASSIFICATION=YES
+READY_FOR_TOP_HALF4_STATIC_PIPELINE_AUDITS=YES
 READY_FOR_TRITON=NO
 
 # VC4 Top-Half Robustness Lock
@@ -31,3 +37,17 @@ disambiguated.
 This lock does not implement Phase 9/10 mask classification, common-plan
 generalization, gather/scatter, block pointers, reductions, dot, numeric casts,
 or generic vector index-cast lowering. `READY_FOR_TRITON=NO` remains true.
+
+## TopHalf3 Output Boundary
+
+TopHalf3 centralizes the importer value-output boundary verifier. The output
+module may contain `builtin.module` as the MLIR container and value-layer body
+ops from `func`, `vc4value`, `vector`, `memref`, `arith`, `math`, `scf`, and
+`cf` only. `func` is restricted to function structure and returns.
+
+The verifier rejects `builtin.unrealized_conversion_cast`, arbitrary builtin
+body ops, producer/backend/lower-half dialects, and unconverted tensor or
+Triton pointer types. The frontend robustness audit locks out regex, printed
+IR/type semantics, fixture/path/name special cases, operation unlink/remove
+workarounds, direct lower-half emission, and broad successful lowering paths
+without accounting.

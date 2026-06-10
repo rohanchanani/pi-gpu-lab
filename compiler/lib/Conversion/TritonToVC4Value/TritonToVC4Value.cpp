@@ -77,6 +77,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/raw_ostream.h"
 
 #include <algorithm>
@@ -173,15 +174,18 @@ static bool isForbiddenProducerOrBackendDialect(Operation *op) {
 
 static bool isForbiddenValueOutputDialect(StringRef dialect) {
   return dialect == "tt" || dialect == "ttg" || dialect == "triton_gpu" ||
-         dialect == "nvgpu" || dialect == "nvvm" || dialect == "gpu" ||
-         dialect == "llvm" || dialect == "spirv" || dialect == "vc4kernel" ||
+         dialect == "nvgpu" || dialect == "nvvm" || dialect == "rocdl" ||
+         dialect == "gpu" || dialect == "llvm" || dialect == "spirv" ||
+         dialect == "tensor" || dialect == "linalg" ||
+         dialect == "stablehlo" || dialect == "mhlo" || dialect == "tosa" ||
+         dialect == "iree" || dialect == "vc4kernel" ||
          dialect == "ssavc4" || dialect == "vc4";
 }
 
-static bool isAllowedValueOutputDialect(StringRef dialect) {
-  return dialect == "builtin" || dialect == "func" || dialect == "vc4value" ||
-         dialect == "vector" || dialect == "memref" || dialect == "arith" ||
-         dialect == "math" || dialect == "scf" || dialect == "cf";
+static bool isAllowedValueOutputBodyDialect(StringRef dialect) {
+  return dialect == "vc4value" || dialect == "vector" || dialect == "memref" ||
+         dialect == "arith" || dialect == "math" || dialect == "scf" ||
+         dialect == "cf";
 }
 
 static bool isObservedOptimizationOnlyLoopAttr(NamedAttribute attr) {
@@ -2018,11 +2022,80 @@ static LogicalResult validateInputModuleAttrs(ModuleOp inputModule) {
   return failure();
 }
 
+static bool isValueOutputScalarType(Type type) {
+  return type.isIndex() || type.isInteger(1) || type.isSignlessInteger(8) ||
+         type.isSignlessInteger(16) || type.isSignlessInteger(32) ||
+         type.isF16() || type.isF32();
+}
+
+static bool isValueOutputType(Type type) {
+  if (isValueOutputScalarType(type))
+    return true;
+  if (llvm::isa<mlir::triton::PointerType>(type))
+    return false;
+  if (llvm::isa<TensorType>(type))
+    return false;
+  if (auto vector = llvm::dyn_cast<VectorType>(type))
+    return vector.hasStaticShape() &&
+           isValueOutputScalarType(vector.getElementType());
+  if (auto memref = llvm::dyn_cast<MemRefType>(type))
+    return memref.hasRank() && isValueOutputScalarType(memref.getElementType());
+  return false;
+}
+
+static LogicalResult emitForbiddenValueOutputOp(Operation *op,
+                                                StringRef detail = {}) {
+  InFlightDiagnostic diag = op->emitOpError()
+      << "forbidden operation in TTIR-to-VC4Value output: "
+      << op->getName().getStringRef() << " dialect '"
+      << op->getName().getDialectNamespace() << "'";
+  if (!detail.empty())
+    diag << " (" << detail << ")";
+  return failure();
+}
+
+static LogicalResult verifyValueOutputTypes(Operation *op) {
+  for (Type type : op->getOperandTypes()) {
+    if (!isValueOutputType(type))
+      return emitForbiddenValueOutputOp(op, "operand type is outside the value surface");
+  }
+  for (Type type : op->getResultTypes()) {
+    if (!isValueOutputType(type))
+      return emitForbiddenValueOutputOp(op, "result type is outside the value surface");
+  }
+  for (Region &region : op->getRegions()) {
+    for (Block &block : region) {
+      for (BlockArgument arg : block.getArguments()) {
+        if (!isValueOutputType(arg.getType()))
+          return emitForbiddenValueOutputOp(
+              op, "block argument type is outside the value surface");
+      }
+    }
+  }
+  if (auto func = llvm::dyn_cast<FunctionOpInterface>(op)) {
+    auto type = llvm::dyn_cast<FunctionType>(func.getFunctionType());
+    if (!type)
+      return emitForbiddenValueOutputOp(
+          op, "function signature is not a builtin function type");
+    for (Type input : type.getInputs()) {
+      if (!isValueOutputType(input))
+        return emitForbiddenValueOutputOp(
+            op, "function argument type is outside the value surface");
+    }
+    for (Type result : type.getResults()) {
+      if (!isValueOutputType(result))
+        return emitForbiddenValueOutputOp(
+            op, "function result type is outside the value surface");
+    }
+  }
+  return success();
+}
+
 static LogicalResult verifyValueOutputModule(ModuleOp outputModule) {
   for (Operation &op : outputModule.getBody()->getOperations()) {
     if (!llvm::isa<func::FuncOp>(&op))
-      return op.emitOpError()
-             << "top-level value output operation must be func.func";
+      return emitForbiddenValueOutputOp(
+          &op, "top-level value output operation must be func.func");
 
     if (!op.hasAttr(kVC4ValueKernelAttr))
       return op.emitOpError()
@@ -2034,16 +2107,39 @@ static LogicalResult verifyValueOutputModule(ModuleOp outputModule) {
 
   bool sawIllegal = false;
   outputModule.walk([&](Operation *op) {
+    if (llvm::isa<ModuleOp>(op))
+      return WalkResult::advance();
+
     StringRef dialect = op->getName().getDialectNamespace();
-    if (isForbiddenValueOutputDialect(dialect)) {
-      op->emitOpError() << "TTIR importer emitted or preserved forbidden dialect '"
-                        << dialect << "'";
+    if (hasName(op, "builtin.unrealized_conversion_cast")) {
+      (void)emitForbiddenValueOutputOp(op);
       sawIllegal = true;
       return WalkResult::interrupt();
     }
-    if (!isAllowedValueOutputDialect(dialect)) {
-      op->emitOpError() << "TTIR importer emitted unexpected value output dialect '"
-                        << dialect << "'";
+    if (dialect == "builtin") {
+      (void)emitForbiddenValueOutputOp(
+          op, "only builtin.module is allowed as a value-output container");
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    if (dialect == "func" &&
+        !llvm::isa<func::FuncOp, func::ReturnOp>(op)) {
+      (void)emitForbiddenValueOutputOp(
+          op, "only func.func and func.return are allowed");
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    if (isForbiddenValueOutputDialect(dialect)) {
+      (void)emitForbiddenValueOutputOp(op);
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    if (dialect != "func" && !isAllowedValueOutputBodyDialect(dialect)) {
+      (void)emitForbiddenValueOutputOp(op);
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    if (failed(verifyValueOutputTypes(op))) {
       sawIllegal = true;
       return WalkResult::interrupt();
     }
@@ -2078,6 +2174,17 @@ struct ConvertTritonToVC4ValuePass
     : public PassWrapper<ConvertTritonToVC4ValuePass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertTritonToVC4ValuePass)
 
+  ConvertTritonToVC4ValuePass() = default;
+  ConvertTritonToVC4ValuePass(const ConvertTritonToVC4ValuePass &other)
+      : PassWrapper(other) {
+    testValueOutputBoundary = other.testValueOutputBoundary;
+  }
+
+  Option<bool> testValueOutputBoundary{
+      *this, "test-value-output-boundary",
+      llvm::cl::desc("Test-only: verify the input module as TTIR-to-VC4Value output"),
+      llvm::cl::init(false)};
+
   StringRef getArgument() const final { return "convert-triton-to-vc4-value"; }
 
   StringRef getDescription() const final {
@@ -2093,6 +2200,12 @@ struct ConvertTritonToVC4ValuePass
 
   void runOnOperation() final {
     ModuleOp inputModule = getOperation();
+    if (testValueOutputBoundary) {
+      if (failed(verifyValueOutputModule(inputModule)))
+        signalPassFailure();
+      return;
+    }
+
     SmallVector<Operation *, 4> ttFuncs;
     SmallVector<Operation *, 4> illegalTopLevelOps;
 
