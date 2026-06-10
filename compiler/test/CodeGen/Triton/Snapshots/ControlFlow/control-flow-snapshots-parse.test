@@ -1,0 +1,42 @@
+# REQUIRES: vc4-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/CodeGen/Triton/Snapshots/ControlFlow/ttir/tl_range_loop_skeleton.ttir.mlir" -o %t/tl_range_loop_skeleton.mlir
+# RUN: FileCheck %s --check-prefix=TL-RANGE --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/tl_range_loop_skeleton.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/CodeGen/Triton/Snapshots/ControlFlow/ttir/persistent_loop_skeleton.ttir.mlir" -o %t/persistent_loop_skeleton.mlir
+# RUN: FileCheck %s --check-prefix=PERSISTENT --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/persistent_loop_skeleton.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/CodeGen/Triton/Snapshots/ControlFlow/ttir/static_range_probe.ttir.mlir" -o %t/static_range_probe.mlir
+# RUN: FileCheck %s --check-prefix=STATIC --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/static_range_probe.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/CodeGen/Triton/Snapshots/ControlFlow/ttir/scalar_if_probe.ttir.mlir" -o %t/scalar_if_probe.mlir
+# RUN: FileCheck %s --check-prefix=SCALAR-IF --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/scalar_if_probe.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/CodeGen/Triton/Snapshots/ControlFlow/ttir/while_probe.ttir.mlir" -o %t/while_probe.mlir
+# RUN: FileCheck %s --check-prefix=WHILE --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/while_probe.mlir
+
+# TL-RANGE: tt.func public @tl_range_loop_skeleton_kernel
+# TL-RANGE: scf.for
+# TL-RANGE: scf.yield
+# TL-RANGE: tt.loop_unroll_factor = 1
+# TL-RANGE: tt.return
+
+# PERSISTENT: tt.func public @persistent_loop_skeleton_kernel
+# PERSISTENT: scf.for
+# PERSISTENT: tt.flatten
+# PERSISTENT: tt.loop_unroll_factor = 1
+# PERSISTENT: tt.return
+
+# STATIC: tt.func public @static_range_probe_kernel
+# STATIC-NOT: scf.for
+# STATIC-NOT: scf.if
+# STATIC-NOT: scf.while
+# STATIC: tt.return
+
+# SCALAR-IF: tt.func public @scalar_if_probe_kernel
+# SCALAR-IF: scf.if
+# SCALAR-IF: scf.yield
+# SCALAR-IF: tt.return
+
+# WHILE: tt.func public @while_probe_kernel
+# WHILE: scf.while
+# WHILE: scf.condition
+# WHILE: scf.yield
+# WHILE: tt.return
