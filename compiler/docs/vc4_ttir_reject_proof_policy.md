@@ -231,25 +231,45 @@ Phase 8 locks value-layer control flow. It does not claim TTIR control-flow
 import. Phase 8.5 must classify real TTIR control-flow forms before any next
 major value capability runs ahead.
 
-The following Phase 8.5 classifications preserve the reject-proof boundary:
+Phase85a2 promoted real Triton 3.7.0 control-flow TTIR snapshots under
+`compiler/test/CodeGen/Triton/Snapshots/ControlFlow/`, and Phase85b records the
+canonical contract in `compiler/docs/vc4_ttir_control_flow_bridge.md`.
 
-- Compile-time or meta-level Triton control flow is frontend specialization
-  when the emitted TTIR no longer has runtime control-flow semantics to import.
-- `tl.range` and emitted TTIR loop forms are Phase 8.5 inventory targets until
-  their real emitted structure is inspected.
-- Scalar `cf`/`scf` branch forms may become lowerable only when they
-  structurally match the Phase 8 value-cf subset; otherwise they remain staged
-  with the first unsupported boundary named.
+The following locked Phase 8.5 classifications preserve the reject-proof
+boundary:
+
+- `tl.range` emitted `scf.for` and is `SCF_CF` when the loop body remains
+  otherwise supported.
+- Persistent-style `tl.range(start_pid, num_tiles, NUM_SMS, flatten=True)`
+  emitted `scf.for` with `tt.flatten` and `tt.loop_unroll_factor = 1`, and is
+  `SCF_CF` when the body remains otherwise supported.
+- `tl.static_range` specialized into straight-line TTIR and is
+  `STATIC_SPECIALIZED_NO_RUNTIME_CF`, not runtime control-flow support.
+- Runtime scalar `if` emitted `scf.if` and is `SCF_CF` when both regions remain
+  otherwise supported.
+- Runtime while emitted `scf.while` with `scf.condition` and is `SCF_CF` when
+  the condition, carried values, and body remain otherwise supported.
+- Unsupported loop bodies stage by exact body feature, not as generic
+  control-flow failure.
 - Vector or per-lane branch conditions reject as control flow. They must become
   mask/select dataflow, not per-lane program-counter divergence.
 - Backend dialect control flow in `ttg`, `triton_gpu`, `nvgpu`, or `nvvm`
   rejects at the TTIR frontend boundary because those dialects are not the
   accepted source boundary for VC4.
-- Warp-specialized or async-partition control metadata may be ignored only if
-  Phase 8.5 proves it is a semantic no-op for the emitted TTIR; otherwise it
-  must be staged or rejected with the exact semantic reason.
+- `tt.loop_unroll_factor` and `tt.flatten` survive in real TTIR and must be
+  classified structurally. `warp_specialize` was not emitted by Phase85a2 and
+  is not claimed.
 
 These are staged/support/reject classifications, not a broad TTIR
 control-flow support claim. Permanent rejects still require the proof template
 above unless the reject is a boundary-policy reject rather than a hardware
 impossibility claim. `READY_FOR_TRITON=NO` remains true.
+
+PHASE85_TTIR_CONTROL_FLOW_CONTRACT=ACTIVE
+REAL_TTIR_SNAPSHOTS_SOURCE_CONTROLLED=YES
+ANY_REAL_RUNTIME_TTIR_CF_LOWERABLE_NOW=YES
+TTIR_VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+TTIR_UNSUPPORTED_LOOP_BODY_POLICY=STAGE_BY_BODY_FEATURE_NOT_CF
+TTIR_BACKEND_DIALECT_CF_POLICY=DETERMINISTIC_REJECT_SOURCE_BOUNDARY
+READY_FOR_PHASE85C_IMPORTER_REGION_FRAMEWORK=YES
+READY_FOR_TRITON=NO

@@ -37,6 +37,29 @@ classifier and richer memory legality leads to Phase 9.5 TTIR mask/memory
 bridge/support/reject lock, not directly to Phase 10. `READY_FOR_TRITON`
 remains `NO`.
 
+## Current Phase-8.5b TTIR Control-Flow Contract Note
+
+Phase85a2 promoted real Triton 3.7.0 control-flow TTIR snapshots into
+`compiler/test/CodeGen/Triton/Snapshots/ControlFlow/`. Phase85b locks the
+source-controlled contract in `compiler/docs/vc4_ttir_control_flow_bridge.md`.
+
+The observed runtime TTIR control-flow forms are:
+
+```text
+PHASE85_TTIR_CONTROL_FLOW_CONTRACT=ACTIVE
+TTIR_TL_RANGE_LOOP_SKELETON_POLICY=SCF_CF
+TTIR_PERSISTENT_LOOP_SKELETON_POLICY=SCF_CF
+TTIR_SCALAR_IF_POLICY=SCF_CF
+TTIR_WHILE_POLICY=SCF_CF
+TTIR_STATIC_RANGE_POLICY=STATIC_SPECIALIZED_NO_RUNTIME_CF
+ANY_REAL_RUNTIME_TTIR_CF_LOWERABLE_NOW=YES
+READY_FOR_PHASE85C_IMPORTER_REGION_FRAMEWORK=YES
+READY_FOR_TRITON=NO
+```
+
+The contract remains docs/taxonomy/test-only. It does not implement importer
+support and does not run hardware.
+
 ## 0. Purpose
 
 This report records the current state of the Vector/Triton plan after the latest design discussion. It updates and extends the earlier pre-P9 Vector/Triton design-decision report with the decisions now made about `vc4value`, program IDs, memref ABI, Triton tooling, approximate math policy, implementation ordering, and the definition of “FULL” Triton support.
@@ -1189,17 +1212,24 @@ Inventory real Triton-emitted TTIR control-flow forms against the Phase 8
 value `scf`/`cf` boundary, then either bridge matching forms to value IR or
 lock deterministic staged/reject classifications with exact reasons.
 
-### Initial classification targets
+### Locked Phase85b classification targets
 
 ```text
-Triton compile-time/meta control flow:
-  frontend-specialization; no runtime value control-flow import required
-
 tl.range / emitted TTIR loop forms:
-  Phase 8.5 inventory target
+  SCF_CF from real Triton-emitted scf.for
 
-scalar cf/scf branch forms:
-  lowerable if they match the Phase 8 value-cf subset, otherwise staged
+persistent loop skeleton:
+  SCF_CF from real Triton-emitted scf.for with tt.flatten and
+  tt.loop_unroll_factor
+
+tl.static_range:
+  STATIC_SPECIALIZED_NO_RUNTIME_CF; classification evidence only
+
+scalar if:
+  SCF_CF from real Triton-emitted scf.if
+
+while:
+  SCF_CF from real Triton-emitted scf.while
 
 vector/per-lane branch conditions:
   deterministic reject as control flow; must become masks/selects
@@ -1207,8 +1237,11 @@ vector/per-lane branch conditions:
 ttg/triton_gpu/nvgpu/nvvm backend control flow:
   reject at TTIR frontend boundary
 
-warp-specialized or async-partition control metadata:
-  inspect in Phase 8.5; ignore only if proven semantic-no-op for emitted TTIR
+unsupported loop bodies:
+  stage by exact body feature, not generic control-flow failure
+
+loop attrs:
+  tt.loop_unroll_factor and tt.flatten survive; warp_specialize was not emitted
 ```
 
 ### Gate

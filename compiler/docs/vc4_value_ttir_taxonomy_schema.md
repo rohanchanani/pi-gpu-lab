@@ -109,6 +109,38 @@ are planning classifications, not implementation claims.
   matches the locked Phase 8 value-cf subset. Non-matching forms remain staged
   or reject with the first unsupported boundary named.
 
+`lowerable_phase85`
+: A real, source-controlled, parseable Phase85a2 TTIR control-flow form is a
+  Phase 8.5 implementation target when its regions/body use otherwise supported
+  operations. This is not an implementation claim by itself.
+
+`static_specialized_no_runtime_cf`
+: Real Triton emitted straight-line TTIR for the source construct. The snapshot
+  is classification evidence but does not require runtime control-flow import.
+
+`staged_by_body_feature`
+: The control-flow skeleton is classified separately from an unsupported body
+  operation. Diagnostics should name the exact unsupported body feature.
+
+`deterministic_reject_target_profile`
+: The VC4 target profile rejects the construct at the source/value boundary,
+  such as vector or per-lane branch CFG on a SIMD-16 QPU.
+
+`deterministic_reject_source_boundary`
+: The construct is outside the accepted VC4 TTIR source boundary, such as
+  backend dialect control flow in TTGIR, `triton_gpu`, `nvgpu`, or `nvvm`.
+
+`not_emitted_by_real_triton`
+: The form was sought but not emitted by the pinned real Triton frontend and
+  must not be supported from guessed or fake TTIR evidence.
+
+`frontend_rejected`
+: The pinned real Triton frontend rejected the source form before TTIR emission.
+
+`inventory_only`
+: The row records classification evidence or provenance without being an
+  implementation target.
+
 ## 4. Feature row schema
 
 Each `feature_families` row is an object with these fields:
@@ -157,6 +189,10 @@ Feature rows are not test manifests and do not imply a lowering exists.
 `phase7`
 : Real TTIR ingestion and target-profile hookup after handwritten value paths
   are proven.
+
+`phase8_5`
+: TTIR control-flow bridge/support/reject lock after Phase 8 value control
+  flow.
 
 `future_hardware_proof`
 : Requires a future hardware-proven phase before a rejected target contract can

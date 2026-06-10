@@ -286,6 +286,10 @@ Phase 8 locks value-layer `scf`/`cf` control flow through the standard
 control-flow import. Phase 8.5 owns TTIR control-flow inventory,
 support/reject classification, and any executable bridge work.
 
+Phase85a2 promoted real Triton 3.7.0 control-flow TTIR snapshots under
+`compiler/test/CodeGen/Triton/Snapshots/ControlFlow/`. The Phase85b canonical
+contract is `compiler/docs/vc4_ttir_control_flow_bridge.md`.
+
 PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
 SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
 NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
@@ -296,6 +300,18 @@ PHASE8R_CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
 PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
 PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON
 IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+PHASE85_TTIR_CONTROL_FLOW_CONTRACT=ACTIVE
+REAL_TTIR_SNAPSHOTS_SOURCE_CONTROLLED=YES
+ANY_REAL_RUNTIME_TTIR_CF_LOWERABLE_NOW=YES
+TTIR_TL_RANGE_LOOP_SKELETON_POLICY=SCF_CF
+TTIR_PERSISTENT_LOOP_SKELETON_POLICY=SCF_CF
+TTIR_STATIC_RANGE_POLICY=STATIC_SPECIALIZED_NO_RUNTIME_CF
+TTIR_SCALAR_IF_POLICY=SCF_CF
+TTIR_WHILE_POLICY=SCF_CF
+TTIR_VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+TTIR_UNSUPPORTED_LOOP_BODY_POLICY=STAGE_BY_BODY_FEATURE_NOT_CF
+TTIR_BACKEND_DIALECT_CF_POLICY=DETERMINISTIC_REJECT_SOURCE_BOUNDARY
+READY_FOR_PHASE85C_IMPORTER_REGION_FRAMEWORK=YES
 READY_FOR_TRITON=NO
 
 QPU control flow is scalar/coherent across SIMD lanes. Per-lane control
@@ -311,21 +327,23 @@ scheduled VC4. Irreducible CFG is probed and currently limited by lower-half
 natural-loop block-argument lowering; it is not required for sane Triton Phase
 8.5 control-flow import and is not classified as hardware-impossible.
 
-Required Phase 8.5 classifications:
+Locked Phase 8.5 classifications:
 
-- TTIR compile-time/meta control flow:
-  `frontend_specialization`; no runtime value control-flow import is required
-  when the emitted TTIR has already been specialized into straight-line or
-  scalar-control IR.
-- TTIR `tl.range` / emitted TTIR loop forms:
-  `phase_inventory_target`; inspect real emitted forms in Phase 8.5 before
-  accepting or rejecting. Structurally scalar counted loops should map to the
-  Phase 8R tl.range-style loop skeleton or persistent-loop skeleton value
-  targets when their bodies use supported features.
-- TTIR scalar `cf`/`scf` branch forms:
-  `lowerable_if_matches_value_cf_subset`; lower only if they structurally match
-  the Phase 8 value-cf subset, otherwise stage with the first unsupported
-  boundary named.
+- TTIR `tl.range` loop skeleton:
+  `SCF_CF`; real Triton emitted `scf.for` with loop-carried
+  `tensor<16xf32>`, `scf.yield`, and `tt.loop_unroll_factor = 1`.
+- TTIR persistent loop skeleton:
+  `SCF_CF`; real Triton emitted `scf.for` with `tt.flatten` and
+  `tt.loop_unroll_factor = 1`.
+- TTIR `tl.static_range`:
+  `STATIC_SPECIALIZED_NO_RUNTIME_CF`; the promoted snapshot contains no runtime
+  `scf`/`cf` and is classification evidence only. This is the Phase85 locked
+  form of the older `frontend_specialization` status.
+- TTIR scalar `scf.if`:
+  `SCF_CF`; real Triton emitted a scalar branch returning `tensor<16xf32>`.
+- TTIR `scf.while`:
+  `SCF_CF`; real Triton emitted `scf.while`, `scf.condition`, `scf.yield`, and
+  loop-carried `tensor<16xf32>, i32`.
 - TTIR scalar switch/index-switch forms:
   `lowerable_if_canonicalized_to_scalar_cf_switch_or_branch_chain`; raw forms
   must enter through upstream canonicalization or the value `cf.switch`
@@ -337,12 +355,19 @@ Required Phase 8.5 classifications:
 - TTIR backend dialect control flow in `ttg`, `triton_gpu`, `nvgpu`, or `nvvm`:
   deterministic reject at the TTIR frontend boundary because those are not the
   accepted source dialects for the VC4 path.
-- TTIR warp-specialized or async-partition control-flow metadata:
-  Phase 8.5 inspection target. Ignore only if proven a semantic no-op for the
-  emitted TTIR; otherwise classify as staged or reject with the exact reason.
+- TTIR unsupported loop bodies:
+  stage by exact body feature, such as `tt.dot`, `tt.reduce`, or block pointer
+  forms; do not report the control-flow skeleton as the failed feature.
+- TTIR loop attrs:
+  `tt.loop_unroll_factor` and `tt.flatten` survive in the promoted snapshots.
+  `warp_specialize` was not emitted by Phase85a2 and remains unclassified.
 
-These are taxonomy and profile classifications only. They do not claim
-supported TTIR control flow, and `READY_FOR_TRITON=NO` remains true.
+These are taxonomy and profile classifications only. They do not implement
+TTIR control-flow lowering, and `READY_FOR_TRITON=NO` remains true.
+
+Legacy taxonomy readers may still see this as
+`lowerable_if_matches_value_cf_subset`: Phase85b narrows that placeholder to
+the exact real TTIR `SCF_CF` forms listed above.
 
 ## 10. Reductions
 
