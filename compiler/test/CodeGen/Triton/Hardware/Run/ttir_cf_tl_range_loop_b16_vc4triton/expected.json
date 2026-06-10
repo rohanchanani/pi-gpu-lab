@@ -1,0 +1,28 @@
+{
+  "name": "ttir_cf_tl_range_loop_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 20,
+    "elements_checked": 3684,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 1025558765,
+    "saw_nonzero_output_hash": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_value_scf_cf": 1,
+    "saw_vc4value_to_vc4kernel": 1,
+    "saw_ttir_scf_for": 1,
+    "saw_tail_mask_load_store": 1,
+    "saw_cpu_oracle_sentinel": 1,
+    "saw_no_arith_sitofp": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 20
+  }
+}

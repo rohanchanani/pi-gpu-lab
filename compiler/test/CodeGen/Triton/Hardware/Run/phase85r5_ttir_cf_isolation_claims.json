@@ -1,0 +1,57 @@
+{
+  "phase": "Phase85R5",
+  "fixtures": [
+    {
+      "name": "ttir_cf_scalar_if_b16_vc4triton",
+      "snapshot": "examples/triton/phase8_5_control_flow/generated/ttir_cf_scalar_if_b16.ttir.mlir",
+      "expected_ops": ["scf.if"],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scf.if", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "tail_mask_load_store", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpu_oracle_sentinel", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_arith.sitofp_accepted_path", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    },
+    {
+      "name": "ttir_cf_tl_range_loop_b16_vc4triton",
+      "snapshot": "examples/triton/phase8_5_control_flow/generated/ttir_cf_tl_range_loop_b16.ttir.mlir",
+      "expected_ops": ["scf.for"],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scf.for_tl.range", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "tail_mask_load_store", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpu_oracle_sentinel", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_arith.sitofp_accepted_path", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    },
+    {
+      "name": "ttir_cf_while_loop_b16_vc4triton",
+      "snapshot": "examples/triton/phase8_5_control_flow/generated/ttir_cf_while_loop_b16.ttir.mlir",
+      "expected_ops": ["scf.while"],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scf.while", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "tail_mask_load_store", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpu_oracle_sentinel", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_arith.sitofp_accepted_path", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    },
+    {
+      "name": "ttir_cf_persistent_loop_b16_vc4triton",
+      "snapshot": "examples/triton/phase8_5_control_flow/generated/ttir_cf_persistent_loop_b16.ttir.mlir",
+      "expected_ops": ["scf.while", "tt.get_num_programs"],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "persistent_loop_skeleton", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "tail_mask_load_store", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpu_oracle_sentinel", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_arith.sitofp_accepted_path", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    }
+  ]
+}

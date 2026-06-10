@@ -373,7 +373,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen vc4_triton_opt lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 stable_legacy_value stable_legacy_vc4kernel stable_legacy_ssavc4 stable_legacy_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
+  local vc4_opt vc4_codegen vc4_triton_opt lowered_dir lowered_tmp_dir input_ttir input_value value_verified value_cf verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_value_cf stable_vc4kernel stable_ssavc4 stable_vc4 stable_legacy_value stable_legacy_vc4kernel stable_legacy_ssavc4 stable_legacy_vc4 input_count input_path input_base per_input_ttir per_input_value
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   vc4_triton_opt="$(find_tool vc4-triton-opt)"
@@ -385,11 +385,13 @@ run_vc4_codegen() {
   input_ttir="$lowered_tmp_dir/input.ttir.mlir"
   input_value="$lowered_tmp_dir/lowered.value.mlir"
   value_verified="$lowered_tmp_dir/lowered.value.verified.mlir"
+  value_cf="$lowered_tmp_dir/lowered.value.cf.mlir"
   verified_vc4kernel="$lowered_tmp_dir/verified.vc4kernel.mlir"
   lowered_ssavc4="$lowered_tmp_dir/lowered.ssavc4.mlir"
   scheduled_vc4="$lowered_tmp_dir/scheduled.vc4.mlir"
   stable_ttir="$lowered_dir/${TEST_NAME}.input.ttir.mlir"
   stable_value="$lowered_dir/${TEST_NAME}.input.vc4value.mlir"
+  stable_value_cf="$lowered_dir/${TEST_NAME}.input.vc4value.cf.mlir"
   stable_vc4kernel="$lowered_dir/${TEST_NAME}.input.vc4kernel.mlir"
   stable_ssavc4="$lowered_dir/${TEST_NAME}.input.ssavc4.mlir"
   stable_vc4="$lowered_dir/${TEST_NAME}.input.vc4.mlir"
@@ -439,8 +441,12 @@ run_vc4_codegen() {
   "$vc4_opt" "$input_value" --vc4-verify-value-surface -o "$value_verified"
   validate_value_file "$value_verified"
 
+  log "lowering imported VC4 value SCF to CF at $(relpath "$value_cf")"
+  "$vc4_opt" "$value_verified" --convert-scf-to-cf -o "$value_cf"
+  validate_value_file "$value_cf"
+
   log "converting imported VC4 value IR to VC4Kernel at $(relpath "$verified_vc4kernel")"
-  "$vc4_opt" "$input_value" \
+  "$vc4_opt" "$value_cf" \
     --vc4-verify-value-surface \
     --convert-vc4-value-to-vc4kernel \
     --verify-vc4kernel \
@@ -468,6 +474,7 @@ run_vc4_codegen() {
 
   cp "$input_ttir" "$stable_ttir"
   cp "$input_value" "$stable_value"
+  cp "$value_cf" "$stable_value_cf"
   cp "$verified_vc4kernel" "$stable_vc4kernel"
   cp "$lowered_ssavc4" "$stable_ssavc4"
   cp "$scheduled_vc4" "$stable_vc4"
@@ -477,10 +484,12 @@ run_vc4_codegen() {
   cp "$scheduled_vc4" "$stable_legacy_vc4"
   cp "$input_ttir" "$GENERATED_DIR/input.ttir.mlir"
   cp "$input_value" "$GENERATED_DIR/input.vc4value.mlir"
+  cp "$value_cf" "$GENERATED_DIR/input.vc4value.cf.mlir"
   cp "$verified_vc4kernel" "$GENERATED_DIR/input.vc4kernel.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/input.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/input.vc4.mlir"
   cp "$input_value" "$GENERATED_DIR/lowered.value.mlir"
+  cp "$value_cf" "$GENERATED_DIR/lowered.value.cf.mlir"
   cp "$verified_vc4kernel" "$GENERATED_DIR/verified.vc4kernel.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"

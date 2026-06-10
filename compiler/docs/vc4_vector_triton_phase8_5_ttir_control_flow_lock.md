@@ -9,6 +9,12 @@ VECTOR_INDEX_CAST_IMPORTER_BOILERPLATE_REMOVED=YES
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 NO_TTIR_TOOLCHAIN_REBUILD=YES
 READY_FOR_PHASE85R5_HARDWARE_ISOLATION=YES
+TTIR_CF_ISOLATION_HARDWARE=PASS
+TTIR_CF_SCALAR_IF_HARDWARE=PASS
+TTIR_CF_TL_RANGE_HARDWARE=PASS
+TTIR_CF_WHILE_HARDWARE=PASS
+TTIR_CF_PERSISTENT_LOOP_HARDWARE=PASS
+READY_FOR_PHASE85R6_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 8.5 TTIR Control-Flow Static Lock
@@ -97,5 +103,27 @@ Boundary audits confirm:
 - SSAVC4 output contains no producer or VC4Kernel operations;
 - scheduled VC4 output contains no producer, VC4Kernel, or SSAVC4 operations.
 
-No hardware proof is claimed by this document. Hardware isolation begins in the
-next phase.
+## Hardware Isolation Lock
+
+Phase 8.5R5 adds targeted TTIR hardware isolation fixtures under:
+
+```text
+compiler/test/CodeGen/Triton/Hardware/Run/
+```
+
+The accepted hardware fixtures consume the source-controlled R2 TTIR snapshots
+as `input.ttir.mlir` and do not regenerate TTIR:
+
+- `ttir_cf_scalar_if_b16_vc4triton`;
+- `ttir_cf_tl_range_loop_b16_vc4triton`;
+- `ttir_cf_while_loop_b16_vc4triton`;
+- `ttir_cf_persistent_loop_b16_vc4triton`.
+
+Each fixture runs with `active_qpus=12`, checks a CPU oracle, verifies guard
+sentinels, requires an exact nonzero output hash, and records result fields for
+the real TTIR snapshot, C++ TTIR importer path, value SCF/CF path,
+value-to-VC4Kernel lowering, and the fixture-specific control-flow form.
+
+The R5 claim audit checks exact snapshot provenance, expected TTIR control-flow
+operations, no accepted-path `arith.sitofp`, and required hardware result
+fields.
