@@ -67,3 +67,34 @@ policy attrs.
 
 No `tl.dot`, `tt.dot`, `vector.contract`, multi-block K accumulation, atomics,
 f16/casts, SFU/math, or full Phase 13 support is claimed.
+
+## Accelerated Demo 2 Hardware Lock
+
+PHASE13_DEMO_RESULT=LOCKED
+FEATURE=TTIR_GEMV_ROWWISE_DOT_DEMO
+REAL_TRITON_GEMV_DEMO_SOURCE=YES
+REAL_TTIR_GEMV_DEMO_SNAPSHOT=YES
+TTIR_GEMV_DEMO_IMPORTER_STATIC=PASS
+TTIR_GEMV_DEMO_STATIC_PIPELINE=PASS
+TTIR_GEMV_DEMO_HARDWARE=PASS
+ACTIVE_QPUS=12
+TTIR_HARNESS_BLOCK_X=16
+FIXTURE_WEAKENING=NO
+FULL_PHASE13_LOCK=NO
+READY_FOR_FULL_PHASE13=YES
+READY_FOR_TRITON=NO
+
+The hardware demo fixture is:
+`compiler/test/CodeGen/Triton/Hardware/Run/ttir_gemv_row_dot_f32_b16_vc4triton`
+
+It proves the source-controlled real Triton GEMV-v0 source and real TTIR
+snapshot through the C++ TTIR importer, value layer, VC4Kernel, SSAVC4,
+scheduled VC4, and real VC4 hardware. The fixture uses the established TTIR
+launch geometry with `block.x = 16`; `active_qpus = 12` remains a runtime and
+expected-result claim.
+
+Rerun the hardware demo from repo root with:
+
+```bash
+VC4_CODEGEN_STATE_ROOT=.vc4_auto/vector_triton_phase13_demo_2_hardware_lock/codegen compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh compiler/test/CodeGen/Triton/Hardware/Run/ttir_gemv_row_dot_f32_b16_vc4triton run
+```
