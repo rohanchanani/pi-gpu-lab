@@ -20,7 +20,7 @@
     "saw_shared_vpm_reuse": 1,
     "saw_sfu_exp": 1,
     "saw_sfu_recip": 1,
-    "saw_tmu_qkv": 1,
+    "saw_tmu_q_vdr_kv": 1,
     "saw_vdw_preserve": 1,
     "no_attention_matrix": 1
   }

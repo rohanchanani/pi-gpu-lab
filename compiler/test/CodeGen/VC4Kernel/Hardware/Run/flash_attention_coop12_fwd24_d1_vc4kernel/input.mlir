@@ -33,12 +33,9 @@ module {
     %qv = vc4kernel.tmu_load_fragment %q, %q_offsets, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
 
     %k0_byte = arith.shli %warp, %c2 : i32
-    %k0_offsets = vc4kernel.splat %k0_byte : i32 -> vector<16xi32>
-    %k0_load = vc4kernel.tmu_load_fragment %k, %k0_offsets, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
-    %v0_load = vc4kernel.tmu_load_fragment %v, %k0_offsets, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
     %vrow0 = arith.addi %warp, %c12 : i32
-    vc4kernel.vpm_write_fragment %tile, %warp, %k0_load, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xf32>, !vc4kernel.pred<16>
-    vc4kernel.vpm_write_fragment %tile, %vrow0, %v0_load, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdr_load_to_vpm %k, %k0_byte, %tile, %warp {rows = 1 : i32, cols = 1 : i32, global_stride_bytes = 8 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
+    vc4kernel.vdr_load_to_vpm %v, %k0_byte, %tile, %vrow0 {rows = 1 : i32, cols = 1 : i32, global_stride_bytes = 8 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
     vc4kernel.barrier
     cf.br ^loop0(%c0, %neg_inf, %zero, %zero : i32, vector<16xf32>, vector<16xf32>, vector<16xf32>)
 
@@ -71,12 +68,9 @@ module {
     vc4kernel.barrier
     %global1 = arith.addi %warp, %c12 : i32
     %k1_byte = arith.shli %global1, %c2 : i32
-    %k1_offsets = vc4kernel.splat %k1_byte : i32 -> vector<16xi32>
-    %k1_load = vc4kernel.tmu_load_fragment %k, %k1_offsets, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
-    %v1_load = vc4kernel.tmu_load_fragment %v, %k1_offsets, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
     %vrow1 = arith.addi %warp, %c12 : i32
-    vc4kernel.vpm_write_fragment %tile, %warp, %k1_load, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xf32>, !vc4kernel.pred<16>
-    vc4kernel.vpm_write_fragment %tile, %vrow1, %v1_load, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdr_load_to_vpm %k, %k1_byte, %tile, %warp {rows = 1 : i32, cols = 1 : i32, global_stride_bytes = 8 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
+    vc4kernel.vdr_load_to_vpm %v, %k1_byte, %tile, %vrow1 {rows = 1 : i32, cols = 1 : i32, global_stride_bytes = 8 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
     vc4kernel.barrier
     cf.br ^loop1(%c0, %m_after0, %l_after0, %acc_after0 : i32, vector<16xf32>, vector<16xf32>, vector<16xf32>)
 

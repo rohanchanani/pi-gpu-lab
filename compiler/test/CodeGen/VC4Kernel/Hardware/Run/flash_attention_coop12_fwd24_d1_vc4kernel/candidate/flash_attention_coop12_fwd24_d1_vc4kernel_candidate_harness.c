@@ -234,7 +234,7 @@ void notmain(void) {
     int elapsed = timer_get_usec() - start;
     const char *status =
         (total_mismatches == 0 && sentinel_mismatches == 0 && launch_failures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=flash_attention_coop12_fwd24_d1_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d warps_per_block=%d seq=%d q_rows=%d runtime_allocations=%d runtime_launches=%d timeouts=%d saw_flash_online_softmax=%d saw_cooperative_tile_load=%d saw_barrier=%d saw_shared_vpm_reuse=%d saw_sfu_exp=%d saw_sfu_recip=%d saw_tmu_qkv=%d saw_vdw_preserve=%d no_attention_matrix=%d checksum_accum=%x elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=flash_attention_coop12_fwd24_d1_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d warps_per_block=%d seq=%d q_rows=%d runtime_allocations=%d runtime_launches=%d timeouts=%d saw_flash_online_softmax=%d saw_cooperative_tile_load=%d saw_barrier=%d saw_shared_vpm_reuse=%d saw_sfu_exp=%d saw_sfu_recip=%d saw_tmu_q_vdr_kv=%d saw_vdw_preserve=%d no_attention_matrix=%d checksum_accum=%x elapsed_usec=%d\n",
            status, FA_COOP_CASES, total_mismatches, sentinel_mismatches, launch_failures,
            12, FA_COOP_LANES, FA_COOP_ROWS, FA_COOP_SEQ, FA_COOP_ROWS, 4, FA_COOP_CASES,
            0, 1, 1, 1, 1, 1, 1, 1, 1, 1, checksum_accum, elapsed);
