@@ -1,0 +1,23 @@
+{
+  "name": "value_scf_while_vector_carry_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 9,
+    "elements_checked": 1237,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 3860069486,
+    "saw_value_scf_while": 1,
+    "saw_vector_loop_carried": 1,
+    "saw_value_tail_mask": 1,
+    "saw_scf_to_cf_boundary": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 9
+  }
+}

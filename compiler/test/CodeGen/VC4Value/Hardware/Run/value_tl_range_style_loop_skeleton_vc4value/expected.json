@@ -1,0 +1,23 @@
+{
+  "name": "value_tl_range_style_loop_skeleton_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "elements_checked": 1221,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 4118258127,
+    "saw_tl_range_style_loop": 1,
+    "saw_persistent_loop_skeleton": 1,
+    "saw_scalar_loop_carried": 1,
+    "saw_scf_to_cf_boundary": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 8
+  }
+}

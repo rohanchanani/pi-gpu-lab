@@ -50,6 +50,12 @@ PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
 PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON
 READY_FOR_PHASE8RE_LOWER_HALF_CF_COMPLETION=NOT_NEEDED
 READY_FOR_PHASE8RF_HARDWARE_ISOLATION=YES
+PHASE8R_SCF_WHILE_HARDWARE=PASS
+PHASE8R_NESTED_STRUCTURED_CF_HARDWARE=PASS
+PHASE8R_TL_RANGE_STYLE_LOOP_HARDWARE=PASS
+PHASE8R_PERSISTENT_LOOP_SKELETON_HARDWARE=PASS
+PHASE8R_MULTI_EXIT_REDUCIBLE_CF_HARDWARE=PASS
+READY_FOR_PHASE8RG_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -167,6 +173,44 @@ SSAVC4 block-argument lowering supports only natural loops with conservative loo
 
 This is a lower-half natural-loop limitation, not a hardware-impossible claim.
 Irreducible CFG is not required for sane Triton Phase 8.5 control-flow import.
+
+## Phase 8Rf Hardware Isolation
+
+Phase 8Rf proved the Phase 8R control-flow completeness features on real VC4
+hardware with focused VC4Value isolation fixtures. All fixtures used
+`active_qpus=12`, `lanes=16`, strict CPU oracles, sentinel checks, nonzero
+output hashes, and the existing VC4Value hardware runner. SCF-bearing fixtures
+preserved `input.value.mlir`, `after-scf-to-cf.value.mlir`,
+`verified.vc4kernel.mlir`, `lowered.ssavc4.mlir`, `scheduled.vc4.mlir`, and
+generated runtime artifacts under the phase codegen root.
+
+```text
+PHASE8R_SCF_WHILE_HARDWARE=PASS
+PHASE8R_NESTED_STRUCTURED_CF_HARDWARE=PASS
+PHASE8R_TL_RANGE_STYLE_LOOP_HARDWARE=PASS
+PHASE8R_PERSISTENT_LOOP_SKELETON_HARDWARE=PASS
+PHASE8R_MULTI_EXIT_REDUCIBLE_CF_HARDWARE=PASS
+READY_FOR_PHASE8RG_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+```
+
+Hardware fixtures:
+
+- `value_scf_while_scalar_loop_vc4value`: `scf.while` with scalar loop-carried
+  state and varied runtime trip counts including 0, 1, 2, 3, 5, and larger
+  values.
+- `value_scf_while_vector_carry_vc4value`: `scf.while` carrying
+  `vector<16xi32>` accumulator state with tail-masked store.
+- `value_nested_structured_cf_vc4value`: nested `scf.for` + `scf.if` +
+  `scf.while` with multiple runtime paths and checked branch/loop behavior.
+- `value_tl_range_style_loop_skeleton_vc4value`: value-level `tl.range` /
+  persistent-loop skeleton with runtime start, end, step, and loop-carried
+  tile scalar.
+- `value_multi_exit_reducible_cf_vc4value`: reducible CFG with multiple exits
+  and a merge block, covering each exit path in the CPU oracle.
+
+The Phase 8R fixture claim manifest audits `saw_*` and no-TTIR-import claims
+against checked input and harness evidence.
 
 ## Runner Policy
 

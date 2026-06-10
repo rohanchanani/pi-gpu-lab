@@ -1,0 +1,3 @@
+# RUN: python3 %vc4_repo_root/compiler/test/CodeGen/VC4Value/Support/audit_phase8r_control_flow_isolation_claims.py --repo-root %vc4_repo_root --claims compiler/test/CodeGen/VC4Value/Hardware/Run/phase8r_control_flow_isolation_claims.json | FileCheck %s
+
+# CHECK: PASS Phase 8R control-flow isolation claim audit

@@ -1,0 +1,243 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase8r_control_flow_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_scf_while_scalar_loop_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_scalar_loop_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_scalar_loop_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_scalar_loop_vc4value/candidate/value_scf_while_scalar_loop_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_scf_while",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "scf.while",
+            "expected_field": "saw_value_scf_while"
+          }
+        },
+        {
+          "claim": "saw_value_cf_loop",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "scf.while",
+            "expected_field": "saw_value_cf_loop"
+          }
+        },
+        {
+          "claim": "saw_scalar_loop_carried",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "(index, i32) -> (index, i32)",
+            "oracle_marker": "expected_acc"
+          }
+        },
+        {
+          "claim": "saw_scf_to_cf_boundary",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "input_marker": "scf.while",
+            "runner_marker": "--convert-scf-to-cf"
+          }
+        },
+        {
+          "claim": "no_ttir_control_flow_import",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "forbidden_input_markers": ["tt.", "ttg."]
+          }
+        }
+      ]
+    },
+    {
+      "name": "value_scf_while_vector_carry_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_vector_carry_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_vector_carry_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_scf_while_vector_carry_vc4value/candidate/value_scf_while_vector_carry_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_scf_while",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "scf.while",
+            "expected_field": "saw_value_scf_while"
+          }
+        },
+        {
+          "claim": "saw_vector_loop_carried",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "vector<16xi32>) -> (index, vector<16xi32>)",
+            "expected_field": "saw_vector_loop_carried"
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "vector.create_mask",
+            "harness_marker": "verify_sentinels"
+          }
+        },
+        {
+          "claim": "saw_scf_to_cf_boundary",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "input_marker": "scf.while",
+            "runner_marker": "--convert-scf-to-cf"
+          }
+        },
+        {
+          "claim": "no_ttir_control_flow_import",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "forbidden_input_markers": ["tt.", "ttg."]
+          }
+        }
+      ]
+    },
+    {
+      "name": "value_nested_structured_cf_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_nested_structured_cf_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_nested_structured_cf_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_nested_structured_cf_vc4value/candidate/value_nested_structured_cf_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_nested_structured_cf",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_markers": ["scf.for", "scf.if", "scf.while"],
+            "expected_field": "saw_nested_structured_cf"
+          }
+        },
+        {
+          "claim": "saw_value_cf_cond_br",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "scf.if",
+            "expected_field": "saw_value_cf_cond_br"
+          }
+        },
+        {
+          "claim": "saw_value_cf_loop",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_markers": ["scf.for", "scf.while"],
+            "expected_field": "saw_value_cf_loop"
+          }
+        },
+        {
+          "claim": "saw_scf_to_cf_boundary",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "input_marker": "scf.",
+            "runner_marker": "--convert-scf-to-cf"
+          }
+        },
+        {
+          "claim": "no_ttir_control_flow_import",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "forbidden_input_markers": ["tt.", "ttg."]
+          }
+        }
+      ]
+    },
+    {
+      "name": "value_tl_range_style_loop_skeleton_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_tl_range_style_loop_skeleton_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_tl_range_style_loop_skeleton_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_tl_range_style_loop_skeleton_vc4value/candidate/value_tl_range_style_loop_skeleton_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_tl_range_style_loop",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_markers": ["%start", "%end", "%step", "scf.for"],
+            "expected_field": "saw_tl_range_style_loop"
+          }
+        },
+        {
+          "claim": "saw_persistent_loop_skeleton",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_markers": ["%step", "iter_args"],
+            "harness_marker": "step"
+          }
+        },
+        {
+          "claim": "saw_scalar_loop_carried",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "iter_args(%acc",
+            "oracle_marker": "expected_acc"
+          }
+        },
+        {
+          "claim": "saw_scf_to_cf_boundary",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "input_marker": "scf.for",
+            "runner_marker": "--convert-scf-to-cf"
+          }
+        },
+        {
+          "claim": "no_ttir_control_flow_import",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "forbidden_input_markers": ["tt.", "ttg."]
+          }
+        }
+      ]
+    },
+    {
+      "name": "value_multi_exit_reducible_cf_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_exit_reducible_cf_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_exit_reducible_cf_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_exit_reducible_cf_vc4value/candidate/value_multi_exit_reducible_cf_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_multi_exit_reducible_cf",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_markers": ["^exit_done", "^exit_early", "^merge"],
+            "expected_field": "saw_multi_exit_reducible_cf"
+          }
+        },
+        {
+          "claim": "saw_value_cf_cond_br",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "cf.cond_br",
+            "expected_field": "saw_value_cf_cond_br"
+          }
+        },
+        {
+          "claim": "saw_scalar_loop_carried",
+          "kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "input_marker": "cf.br ^loop(%c0, %zero_i32",
+            "oracle_marker": "expected_acc"
+          }
+        },
+        {
+          "claim": "no_ttir_control_flow_import",
+          "kind": "CHECKED_AUDIT",
+          "evidence": {
+            "forbidden_input_markers": ["tt.", "ttg."]
+          }
+        }
+      ]
+    }
+  ]
+}

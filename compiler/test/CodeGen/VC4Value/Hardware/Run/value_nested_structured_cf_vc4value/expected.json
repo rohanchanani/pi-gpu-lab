@@ -1,0 +1,23 @@
+{
+  "name": "value_nested_structured_cf_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 10,
+    "elements_checked": 1302,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 2039663194,
+    "saw_nested_structured_cf": 1,
+    "saw_value_cf_cond_br": 1,
+    "saw_value_cf_loop": 1,
+    "saw_scf_to_cf_boundary": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 10
+  }
+}
