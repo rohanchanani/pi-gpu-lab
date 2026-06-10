@@ -283,6 +283,93 @@
         "f32_cmp_select",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 10 TTIR mixed kernel combining elementwise f32 select, scalar control flow, 2D multi-axis launch identity, and mask/memory legality",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "f32_alu",
+        "f32_cmp_select",
+        "ttir_scf_if",
+        "ttir_program_id_axis1",
+        "ttir_num_programs_axis0",
+        "ttir_mask_tail",
+        "ttir_mask_full",
+        "ttir_mask_empty",
+        "ttir_compute_mask_select",
+        "value_mask_classifier",
+        "no_sparse_memory_mask",
+        "active_qpus_12",
+        "sentinel_preserve",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash",
+        "saw_real_ttir_input",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_program_id_axis0",
+        "saw_arange_make_range_16",
+        "saw_masked_load_other_zero",
+        "saw_masked_store_tail",
+        "saw_tmu_load",
+        "saw_vdw_preserve_store",
+        "saw_tail_mask_clamp_overlaunch",
+        "saw_ttir_elementwise",
+        "saw_ttir_control_flow",
+        "saw_ttir_multi_axis",
+        "saw_ttir_mask_tail",
+        "saw_ttir_mask_full",
+        "saw_ttir_mask_empty",
+        "saw_ttir_compute_mask_select",
+        "saw_value_mask_classifier",
+        "saw_no_sparse_memory_mask",
+        "saw_ttir_program_id_axis1",
+        "saw_ttir_num_programs_axis0",
+        "saw_select_x_arm",
+        "saw_select_y_arm",
+        "saw_scf_if_true",
+        "saw_scf_if_false",
+        "saw_nonzero_output_hash"
+      ],
+      "expected_cases_summary": "11 mixed grid/n/threshold/bias/flag cases over 2D grids; active_qpus=12; empty/full/tail masks, compute select, scalar if, overlaunch, and sentinels checked",
+      "triage_feature_bands": [
+        "ttir_import",
+        "ttir_control_flow",
+        "ttir_multi_axis_launch",
+        "phase10_mask_memory",
+        "f32_tmu",
+        "f32_cmp_select",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -554,6 +641,54 @@
       "verification_kind": "checked_output",
       "covered_by": [
         "mixed_ttir_multi_axis_cf_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_mask_tail",
+      "verification_kind": "ttir_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_mask_full",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_mask_empty",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_compute_mask_select",
+      "verification_kind": "ttir_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_mask_classifier",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_sparse_memory_mask",
+      "verification_kind": "audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
       ],
       "required": true
     }

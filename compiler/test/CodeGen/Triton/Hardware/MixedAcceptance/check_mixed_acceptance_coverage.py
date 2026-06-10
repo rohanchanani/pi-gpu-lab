@@ -37,6 +37,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
     "mixed_ttir_cf_loop_if_tail_vc4triton",
     "mixed_ttir_multi_axis_cf_tail_vc4triton",
+    "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -63,6 +64,12 @@ REQUIRED_FEATURES = {
     "ttir_program_id_axis2",
     "ttir_num_programs_axis1",
     "value_multi_axis_launch",
+    "ttir_mask_tail",
+    "ttir_mask_full",
+    "ttir_mask_empty",
+    "ttir_compute_mask_select",
+    "value_mask_classifier",
+    "no_sparse_memory_mask",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -220,6 +227,16 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_program_id_axis2 but TTIR lacks tt.get_program_id z")
     if "ttir_num_programs_axis1" in tags and "tt.get_num_programs y" not in ttir_text:
         fail(f"{name} claims ttir_num_programs_axis1 but TTIR lacks tt.get_num_programs y")
+    if "ttir_num_programs_axis0" in tags and "tt.get_num_programs x" not in ttir_text:
+        fail(f"{name} claims ttir_num_programs_axis0 but TTIR lacks tt.get_num_programs x")
+    if "ttir_mask_tail" in tags and "arith.cmpi slt" not in ttir_text:
+        fail(f"{name} claims ttir_mask_tail but TTIR lacks canonical slt tail mask")
+    if "ttir_compute_mask_select" in tags and ("arith.cmpf" not in ttir_text or "arith.select" not in ttir_text):
+        fail(f"{name} claims ttir_compute_mask_select but TTIR lacks cmpf/select")
+    if "value_mask_classifier" in tags and "saw_value_mask_classifier" not in (repo_root / fixture["path"] / "expected.json").read_text():
+        fail(f"{name} claims value_mask_classifier but expected.json lacks saw_value_mask_classifier")
+    if "no_sparse_memory_mask" in tags and "sparse" in ttir_text.lower():
+        fail(f"{name} claims no_sparse_memory_mask but TTIR contains sparse marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

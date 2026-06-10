@@ -200,3 +200,42 @@ TTIR_COMPUTE_MASK_SELECT_HARDWARE=PASS
 TTIR_EMPTY_MASK_REPEAT_HARDWARE=PASS
 READY_FOR_PHASE10_9_TTIR_MIXED_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
+
+## Phase 10.9 Final Mixed Acceptance Lock
+
+Phase 10.9 adds the cumulative TTIR mixed fixture
+`mixed_ttir_mask_memory_cf_axes_b16_vc4triton`. It uses the source-controlled
+real Triton source and real emitted TTIR snapshot from the controlled Phase 10
+fixture set, imports through the C++ TTIR path, and lowers through the
+hardware-proven value mask classifier.
+
+The fixture combines Phase 7 elementwise behavior, Phase 8.5 scalar control
+flow, Phase 9 multi-axis launch identity, and Phase 10 mask/memory legality in
+one rank-1 flattened memory kernel. It checks tail/full/empty mask behavior,
+compute-mask select, inactive-zero loads, inactive-preserve stores,
+`active_qpus=12`, strict CPU oracle checks, sentinels, and nonzero output hash
+checking. Sparse transfer masks and nonzero load `other` remain staged and are
+covered by static negative tests only.
+
+PHASE10_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_MASK_CLASSIFIER_MEMORY_LEGALITY
+VALUE_MASK_MEMORY_CONTRACT=LOCKED
+VALUE_MASK_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MEMORY_LEGALITY_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MASK_MEMORY_STATIC=PASS
+VALUE_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_MASK_MEMORY_SOURCES=YES
+REAL_TTIR_MASK_MEMORY_SNAPSHOTS=YES
+TTIR_MASK_MEMORY_IMPORTER_STATIC=PASS
+TTIR_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+SPARSE_TRANSFER_MASKS_STAGED=YES
+NONZERO_LOAD_OTHER_STAGED=YES
+RANK2_STRIDED_GATHER_BLOCK_POINTER_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_MASK_MEMORY_WORKAROUNDS=YES
+READY_FOR_PHASE11_STRIDED_RANKED_MEMORY_SKELETONS=YES
+READY_FOR_TRITON=NO

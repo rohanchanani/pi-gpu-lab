@@ -606,6 +606,221 @@
           }
         }
       ]
+    },
+    {
+      "name": "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+      "source_paths": [
+        "examples/triton/phase10_mask_memory/sources/mixed_ttir_mask_memory_cf_axes_b16.py",
+        "examples/triton/phase10_mask_memory/generated/mixed_ttir_mask_memory_cf_axes_b16.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_mask_memory_cf_axes_b16_vc4triton/input.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_mask_memory_cf_axes_b16_vc4triton/candidate/mixed_ttir_mask_memory_cf_axes_b16_vc4triton_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_nonzero_output_hash",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness prints saw_nonzero_output_hash from output_hash != 0u and expected.json requires the claim field to be 1."
+          }
+        },
+        {
+          "claim": "saw_real_ttir_input",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "coverage and claim audits require source-controlled TTIR containing tt.func and tt.return, with no lower-layer dialect input markers."
+          }
+        },
+        {
+          "claim": "saw_real_ttir_snapshot",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "snapshot provenance audit requires fixture input.ttir.mlir to match examples/triton/phase10_mask_memory/generated/mixed_ttir_mask_memory_cf_axes_b16.ttir.mlir exactly."
+          }
+        },
+        {
+          "claim": "saw_cpp_ttir_importer",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_CPP_TTIR_IMPORTER only after vc4-triton-opt --convert-triton-to-vc4-value succeeds; expected.json requires the printed result field to be 1."
+          }
+        },
+        {
+          "claim": "saw_value_surface_verification",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner verifies value surface and lowers through VC4ValueToVC4Kernel before hardware workdir generation."
+          }
+        },
+        {
+          "claim": "saw_value_to_vc4kernel",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner verifies value surface and lowers through VC4ValueToVC4Kernel before hardware workdir generation."
+          }
+        },
+        {
+          "claim": "saw_value_scf_cf",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the TTIR runner executes --convert-scf-to-cf and expected.json requires the printed saw_value_scf_cf field to be 1."
+          }
+        },
+        {
+          "claim": "saw_program_id_axis0",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR snapshot contains tt.get_program_id x and expected.json requires the program_id axis0 claim."
+          }
+        },
+        {
+          "claim": "saw_arange_make_range_16",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR snapshot contains tt.make_range with end = 16, audited by the claim checker."
+          }
+        },
+        {
+          "claim": "saw_masked_load_other_zero",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot contains masked tt.load other=0.0 and the harness checks every active output element against a CPU oracle."
+          }
+        },
+        {
+          "claim": "saw_masked_store_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot contains masked tt.store and expected.json requires sentinel_mismatches=0 after inactive output verification."
+          }
+        },
+        {
+          "claim": "saw_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot has multiple tt.load operations; harness output depends on copied x/y device buffers and is checked per element."
+          }
+        },
+        {
+          "claim": "saw_vdw_preserve_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked output stores must preserve inactive sentinel regions; expected.json requires sentinel_mismatches=0."
+          }
+        },
+        {
+          "claim": "saw_tail_mask_clamp_overlaunch",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness sweeps n below, equal to, and above grid coverage and verifies inactive sentinels."
+          }
+        },
+        {
+          "claim": "saw_ttir_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot contains f32 add/cmp/select operations and the harness checks their combined output through a CPU oracle."
+          }
+        },
+        {
+          "claim": "saw_ttir_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot contains scf.if and the harness sweeps flag values while checking CPU oracle and sentinels."
+          }
+        },
+        {
+          "claim": "saw_ttir_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot contains program_id y and num_programs x; the harness sweeps 2D grids and expected.json requires the printed multi-axis claim."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness includes partial n cases and verifies active outputs plus inactive sentinel preservation."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_full",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness includes n equal to and greater than grid coverage and verifies every grid element is active."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_empty",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness includes n=0 and verifies all output sentinels are preserved."
+          }
+        },
+        {
+          "claim": "saw_ttir_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR snapshot has arith.cmpf/arithmetic select and harness requires both select arms to be observed."
+          }
+        },
+        {
+          "claim": "saw_value_mask_classifier",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the TTIR path lowers into value transfer masks and expected.json requires the printed value mask classifier claim."
+          }
+        },
+        {
+          "claim": "saw_no_sparse_memory_mask",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "claim audit checks the mixed TTIR snapshot uses canonical tail masks only and no sparse memory mask support is claimed."
+          }
+        },
+        {
+          "claim": "saw_ttir_program_id_axis1",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR snapshot contains tt.get_program_id y and expected.json requires the axis1 claim."
+          }
+        },
+        {
+          "claim": "saw_ttir_num_programs_axis0",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR snapshot contains tt.get_num_programs x and expected.json requires the axis0 num_programs claim."
+          }
+        },
+        {
+          "claim": "saw_select_x_arm",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness records both compute-select arms from checked active elements and expected.json requires both fields."
+          }
+        },
+        {
+          "claim": "saw_select_y_arm",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness records both compute-select arms from checked active elements and expected.json requires both fields."
+          }
+        },
+        {
+          "claim": "saw_scf_if_true",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness sweeps flag true and false cases and expected.json requires both fields."
+          }
+        },
+        {
+          "claim": "saw_scf_if_false",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness sweeps flag true and false cases and expected.json requires both fields."
+          }
+        }
+      ]
     }
   ]
 }

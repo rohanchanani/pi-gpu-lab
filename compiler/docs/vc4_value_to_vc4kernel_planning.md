@@ -766,3 +766,40 @@ VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
 READY_FOR_PHASE10_7_TTIR_IMPORTER_MASK_MEMORY_STATIC=YES
 READY_FOR_TRITON=NO
+
+## 27. Phase 10 final mask/memory legality lock
+
+Phase 10 final-lock keeps the value-to-VC4Kernel contract unchanged from the
+Phase 10.4 classifier implementation and records that the full value/TTIR
+vertical slice has passed static checks, value hardware isolation, value mixed
+acceptance, TTIR importer static lowering, TTIR hardware isolation, and TTIR
+mixed acceptance.
+
+The central value mask classifier accepts full, empty, and lane-zero clamped
+tail masks for memory transfers. Compute masks remain compute-only. Sparse or
+unknown transfer masks remain staged/rejected. The central memory legality
+classifier accepts only rank-1 identity global i32/f32 `vector<16>` transfers
+with zero load padding and inactive-zero/inactive-preserve policies.
+
+PHASE10_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_MASK_CLASSIFIER_MEMORY_LEGALITY
+VALUE_MASK_MEMORY_CONTRACT=LOCKED
+VALUE_MASK_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MEMORY_LEGALITY_CLASSIFIER_IMPLEMENTED=YES
+VALUE_MASK_MEMORY_STATIC=PASS
+VALUE_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_MASK_MEMORY_SOURCES=YES
+REAL_TTIR_MASK_MEMORY_SNAPSHOTS=YES
+TTIR_MASK_MEMORY_IMPORTER_STATIC=PASS
+TTIR_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+SPARSE_TRANSFER_MASKS_STAGED=YES
+NONZERO_LOAD_OTHER_STAGED=YES
+RANK2_STRIDED_GATHER_BLOCK_POINTER_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_MASK_MEMORY_WORKAROUNDS=YES
+READY_FOR_PHASE11_STRIDED_RANKED_MEMORY_SKELETONS=YES
+READY_FOR_TRITON=NO
