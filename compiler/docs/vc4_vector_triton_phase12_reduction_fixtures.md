@@ -2,11 +2,17 @@ PHASE12_CONTROLLED_TRITON_REDUCTION_FIXTURES=YES
 REAL_TRITON_REDUCTION_SOURCES=YES
 REAL_TTIR_REDUCTION_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
+PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
 F32_REDUCTION_FINITE_TREE_POLICY=YES
+NON_ADD_REDUCTIONS_STAGED=YES
 NON_ADD_REDUCTION_FIXTURE_STAGED=YES
 RANK_GT_1_REDUCTION_FIXTURE_STAGED=YES
 DOT_GEMV_STAGED_FOR_PHASE13=YES
 READY_FOR_PHASE12_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 12 Reduction Fixtures
@@ -71,5 +77,21 @@ exact/default IEEE f32 reduction ordering.
 Dot, GEMV, GEMM, product reductions, min/max reductions, custom reducers,
 rank>1 reductions, scans, atomics, f16/subword reductions, numeric casts, and
 SFU/generalized math remain staged.
+
+Phase 12.3 locks the matching value-surface contract:
+
+- `vector.reduction <add>` over `vector<16xi32>` is accepted with scalar `i32`
+  result.
+- `vector.reduction <add>` over `vector<16xf32>` is accepted with scalar `f32`
+  result only under explicit finite-input and finite-tree policy.
+- tail reduction uses Phase 10 inactive-zero lanes; no separate masked
+  reduction op is required.
+- scalar `memref.store` of an `i32`/`f32` reduction result to a rank-1
+  `#vc4value.global` output memref is accepted as the source-level output
+  form.
+
+This is a contract and verifier lock only. Executable value-to-VC4Kernel
+reduction lowering is staged for Phase 12.4, and `READY_FOR_TRITON=NO` remains
+locked.
 
 `READY_FOR_TRITON=NO` remains locked.

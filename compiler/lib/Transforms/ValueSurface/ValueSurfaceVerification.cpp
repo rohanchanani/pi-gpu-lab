@@ -7,6 +7,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
@@ -53,8 +54,8 @@ static bool isLegalVC4ValueOp(StringRef name) {
 }
 
 static bool isForbiddenMemRefSideEffectOp(StringRef name) {
-  return name == "memref.load" || name == "memref.store" ||
-         name == "memref.atomic_rmw" || name == "memref.generic_atomic_rmw" ||
+  return name == "memref.load" || name == "memref.atomic_rmw" ||
+         name == "memref.generic_atomic_rmw" ||
          name == "memref.atomic_yield" || name == "memref.copy" ||
          name == "memref.dma_start" || name == "memref.dma_wait";
 }
@@ -118,6 +119,13 @@ static bool isIndexOrI32(Type type) {
   return false;
 }
 
+static bool isScalarI32OrF32(Type type) {
+  if (type.isF32())
+    return true;
+  auto integerType = dyn_cast<IntegerType>(type);
+  return integerType && integerType.isSignlessInteger(32);
+}
+
 static bool hasF16Type(Type type) {
   if (type.isF16())
     return true;
@@ -142,6 +150,11 @@ static Operation *getEnclosingFunc(Operation *op) {
       return parent;
   }
   return nullptr;
+}
+
+static bool hasStringAttr(Operation *op, StringRef name, StringRef value) {
+  auto attr = dyn_cast_or_null<StringAttr>(op->getAttr(name));
+  return attr && attr.getValue() == value;
 }
 
 static std::optional<int64_t> getI64Attr(Operation *op, StringRef attrName) {
@@ -824,6 +837,89 @@ static void checkMemRefDimOp(memref::DimOp dimOp, bool &sawError) {
   }
 }
 
+static void checkVectorReductionOp(vector::ReductionOp reductionOp,
+                                   bool &sawError) {
+  VectorType sourceType = reductionOp.getSourceVectorType();
+  Type resultType = reductionOp.getDest().getType();
+
+  if (reductionOp.getKind() != vector::CombiningKind::ADD) {
+    reductionOp.emitError()
+        << "Phase 12 value reductions only accept vector.reduction <add>; "
+        << "non-add reductions are staged";
+    sawError = true;
+    return;
+  }
+
+  if (sourceType.getRank() != 1 || sourceType.getDimSize(0) != 16) {
+    reductionOp.emitError()
+        << "Phase 12 value reductions require vector<16xT>; rank>1 and "
+        << "non-16 reductions are staged";
+    sawError = true;
+    return;
+  }
+
+  if (reductionOp.getAcc()) {
+    reductionOp.emitError()
+        << "Phase 12 value reductions do not accept accumulator operands";
+    sawError = true;
+    return;
+  }
+
+  Type elementType = sourceType.getElementType();
+  if (auto integerType = dyn_cast<IntegerType>(elementType)) {
+    if (!integerType.isSignlessInteger(32) || resultType != elementType) {
+      reductionOp.emitError()
+          << "Phase 12 i32 add reduction requires vector<16xi32> to i32";
+      sawError = true;
+    }
+    return;
+  }
+
+  if (elementType.isF32()) {
+    if (!resultType.isF32()) {
+      reductionOp.emitError()
+          << "Phase 12 f32 add reduction requires vector<16xf32> to f32";
+      sawError = true;
+      return;
+    }
+
+    Operation *func = getEnclosingFunc(reductionOp);
+    bool hasFiniteDomain =
+        hasStringAttr(reductionOp, "vc4value.fp_domain", "finite") ||
+        (func && hasStringAttr(func, "vc4value.fp_domain", "finite"));
+    bool hasFiniteTree =
+        hasStringAttr(reductionOp, "vc4value.reduction_policy",
+                      "finite_tree") ||
+        (func && hasStringAttr(func, "vc4value.reduction_policy",
+                               "finite_tree"));
+    if (!hasFiniteDomain || !hasFiniteTree) {
+      reductionOp.emitError()
+          << "f32 vector.reduction <add> requires explicit "
+          << "vc4value.fp_domain = \"finite\" and "
+          << "vc4value.reduction_policy = \"finite_tree\" in Phase 12";
+      sawError = true;
+    }
+    return;
+  }
+
+  reductionOp.emitError()
+      << "Phase 12 value reductions only accept i32 and f32 element types";
+  sawError = true;
+}
+
+static bool isAllowedPhase12ScalarStore(memref::StoreOp storeOp) {
+  Type valueType = storeOp.getValueToStore().getType();
+  if (!isScalarI32OrF32(valueType))
+    return false;
+
+  auto memRefType = dyn_cast<MemRefType>(storeOp.getMemRefType());
+  if (!memRefType || memRefType.getRank() != 1 ||
+      !hasGlobalMemorySpace(memRefType))
+    return false;
+
+  return memRefType.getElementType() == valueType;
+}
+
 struct VerifyValueSurfacePass
     : public PassWrapper<VerifyValueSurfacePass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VerifyValueSurfacePass)
@@ -922,12 +1018,25 @@ struct VerifyValueSurfacePass
       if (auto dimOp = dyn_cast<memref::DimOp>(op))
         checkMemRefDimOp(dimOp, sawError);
 
+      if (auto reductionOp = dyn_cast<vector::ReductionOp>(op))
+        checkVectorReductionOp(reductionOp, sawError);
+
       if (isForbiddenMemRefSideEffectOp(opName)) {
         op->emitError()
             << "direct memref side-effect operation is not legal in the "
             << "VC4 value surface; use structured vector transfer/planning "
             << "forms";
         sawError = true;
+      }
+
+      if (auto storeOp = dyn_cast<memref::StoreOp>(op)) {
+        if (!isAllowedPhase12ScalarStore(storeOp)) {
+          op->emitError()
+              << "direct memref.store is only legal for Phase 12 scalar "
+              << "i32/f32 reduction-output stores to rank-1 "
+              << "#vc4value.global memrefs";
+          sawError = true;
+        }
       }
 
       if (isForbiddenHiddenMemRefDescriptorOp(opName)) {

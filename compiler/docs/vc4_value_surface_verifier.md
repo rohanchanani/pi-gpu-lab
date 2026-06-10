@@ -2,10 +2,18 @@
 
 PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
+PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
 SPARSE_MEMORY_MASKS_STAGED=YES
 NONZERO_LOAD_OTHER_STAGED=YES
 RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
+READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -195,7 +203,6 @@ vector/memref planning boundary:
 
 ```text
 memref.load
-memref.store
 memref.atomic_rmw
 memref.generic_atomic_rmw
 memref.atomic_yield
@@ -203,6 +210,60 @@ memref.copy
 memref.dma_start
 memref.dma_wait
 ```
+
+Phase 12 admits the narrow scalar reduction-output store form:
+
+```text
+memref.store scalar i32/f32 to rank-1 #vc4value.global output memref
+```
+
+This is a source-level ABI admission for reduction results. It does not expose
+VDW, does not add a hidden memref descriptor, and does not claim executable
+lowering in the verifier phase. All other direct `memref.store` forms remain
+rejected.
+
+## 10.1 Phase 12 reduction contract
+
+PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
+READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_TRITON=NO
+
+The accepted Phase 12 value reduction forms are:
+
+- `I32_VECTOR_ADD_REDUCTION`: `vector.reduction <add>` over
+  `vector<16xi32>` with scalar `i32` result. Integer reduction follows the
+  existing exact modulo/int VC4Kernel reduction policy.
+- `F32_VECTOR_ADD_REDUCTION_FINITE_TREE`: `vector.reduction <add>` over
+  `vector<16xf32>` with scalar `f32` result. The reduction or containing
+  kernel must carry explicit finite-input and finite-tree policy:
+  `vc4value.fp_domain = "finite"` and
+  `vc4value.reduction_policy = "finite_tree"`.
+- `TAIL_REDUCTION_BY_INACTIVE_ZERO`: the reduction op remains unmasked.
+  Inactive tail lanes must already contain zero values from Phase 10
+  inactive-zero transfer reads using `other=0` or `other=0.0`.
+- `SCALAR_REDUCTION_OUTPUT_STORE`: scalar `i32`/`f32` reduction results may be
+  stored to rank-1 `#vc4value.global` output memrefs, including inside existing
+  `scf`/`cf` control flow.
+
+The Phase 12 verifier contract stages or rejects:
+
+- max, min, product, and custom reductions;
+- `vector.multi_reduction`;
+- rank greater than 1 reductions;
+- scan/prefix forms;
+- atomics;
+- reductions over f16/subword storage;
+- exact/default f32 reductions without finite-tree policy;
+- dot, GEMV, and GEMM.
+
+The f32 policy is finite-tree target semantics only. Phase 12 makes no exact
+IEEE left-to-right sum claim, and NaN/Inf behavior is not accepted.
 
 ## 11. Sparse store policy
 

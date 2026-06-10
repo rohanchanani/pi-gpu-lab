@@ -2,10 +2,18 @@
 
 PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
+PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
 SPARSE_MEMORY_MASKS_STAGED=YES
 NONZERO_LOAD_OTHER_STAGED=YES
 RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
+READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose and non-goals
@@ -410,13 +418,54 @@ dynamic orientation, or dynamic layout.
 `vector.reduction` maps to `vc4kernel.fragment_reduce` only after type, kind,
 mask, identity, and math policy are proven.
 
-i32 reductions are exact for the accepted integer reduction kinds.
+PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
+READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 12 accepts the following value-surface reduction contract for later
+executable lowering:
+
+- `vector.reduction <add>` over `vector<16xi32>` to scalar `i32`.
+- `vector.reduction <add>` over `vector<16xf32>` to scalar `f32` only with
+  explicit finite-input and finite-tree policy.
+- tail reductions by inactive-zero input lanes from the Phase 10 transfer-read
+  contract; the reduction operation itself remains unmasked.
+- scalar `memref.store` of `i32`/`f32` reduction results to rank-1
+  `#vc4value.global` output memrefs. The planner may implement this internally
+  through one-lane VDW inactive-preserve stores when Phase 12.4 adds executable
+  lowering.
+
+i32 add reductions are exact for the accepted integer reduction policy.
 
 f32 reductions require finite-tree or explicit approximate policy only. Strict
 IEEE f32 reductions must not silently lower to finite-tree VC4Kernel reduction.
 They require an exact/emulated plan or a diagnostic.
 
-Masked reductions must specify inactive lane identity behavior before lowering.
+Masked reductions are not a separate Phase 12 source form. Tail reductions use
+the Phase 10 inactive-zero load contract so inactive lanes already hold the add
+identity before the unmasked `vector.reduction`.
+
+The Phase 12.4 planned static coverage is:
+
+- `vector.reduction <add>` over `vector<16xi32>` lowers.
+- `vector.reduction <add>` over `vector<16xf32>` with finite-tree policy lowers.
+- missing f32 finite-tree policy rejects.
+- scalar `memref.store` of `i32`/`f32` reduction outputs lowers.
+- tail inactive-zero reduction lowers.
+- row-strided sum value patterns lower through the Phase 11 address plan.
+- max, min, product, and custom reductions reject.
+- rank greater than 1 reductions reject.
+- `vector.multi_reduction` rejects.
+
+Max/min/product/custom reductions, `vector.multi_reduction`, rank greater than
+1 reductions, scans, atomics, f16/subword reductions, exact/default f32
+reductions without finite policy, dot, GEMV, and GEMM remain staged.
 
 ## 15. Math and SFU planning
 
@@ -597,7 +646,8 @@ Future implementation hooks:
 - Phase 10 masks/memory legality: mask classifier, transfer read/write
   legality, TMU safe-offset loads, and VDW preserve stores;
 - later gather/strided: gather-load and affine strided memory planning;
-- Phase 11 reductions: i32 exact and f32 finite-tree/approx reduction plans;
+- Phase 12 reductions: i32 add reduction, f32 finite-tree add reduction, tail
+  inactive-zero reduction, and scalar reduction-output stores;
 - Phase 13 math: explicit approximate SFU and exact/default diagnostics;
 - Phase 15 subword/f16: exact mode-table subword paths and f16 storage
   conversion plus f32 compute;

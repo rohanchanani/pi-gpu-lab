@@ -209,12 +209,12 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%x: memref<16xf32, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "out"})
+  func.func @kernel(%x: memref<16xf16, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "out"})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
-    %zero = arith.constant 0.000000e+00 : f32
-    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
-    memref.store %zero, %x[%c0] : memref<16xf32, #vc4value.global>
+    %zero = arith.constant 0.000000e+00 : f16
+    // expected-error @+1 {{direct memref.store is only legal for Phase 12 scalar i32/f32 reduction-output stores to rank-1 #vc4value.global memrefs}}
+    memref.store %zero, %x[%c0] : memref<16xf16, #vc4value.global>
     func.return
   }
 }
