@@ -97,6 +97,21 @@ intermediate.
 
 ## 3. Launch identity planning
 
+Phase 9 multi-axis launch identity contract:
+
+```text
+PHASE9_FEATURE=VALUE_AND_TTIR_MULTI_AXIS_LAUNCH_IDENTITY
+VALUE_MULTI_AXIS_SURFACE_CONTRACT=LOCKED
+VC4VALUE_GRID_RANK_1_2_3_EXECUTABLE_FOR_LAUNCH_IDENTITY=YES
+VC4VALUE_PROGRAM_ID_AXES_0_1_2_LOWERABLE_NOW=YES
+VC4VALUE_NUM_PROGRAMS_AXES_0_1_2_LOWERABLE_NOW=YES
+PHASE9_MEMORY_MODEL=FLATTENED_RANK1_ONLY
+PHASE9_MASK_MODEL=CANONICAL_LINEARIZED_TAIL_ONLY
+MASK_CLASSIFIER_SCOPE_CREEP=NO
+RANK2_MEMORY_SCOPE_CREEP=NO
+READY_FOR_TRITON=NO
+```
+
 `vc4value.program_id {axis = 0|1|2}` maps to the VC4Kernel program-id operation
 for the same logical axis.
 
@@ -105,6 +120,33 @@ and associated resource/launch metadata.
 
 Axes are logical launch-grid axes only. They are not physical QPU IDs and must
 not expose physical scheduling to the value layer.
+
+For Phase 9, `vc4value.grid_rank` values 1, 2, and 3 are executable for launch
+identity. The logical mapping from a flattened launch request to grid
+coordinates is:
+
+```text
+pid0 = logical_block_id % grid.x
+pid1 = (logical_block_id / grid.x) % grid.y
+pid2 = logical_block_id / (grid.x * grid.y)
+```
+
+`vc4value.num_programs(axis)` returns `grid.x`, `grid.y`, or `grid.z` for axes
+0, 1, and 2 respectively.
+
+Phase 9 multi-axis launch identity does not change the memory model. Memory
+remains flattened rank-1 only. Multi-axis kernels may compute a linearized
+rank-1 element index from logical grid coordinates, but rank-2 memory,
+rank-2 transfer planning, gather/scatter, block pointers, tensor descriptors,
+and VPM tile planning remain staged.
+
+Phase 9 also does not add a general mask classifier. The only accepted dynamic
+mask form for this feature is the canonical linearized tail:
+
+```text
+idx = flattened_block_id * 16 + lane
+mask = idx < n
+```
 
 Index values may remain `index` in the value surface, but the planner must prove
 the target i32 conversion policy before constructing VC4Kernel scalar i32
@@ -489,9 +531,12 @@ Future implementation hooks:
 
 - Phase 5 elementwise: fragment constants, splats, ALU, comparisons, and
   select;
-- Phase 9 masks/memory legality: mask classifier, transfer read/write legality,
-  TMU safe-offset loads, and VDW preserve stores;
-- Phase 10 gather/strided: gather-load and affine strided memory planning;
+- Phase 9 multi-axis launch identity: `vc4value.grid_rank` 1/2/3,
+  `program_id` axes 0/1/2, `num_programs` axes 0/1/2, flattened rank-1 memory
+  only, and canonical linearized tail masks only;
+- Phase 10 masks/memory legality: mask classifier, transfer read/write
+  legality, TMU safe-offset loads, and VDW preserve stores;
+- later gather/strided: gather-load and affine strided memory planning;
 - Phase 11 reductions: i32 exact and f32 finite-tree/approx reduction plans;
 - Phase 13 math: explicit approximate SFU and exact/default diagnostics;
 - Phase 15 subword/f16: exact mode-table subword paths and f16 storage
