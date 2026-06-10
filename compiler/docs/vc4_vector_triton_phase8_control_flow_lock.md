@@ -62,6 +62,19 @@ PHASE8RG_VALUE_MIXED_REGRESSION=PASS
 PHASE8RG_TTIR_CPP_IMPORTER_MIXED_REGRESSION=PASS
 PHASE8RG_VC4KERNEL_MIXED_REGRESSION=NOT_REQUIRED_BY_LAYER_POLICY
 READY_FOR_PHASE8RH_FINAL_LOCK=YES
+PHASE8R_RESULT=LOCKED
+SCF_WHILE_VALUE_SUPPORT=YES
+NESTED_STRUCTURED_CF_SUPPORT=YES
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_SUPPORT=YES
+PERSISTENT_LOOP_SKELETON_VALUE_SUPPORT=YES
+SCALAR_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
+CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
+IRREDUCIBLE_CFG_POLICY_PROBED=YES
+VECTOR_BRANCH_CONDITION_REJECTS=PASS
+CONTROL_FLOW_COMPLETENESS_HARDWARE=PASS
+PHASE8R_FINAL_LAYERED_MIXED_REGRESSION=PASS
+NO_TEMPORARY_FRONTEND_OR_VALUE_WORKAROUNDS=YES
+READY_FOR_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -337,6 +350,67 @@ legality.
 NO_TEMPORARY_FRONTEND_OR_VALUE_WORKAROUNDS=YES
 READY_FOR_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE=YES
 READY_FOR_PHASE8R_CONTROL_FLOW_COMPLETENESS_REPAIR=YES
+READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
+READY_FOR_TRITON=NO
+```
+
+## Phase 8Rh Final Lock
+
+Phase 8R is locked. The accepted value-control-flow subset is scalar/coherent
+control flow over the standard value-layer profile:
+
+- `scf.if`, `scf.for`, `scf.while`, and nested structured control flow, after
+  upstream `--convert-scf-to-cf`;
+- value-level `tl.range`-style counted loop skeletons and persistent-loop
+  skeletons when loop bodies use already-supported value features;
+- reducible `cf.br` / `cf.cond_br` control flow, including scalar multi-exit
+  reducible loop shapes with merge block arguments;
+- scalar `cf.switch` / `scf.index_switch` through the locked Phase 8Rd scalar
+  chain policy.
+
+Staged or rejected forms are explicit:
+
+- vector-valued branch conditions are rejected as CFG and must be represented
+  through masks/selects;
+- `scf.parallel`, `scf.forall`, and `scf.reduce` remain staged/rejected as
+  parallel/reduction semantics, not simple scalar control flow;
+- irreducible CFG is probed/classified, but is not required for sane Triton
+  Phase 8.5 control-flow support;
+- unsupported loop body features remain staged by body feature, not by control
+  flow form.
+
+This maps to expected real Triton forms by giving Phase 8.5 a value target for
+scalar runtime `if`/`else`, `tl.range` loop skeletons, persistent-loop
+skeletons, and while-like scalar/coherent loops. Per-lane masks, `tl.where`,
+masked load/store behavior, reductions, dot, gather, block pointers, and tensor
+descriptors remain outside Phase 8R and are routed to their later phases.
+
+Hardware acceptance is locked by Phase 8Rf isolation hardware, Phase 8Rg mixed
+value acceptance, and the SSAVC4ToVC4 spill-prologue repair hardware rerun. The
+Phase 8Rh final lock reuses the preserved after-repair layered mixed
+regression logs because no compiler source changed in Phase 8Rh; this phase
+only updated final lock docs and reports.
+
+Audit acceptance is locked by value-surface matrix/audits, the Phase 8
+value-control-flow source audit, Phase 8R isolation and mixed claim audits,
+TTIR C++ importer semantic/string/output-module audits, frontend lane and
+legacy Python importer audits, and lower-half branch/spill/DMA audits.
+
+```text
+PHASE8R_RESULT=LOCKED
+SCF_WHILE_VALUE_SUPPORT=YES
+NESTED_STRUCTURED_CF_SUPPORT=YES
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_SUPPORT=YES
+PERSISTENT_LOOP_SKELETON_VALUE_SUPPORT=YES
+SCALAR_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
+CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
+IRREDUCIBLE_CFG_POLICY_PROBED=YES
+VECTOR_BRANCH_CONDITION_REJECTS=PASS
+CONTROL_FLOW_COMPLETENESS_HARDWARE=PASS
+PHASE8R_VALUE_CF_COMPLETENESS_MIXED_ACCEPTANCE=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_FRONTEND_OR_VALUE_WORKAROUNDS=YES
+READY_FOR_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 ```
