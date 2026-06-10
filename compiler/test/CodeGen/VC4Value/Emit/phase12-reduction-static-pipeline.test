@@ -1,0 +1,161 @@
+// RUN: rm -rf %t && mkdir -p %t
+// RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/phase12.vc4kernel.mlir
+// RUN: vc4-opt %t/phase12.vc4kernel.mlir --verify-vc4kernel -o %t/phase12.reverified.vc4kernel.mlir
+// RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/phase12.vc4kernel.mlir
+// RUN: vc4-opt %t/phase12.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/phase12.ssavc4.mlir
+// RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/phase12.ssavc4.mlir
+// RUN: vc4-opt %t/phase12.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/phase12.vc4.mlir
+// RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/phase12.vc4.mlir
+// RUN: vc4-codegen %t/phase12.vc4.mlir --emit-bundle %t/phase12.bundle
+// RUN: test -f %t/phase12.bundle/kernel_launch.c
+// RUN: test -f %t/phase12.bundle/kernel_launch.h
+// RUN: test -f %t/phase12.bundle/manifest.json
+// RUN: test -f %t/phase12.bundle/kernels/value_reduce_sum_i32_tail_vc4value.qasm
+// RUN: test -f %t/phase12.bundle/kernels/value_reduce_sum_f32_tail_vc4value.qasm
+// RUN: test -f %t/phase12.bundle/kernels/value_reduce_scalar_store_guard_vc4value.qasm
+// RUN: test -f %t/phase12.bundle/kernels/value_reduce_row_strided_sum_vc4value.qasm
+// RUN: test -f %t/phase12.bundle/kernels/mixed_value_reduction_axes_mask_cf_strided_vc4value.qasm
+// RUN: FileCheck %s --check-prefix=BUNDLE --input-file=%t/phase12.bundle/manifest.json
+
+func.func @value_reduce_sum_i32_tail_vc4value(
+    %in: memref<?xi32, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["n"]},
+    %out: memref<?xi32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["blocks"]},
+    %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
+    %blocks: index {vc4value.arg_name = "blocks", vc4value.scalar_role = "extent"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  %pid = vc4value.program_id {axis = 0 : i32} : index
+  %c16 = arith.constant 16 : index
+  %base = arith.muli %pid, %c16 : index
+  %remaining = arith.subi %n, %base : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0 : i32
+  %v = vector.transfer_read %in[%base], %zero, %mask {in_bounds = [true]} : memref<?xi32, #vc4value.global>, vector<16xi32>
+  %sum = vector.reduction <add>, %v : vector<16xi32> into i32
+  memref.store %sum, %out[%pid] : memref<?xi32, #vc4value.global>
+  return
+}
+
+func.func @value_reduce_sum_f32_tail_vc4value(
+    %in: memref<?xf32, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["n"]},
+    %out: memref<?xf32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["blocks"]},
+    %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
+    %blocks: index {vc4value.arg_name = "blocks", vc4value.scalar_role = "extent"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32,
+                vc4value.fp_domain = "finite",
+                vc4value.reduction_policy = "finite_tree"} {
+  %pid = vc4value.program_id {axis = 0 : i32} : index
+  %c16 = arith.constant 16 : index
+  %base = arith.muli %pid, %c16 : index
+  %remaining = arith.subi %n, %base : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %v = vector.transfer_read %in[%base], %zero, %mask {in_bounds = [true]} : memref<?xf32, #vc4value.global>, vector<16xf32>
+  %sum = vector.reduction <add>, %v : vector<16xf32> into f32
+  memref.store %sum, %out[%pid] : memref<?xf32, #vc4value.global>
+  return
+}
+
+func.func @value_reduce_scalar_store_guard_vc4value(
+    %out: memref<?xi32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["blocks"]},
+    %value: i32 {vc4value.arg_name = "value"},
+    %blocks: index {vc4value.arg_name = "blocks", vc4value.scalar_role = "extent"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  %pid = vc4value.program_id {axis = 0 : i32} : index
+  %active = arith.cmpi ult, %pid, %blocks : index
+  cf.cond_br %active, ^store, ^exit
+^store:
+  memref.store %value, %out[%pid] : memref<?xi32, #vc4value.global>
+  cf.br ^exit
+^exit:
+  return
+}
+
+func.func @value_reduce_row_strided_sum_vc4value(
+    %in: memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %out: memref<?xf32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"},
+    %row_stride: index {vc4value.arg_name = "row_stride", vc4value.scalar_role = "stride"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32,
+                vc4value.fp_domain = "finite",
+                vc4value.reduction_policy = "finite_tree"} {
+  %row = vc4value.program_id {axis = 0 : i32} : index
+  %c0 = arith.constant 0 : index
+  %mask = vector.create_mask %cols : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %v = vector.transfer_read %in[%row, %c0], %zero, %mask {in_bounds = [true]} : memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xf32>
+  %sum = vector.reduction <add>, %v : vector<16xf32> into f32
+  memref.store %sum, %out[%row] : memref<?xf32, #vc4value.global>
+  return
+}
+
+func.func @mixed_value_reduction_axes_mask_cf_strided_vc4value(
+    %in: memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %out: memref<?xf32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"},
+    %row_stride: index {vc4value.arg_name = "row_stride", vc4value.scalar_role = "stride"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32,
+                vc4value.fp_domain = "finite",
+                vc4value.reduction_policy = "finite_tree"} {
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %num_cols = vc4value.num_programs {axis = 0 : i32} : index
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %remaining = arith.subi %cols, %col : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %v = vector.transfer_read %in[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xf32>
+  %sum = vector.reduction <add>, %v : vector<16xf32> into f32
+  %is_last_col = arith.cmpi eq, %pid_col, %num_cols : index
+  cf.cond_br %is_last_col, ^skip, ^store
+^store:
+  memref.store %sum, %out[%row] : memref<?xf32, #vc4value.global>
+  cf.br ^skip
+^skip:
+  return
+}
+
+// VC4KERNEL: vc4kernel.kernel @value_reduce_sum_i32_tail_vc4value
+// VC4KERNEL: vc4kernel.fragment_reduce
+// VC4KERNEL: vc4kernel.vdw_store_fragment
+// VC4KERNEL: vc4kernel.kernel @value_reduce_sum_f32_tail_vc4value
+// VC4KERNEL: vc4kernel.fragment_reduce
+// VC4KERNEL-SAME: fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>
+// VC4KERNEL: vc4kernel.kernel @value_reduce_scalar_store_guard_vc4value
+// VC4KERNEL: cf.cond_br
+// VC4KERNEL: vc4kernel.splat
+// VC4KERNEL: vc4kernel.vdw_store_fragment
+// VC4KERNEL: vc4kernel.kernel @value_reduce_row_strided_sum_vc4value
+// VC4KERNEL: arith.muli
+// VC4KERNEL: vc4kernel.fragment_reduce
+// VC4KERNEL: vc4kernel.kernel @mixed_value_reduction_axes_mask_cf_strided_vc4value
+// VC4KERNEL: vc4kernel.num_programs
+// VC4KERNEL: vc4kernel.fragment_reduce
+// VC4KERNEL-NOT: func.func
+// VC4KERNEL-NOT: vc4value.
+// VC4KERNEL-NOT: vector.
+// VC4KERNEL-NOT: memref.
+
+// SSAVC4-LABEL: ssavc4.func @value_reduce_sum_i32_tail_vc4value
+// SSAVC4: ssavc4.vdw.store
+// SSAVC4-LABEL: ssavc4.func @value_reduce_sum_f32_tail_vc4value
+// SSAVC4: ssavc4.vdw.store
+// SSAVC4-LABEL: ssavc4.func @mixed_value_reduction_axes_mask_cf_strided_vc4value
+// SSAVC4: ssavc4.vdw.store
+// SSAVC4-NOT: vc4kernel.
+// SSAVC4-NOT: vc4value.
+// SSAVC4-NOT: vector.
+// SSAVC4-NOT: memref.
+
+// VC4: vc4.module
+// VC4: vc4.qpu.
+// VC4-NOT: ssavc4.
+// VC4-NOT: vc4kernel.
+
+// BUNDLE: "public_name": "value_reduce_sum_i32_tail_vc4value"
+// BUNDLE: "public_name": "value_reduce_sum_f32_tail_vc4value"
+// BUNDLE: "public_name": "value_reduce_scalar_store_guard_vc4value"
+// BUNDLE: "public_name": "value_reduce_row_strided_sum_vc4value"
+// BUNDLE: "public_name": "mixed_value_reduction_axes_mask_cf_strided_vc4value"

@@ -3,9 +3,13 @@
 PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
+VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 NON_ADD_REDUCTIONS_STAGED=YES
 DOT_GEMV_STAGED_FOR_PHASE13=YES
@@ -14,6 +18,7 @@ NONZERO_LOAD_OTHER_STAGED=YES
 RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose and non-goals
@@ -419,13 +424,18 @@ dynamic orientation, or dynamic layout.
 mask, identity, and math policy are proven.
 
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
+VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 NON_ADD_REDUCTIONS_STAGED=YES
 DOT_GEMV_STAGED_FOR_PHASE13=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 Phase 12 accepts the following value-surface reduction contract for later
@@ -466,6 +476,23 @@ The Phase 12.4 planned static coverage is:
 Max/min/product/custom reductions, `vector.multi_reduction`, rank greater than
 1 reductions, scans, atomics, f16/subword reductions, exact/default f32
 reductions without finite policy, dot, GEMV, and GEMM remain staged.
+
+Phase 12.4 implements and statically proves the accepted value executable
+subset:
+
+- `vector.reduction <add>` over `vector<16xi32>` lowers to
+  `vc4kernel.fragment_reduce` with `#vc4kernel.reduce<add>`.
+- `vector.reduction <add>` over `vector<16xf32>` lowers to
+  `vc4kernel.fragment_reduce` with
+  `#vc4kernel.fp_reduce_policy<finite_tree>` only when the explicit finite
+  policy is present.
+- scalar `memref.store` of `i32`/`f32` reduction-output values lowers through
+  a `vc4kernel.splat`, a lane-zero `vc4kernel.pred.tail`, and
+  `vc4kernel.vdw_store_fragment` with inactive-preserve policy.
+- row-strided reduction inputs reuse the Phase 11 central address planner.
+
+No hardware proof is claimed by Phase 12.4; Phase 12.5 is the hardware
+isolation phase.
 
 ## 15. Math and SFU planning
 

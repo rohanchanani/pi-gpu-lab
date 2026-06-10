@@ -77,6 +77,7 @@ constexpr llvm::StringLiteral kArgNameAttr("vc4value.arg_name");
 constexpr llvm::StringLiteral kDirectionAttr("vc4value.direction");
 constexpr llvm::StringLiteral kScalarRoleAttr("vc4value.scalar_role");
 constexpr llvm::StringLiteral kFPDomainAttr("vc4value.fp_domain");
+constexpr llvm::StringLiteral kReductionPolicyAttr("vc4value.reduction_policy");
 constexpr llvm::StringLiteral kI32MulPolicyAttr("vc4value.i32_mul_policy");
 constexpr llvm::StringLiteral kShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kStrideArgsAttr("vc4value.stride_args");
@@ -95,6 +96,7 @@ constexpr llvm::StringLiteral kFragmentALUAddOpName("vc4kernel.fragment_alu.add"
 constexpr llvm::StringLiteral kFragmentALUMulOpName("vc4kernel.fragment_alu.mul");
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentSelectOpName("vc4kernel.fragment_select");
+constexpr llvm::StringLiteral kFragmentReduceOpName("vc4kernel.fragment_reduce");
 constexpr llvm::StringLiteral kTMULoadFragmentOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreFragmentOpName("vc4kernel.vdw_store_fragment");
 
@@ -532,6 +534,7 @@ struct LoweringState {
   Operation *sourceKernel = nullptr;
   DenseMap<Block *, Block *> blocks;
   DenseMap<Value, Value> values;
+  DenseMap<Value, Value> reductionFragments;
   DenseMap<Value, Value> predicates;
   DenseMap<Value, ClassifiedMemoryMask> memoryMasks;
 };
@@ -790,6 +793,13 @@ private:
     return {};
   }
 
+  Value lookupReductionFragment(Value value) {
+    auto it = state.reductionFragments.find(value);
+    if (it != state.reductionFragments.end())
+      return it->second;
+    return {};
+  }
+
   Value lookupPredicate(Operation *op, Value value) {
     auto it = state.predicates.find(value);
     if (it != state.predicates.end())
@@ -1015,6 +1025,10 @@ private:
       return lowerTransferRead(op);
     if (name == "vector.transfer_write")
       return lowerTransferWrite(op);
+    if (auto reduction = llvm::dyn_cast<vector::ReductionOp>(op))
+      return lowerVectorReduction(reduction);
+    if (name == "vector.multi_reduction")
+      return emitStagedDiagnostic(op, "vector.multi_reduction is staged");
     if (auto constant = llvm::dyn_cast<arith::ConstantOp>(op))
       return lowerConstant(constant);
     if (llvm::isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::ShLIOp,
@@ -1030,6 +1044,10 @@ private:
       return lowerIndexCast(op);
     if (auto dim = llvm::dyn_cast<memref::DimOp>(op))
       return lowerMemRefDim(dim);
+    if (auto store = llvm::dyn_cast<memref::StoreOp>(op))
+      return lowerScalarMemrefStore(store);
+    if (llvm::isa<memref::LoadOp>(op))
+      return emitStagedDiagnostic(op, "scalar memref.load is staged");
 
     if (op->getName().getDialectNamespace() == "scf")
       return emitRawSCFDiagnostic(op);
@@ -1476,6 +1494,56 @@ private:
     return success();
   }
 
+  bool hasFiniteReductionPolicy(Operation *op) {
+    return (hasStringAttr(op, kFPDomainAttr, "finite") ||
+            hasStringAttr(func.getOperation(), kFPDomainAttr, "finite")) &&
+           (hasStringAttr(op, kReductionPolicyAttr, "finite_tree") ||
+            hasStringAttr(func.getOperation(), kReductionPolicyAttr,
+                          "finite_tree"));
+  }
+
+  LogicalResult lowerVectorReduction(vector::ReductionOp reduction) {
+    VectorType sourceType = reduction.getSourceVectorType();
+    Type elementType = sourceType.getElementType();
+    Type resultType = reduction.getDest().getType();
+
+    if (reduction.getKind() != vector::CombiningKind::ADD)
+      return reduction.emitOpError("non-add vector.reduction is staged");
+    if (sourceType.getRank() != 1 || sourceType.getDimSize(0) != 16)
+      return reduction.emitOpError("rank>1 reduction is staged");
+    if (reduction.getAcc())
+      return reduction.emitOpError("accumulator vector.reduction is staged");
+
+    if (!elementType.isSignlessInteger(32) && !elementType.isF32())
+      return reduction.emitOpError("unsupported reduction element type");
+    if (resultType != elementType)
+      return reduction.emitOpError("unsupported reduction element type");
+    if (elementType.isF32() && !hasFiniteReductionPolicy(reduction))
+      return reduction.emitOpError(
+          "f32 vector.reduction requires explicit finite-tree policy");
+
+    Value input = lookupValue(reduction, reduction.getVector());
+    if (!input)
+      return failure();
+    Value pred = createPredFull(builder, reduction.getLoc());
+
+    SmallVector<NamedAttribute, 2> attrs;
+    attrs.push_back(builder.getNamedAttr(
+        "kind", mlir::vc4kernel::ReduceKindAttr::get(
+                    ctx, mlir::vc4kernel::ReduceKind::add)));
+    if (elementType.isF32()) {
+      attrs.push_back(builder.getNamedAttr(
+          "fp_policy", mlir::vc4kernel::FPReducePolicyAttr::get(
+                           ctx, mlir::vc4kernel::FPReducePolicy::finite_tree)));
+    }
+
+    Value fragment =
+        createOpWithResult(builder, reduction.getLoc(), kFragmentReduceOpName,
+                           {input, pred}, attrs, input.getType());
+    state.reductionFragments[reduction.getResult()] = fragment;
+    return success();
+  }
+
   LogicalResult lowerMemRefDim(memref::DimOp dimOp) {
     Value source = dimOp.getSource();
     auto memrefType = llvm::dyn_cast<MemRefType>(source.getType());
@@ -1911,6 +1979,100 @@ private:
       return failure();
     createOp(builder, op->getLoc(), kVDWStoreFragmentOpName,
              {plan.basePointer, *byteOffsets, value, plan.mask.predicate},
+             {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
+                                                     ctx, mlir::vc4kernel::MemoryPath::vdw_global_store)),
+              builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(
+                                                  ctx, mlir::vc4kernel::Coherency::dma_ordered)),
+              builder.getNamedAttr("inactive_store", mlir::vc4kernel::InactiveStoreAttr::get(
+                                                   ctx, mlir::vc4kernel::InactiveStore::preserve))});
+    return success();
+  }
+
+  LogicalResult diagnoseScalarStoreMemref(memref::StoreOp store,
+                                          MemRefType memrefType) {
+    if (!hasGlobalMemorySpace(memrefType))
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "non-global scalar store memory space");
+    if (memrefType.getRank() != 1)
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "rank>1 scalar store is staged");
+    if (!memrefType.getLayout().isIdentity())
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "non-identity scalar store layout is staged");
+    if (!isI32OrF32(memrefType.getElementType()))
+      return store.emitOpError("unsupported scalar store element type");
+    if (store.getIndices().size() != 1)
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "scalar store rank/index count mismatch");
+    Value index = store.getIndices().front();
+    if (!isScalarI32OrIndex(index.getType()))
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "scalar store index must be index or i32");
+
+    std::optional<unsigned> argIndex =
+        getPublicMemRefArgIndex(func, store.getMemRef());
+    if (!argIndex)
+      return store.emitOpError()
+             << "scalar reduction-output store requires a public "
+                "#vc4value.global memref argument. READY_FOR_TRITON remains NO";
+    StringAttr direction =
+        func.getArgAttrOfType<StringAttr>(*argIndex, kDirectionAttr);
+    if (direction && direction.getValue() != "out" &&
+        direction.getValue() != "inout") {
+      return store.emitOpError()
+             << "scalar reduction-output store requires output or inout "
+                "direction metadata. READY_FOR_TRITON remains NO";
+    }
+    return success();
+  }
+
+  FailureOr<Value> getScalarStoreFragment(memref::StoreOp store,
+                                          Type elementType) {
+    Value source = store.getValueToStore();
+    Value fragment = lookupReductionFragment(source);
+    if (fragment)
+      return fragment;
+
+    if (!source.getType().isSignlessInteger(32) && !source.getType().isF32())
+      return store.emitOpError("unsupported scalar store element type");
+    if (source.getType() != elementType)
+      return store.emitOpError("unsupported scalar store element type");
+    Value scalar = lookupValue(store, source);
+    if (!scalar)
+      return failure();
+    Type fragmentType =
+        VectorType::get({16}, lowerValueType(elementType, ctx));
+    return createSplat(builder, store.getLoc(), scalar, fragmentType);
+  }
+
+  LogicalResult lowerScalarMemrefStore(memref::StoreOp store) {
+    auto memrefType = llvm::dyn_cast<MemRefType>(store.getMemRef().getType());
+    if (!memrefType)
+      return emitStagedDiagnostic(store.getOperation(),
+                                  "scalar store memref must be ranked");
+    if (failed(diagnoseScalarStoreMemref(store, memrefType)))
+      return failure();
+    Type elementType = memrefType.getElementType();
+    if (store.getValueToStore().getType() != elementType)
+      return store.emitOpError("unsupported scalar store element type");
+
+    FailureOr<Value> storeFragment = getScalarStoreFragment(store, elementType);
+    if (failed(storeFragment))
+      return failure();
+
+    Value basePointer = lookupValue(store, store.getMemRef());
+    Value loweredIndex = lookupValue(store, store.getIndices().front());
+    if (!basePointer || !loweredIndex)
+      return failure();
+    FailureOr<Value> byteOffsets =
+        createByteOffsets(store, loweredIndex, /*elemBytes=*/4, std::nullopt);
+    if (failed(byteOffsets))
+      return failure();
+    Value zero = createI32Constant(builder, store.getLoc(), 0);
+    Value one = createI32Constant(builder, store.getLoc(), 1);
+    Value laneZero = createPredTail(builder, store.getLoc(), zero, one);
+    createOp(builder, store.getLoc(), kVDWStoreFragmentOpName,
+             {basePointer, *byteOffsets, *storeFragment, laneZero},
              {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                      ctx, mlir::vc4kernel::MemoryPath::vdw_global_store)),
               builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(
