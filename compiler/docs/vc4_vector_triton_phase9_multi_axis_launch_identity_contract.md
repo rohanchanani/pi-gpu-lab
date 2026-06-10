@@ -7,6 +7,14 @@ PHASE9_MEMORY_MODEL=FLATTENED_RANK1_ONLY
 PHASE9_MASK_MODEL=CANONICAL_LINEARIZED_TAIL_ONLY
 MASK_CLASSIFIER_SCOPE_CREEP=NO
 RANK2_MEMORY_SCOPE_CREEP=NO
+VALUE_MULTI_AXIS_TO_VC4KERNEL_STATIC=PASS
+VC4VALUE_GRID_RANK_2_3_LOWERING=YES
+VC4VALUE_PROGRAM_ID_AXES_0_1_2_TO_VC4KERNEL=YES
+VC4VALUE_NUM_PROGRAMS_AXES_0_1_2_TO_VC4KERNEL=YES
+GRID_XYZ_REQUEST_INFO_STATIC_AUDIT=PASS
+NO_MASK_CLASSIFIER_SCOPE_CREEP=YES
+NO_RANK2_MEMORY_SCOPE_CREEP=YES
+READY_FOR_PHASE9_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 # Phase 9 Multi-Axis Launch Identity Contract
@@ -84,3 +92,35 @@ VC4Value -> vc4kernel -> ssavc4 -> scheduled vc4
 It does not authorize direct lowering from value IR or TTIR to scheduled `vc4`,
 does not alter the `vc4value` dialect surface, does not implement mask
 classifier behavior, and does not mark global Triton readiness.
+
+## Phase 9.4 Static Lowering Lock
+
+Phase 9.4 implements the value executable launch-identity delta:
+
+```text
+VALUE_MULTI_AXIS_TO_VC4KERNEL_STATIC=PASS
+VC4VALUE_GRID_RANK_2_3_LOWERING=YES
+VC4VALUE_PROGRAM_ID_AXES_0_1_2_TO_VC4KERNEL=YES
+VC4VALUE_NUM_PROGRAMS_AXES_0_1_2_TO_VC4KERNEL=YES
+GRID_XYZ_REQUEST_INFO_STATIC_AUDIT=PASS
+NO_MASK_CLASSIFIER_SCOPE_CREEP=YES
+NO_RANK2_MEMORY_SCOPE_CREEP=YES
+READY_FOR_PHASE9_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+```
+
+`vc4value.program_id` and `vc4value.num_programs` now lower structurally to the
+matching `vc4kernel.program_id` and `vc4kernel.num_programs` axis attributes for
+axes 0, 1, and 2 when the axis is within the enclosing `vc4value.grid_rank`.
+Axis 0 behavior remains compatible with the earlier single-axis path.
+
+The launch identity remains logical grid identity. The generated launch ABI
+passes `vc4_dim3 grid` through to `vc4LaunchKernel`, and generated uniform
+packers consume the runtime request-info fields for `program_id_x/y/z` and
+`num_programs_x/y/z`. The runtime request-info contract is the logical mapping
+defined above, not physical QPU identity.
+
+This static lock does not broaden memory or mask legality. The value-to-VC4Kernel
+path still accepts only flattened rank-1 global memrefs and the canonical
+linearized `vector.create_mask` tail form; rank-2 memory and noncanonical masks
+remain staged for later phases.

@@ -8,7 +8,8 @@
 //
 // Phase 5 lowered the first executable standard value-layer slice into the
 // locked VC4Kernel target-kernel planning dialect.  Phase 8 extends that slice
-// with standard cf.br/cf.cond_br multi-block control flow while preserving a
+// with standard cf.br/cf.cond_br multi-block control flow, and Phase 9 extends
+// logical launch identity to grid ranks 1/2/3 while preserving a
 // crisp boundary between:
 //
 //   * the broad value-surface contract, which is allowed to contain staged
@@ -16,7 +17,7 @@
 //     scf/cf, and future TTIR-importable patterns; and
 //   * the executable subset, which is vector<16> i32/f32 elementwise code over
 //     rank-1 contiguous #vc4value.global memrefs plus Phase 8 V1 cf control
-//     flow.
+//     flow plus multi-axis program_id/num_programs identity.
 //
 // Staged value-surface features are not rejected by the value-surface verifier;
 // they are rejected here with precise diagnostics until the corresponding
@@ -416,10 +417,15 @@ private:
   LogicalResult verifyKernelShape() {
     if (!func->hasAttr(kKernelAttr))
       return func.emitOpError("expected vc4value.kernel for Phase 5 lowering");
-    auto gridRank = llvm::dyn_cast_or_null<IntegerAttr>(func->getAttr(kGridRankAttr));
-    if (!gridRank || gridRank.getInt() != 1)
-      return emitStagedDiagnostic(func.getOperation(),
-                                  "grid_rank other than 1");
+    auto gridRankAttr =
+        llvm::dyn_cast_or_null<IntegerAttr>(func->getAttr(kGridRankAttr));
+    if (!gridRankAttr)
+      return func.emitOpError(
+          "expected vc4value.grid_rank for Phase 9 value lowering");
+    gridRank = gridRankAttr.getInt();
+    if (gridRank < 1 || gridRank > 3)
+      return func.emitOpError(
+          "expected vc4value.grid_rank in [1, 3] for Phase 9 value lowering");
     if (!func.getFunctionType().getResults().empty())
       return func.emitOpError("Phase 8 value kernels must have no function results");
     return success();
@@ -871,27 +877,49 @@ private:
   }
 
   LogicalResult lowerProgramId(Operation *op) {
-    int64_t axis = getI32Attr(op, "axis").value_or(0);
-    if (axis != 0)
-      return emitStagedDiagnostic(op, "program_id axis other than 0");
+    FailureOr<int64_t> axis = getLaunchAxis(op, "program_id");
+    if (failed(axis))
+      return failure();
     Value result = createOpWithResult(
         builder, op->getLoc(), kProgramIdOpName, {},
-        {builder.getNamedAttr("axis", builder.getI32IntegerAttr(axis))},
+        {builder.getNamedAttr("axis", builder.getI32IntegerAttr(*axis))},
         builder.getI32Type());
     state.values[op->getResult(0)] = result;
     return success();
   }
 
   LogicalResult lowerNumPrograms(Operation *op) {
-    int64_t axis = getI32Attr(op, "axis").value_or(0);
-    if (axis != 0)
-      return emitStagedDiagnostic(op, "num_programs axis other than 0");
+    FailureOr<int64_t> axis = getLaunchAxis(op, "num_programs");
+    if (failed(axis))
+      return failure();
     Value result = createOpWithResult(
         builder, op->getLoc(), kNumProgramsOpName, {},
-        {builder.getNamedAttr("axis", builder.getI32IntegerAttr(axis))},
+        {builder.getNamedAttr("axis", builder.getI32IntegerAttr(*axis))},
         builder.getI32Type());
     state.values[op->getResult(0)] = result;
     return success();
+  }
+
+  FailureOr<int64_t> getLaunchAxis(Operation *op, StringRef opName) {
+    std::optional<int64_t> maybeAxis = getI32Attr(op, "axis");
+    if (!maybeAxis) {
+      op->emitOpError() << opName << " requires i32 axis attribute";
+      return failure();
+    }
+    int64_t axis = *maybeAxis;
+    if (axis < 0 || axis > 2) {
+      op->emitOpError() << opName << " axis must be 0, 1, or 2";
+      return failure();
+    }
+    if (axis >= gridRank) {
+      op->emitOpError()
+          << opName << " axis " << axis
+          << " is outside vc4value.grid_rank " << gridRank
+          << "; Phase 9 launch identity only lowers axes within the "
+             "logical grid rank. READY_FOR_TRITON remains NO";
+      return failure();
+    }
+    return axis;
   }
 
   LogicalResult lowerVectorStep(Operation *op) {
@@ -1353,6 +1381,7 @@ private:
   MLIRContext *ctx;
   OpBuilder builder;
   LoweringState state;
+  int64_t gridRank = 1;
 };
 
 struct ConvertVC4ValueToVC4KernelPass

@@ -6,6 +6,6 @@ func.func @axis1()
   return
 }
 
-// CHECK: program_id axis other than 0 is not Phase 5 lowerable
-// CHECK: staged value-surface feature
+// CHECK: program_id axis 1 is outside vc4value.grid_rank 1
+// CHECK: logical grid rank
 // CHECK: READY_FOR_TRITON remains NO
