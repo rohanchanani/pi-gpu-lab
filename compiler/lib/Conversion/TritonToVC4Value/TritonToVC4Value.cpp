@@ -1048,9 +1048,25 @@ public:
         return emitStagedDiagnostic(def, "unsupported pointer expression");
       }
       PointerExpr expr = *base;
-      expr.offsetValue = def->getOperand(1);
       expr.hasCanonicalOffset = true;
       expr.isScalarOffset = scalarPointerResult;
+      expr.offsetValue = def->getOperand(1);
+      if (base->hasCanonicalOffset) {
+        const SmallVector<Value, 4> *baseTerms =
+            lookupContiguousOffsetScalarTerms(base->offsetValue);
+        const SmallVector<Value, 4> *offsetTerms =
+            lookupContiguousOffsetScalarTerms(def->getOperand(1));
+        if (!baseTerms || !offsetTerms)
+          return emitStagedDiagnostic(def, "non-canonical pointer offset");
+        SmallVector<Value, 4> combinedTerms;
+        combinedTerms.append(baseTerms->begin(), baseTerms->end());
+        combinedTerms.append(offsetTerms->begin(), offsetTerms->end());
+        contiguousOffsetScalarTerms[def->getResult(0)] =
+            std::move(combinedTerms);
+        canonicalInfrastructureValues.insert(def->getResult(0));
+        expr.offsetValue = def->getResult(0);
+      }
+      pointerExprs[ptrValue] = expr;
       return expr;
     }
 
@@ -1761,8 +1777,8 @@ private:
   DenseMap<BlockArgument, unsigned> argIndex;
   CommonPlan common;
   mutable DenseMap<Value, PointerExpr> pointerExprs;
-  DenseMap<Value, SmallVector<Value, 4>> contiguousOffsetScalarTerms;
-  DenseSet<Value> canonicalInfrastructureValues;
+  mutable DenseMap<Value, SmallVector<Value, 4>> contiguousOffsetScalarTerms;
+  mutable DenseSet<Value> canonicalInfrastructureValues;
   DenseSet<Value> requiredDataValues;
 };
 

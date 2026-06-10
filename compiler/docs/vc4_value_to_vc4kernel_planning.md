@@ -1079,3 +1079,42 @@ finite-tree f32 add reductions, and scalar reduction-output stores. The suite
 passes with strict CPU oracles, sentinels, expected JSON checks, active QPU
 requirements, and claim audits. Dot, GEMV, GEMM, non-add reductions, and
 rank>1 reductions remain staged.
+
+## 35. Phase 12 final value and TTIR reduction lock
+
+PHASE12_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_REDUCTIONS
+VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
+VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
+VALUE_REDUCTION_HARDWARE_ISOLATION=PASS
+VALUE_REDUCTION_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_REDUCTION_SOURCES=YES
+REAL_TTIR_REDUCTION_SNAPSHOTS=YES
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_REDUCTION_HARDWARE_ISOLATION=PASS
+TTIR_REDUCTION_MIXED_ACCEPTANCE=PASS
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+EXACT_F32_REDUCTION_NOT_CLAIMED=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+RANK_GT_1_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_REDUCTION_WORKAROUNDS=YES
+READY_FOR_PHASE13_GEMV_ROWWISE_DOT=YES
+READY_FOR_TRITON=NO
+
+The Phase 12 final lock preserves the value-to-VC4Kernel contract for add-only
+reductions and scalar reduction-output stores. Value lowering supports
+`vector.reduction <add>` over `vector<16xi32>` and explicit finite-tree
+`vector<16xf32>` reductions, plus rank-1 scalar `memref.store` outputs. TTIR
+support enters through the standard value surface and then this same value
+planner.
+
+No exact/default f32 reduction support is claimed. Non-add reductions, rank>1
+reductions, `vector.multi_reduction`, dot, GEMV, GEMM, scans, atomics, and
+generalized math remain staged for later phases.

@@ -13,7 +13,11 @@
 // CHECK: vector.transfer_read
 // CHECK: vector.reduction <add>
 // CHECK: scf.if
-// CHECK: memref.store
+// CHECK: [[ROW_BLOCKS:%.*]] = arith.muli
+// CHECK: [[ROW_INDEX:%.*]] = arith.index_cast [[ROW_BLOCKS]]
+// CHECK: [[BLOCK_INDEX:%.*]] = arith.index_cast
+// CHECK: [[STORE_INDEX:%.*]] = arith.addi [[ROW_INDEX]], [[BLOCK_INDEX]]
+// CHECK: memref.store {{%.*}}, {{%.*}}[[STORE_INDEX]]
 // CHECK-NOT: tt.
 // CHECK-NOT: ttg.
 // CHECK-NOT: vc4kernel.

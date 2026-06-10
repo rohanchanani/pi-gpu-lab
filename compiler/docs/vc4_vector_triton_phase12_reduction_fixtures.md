@@ -185,3 +185,43 @@ store for empty/repeated launches, and Phase 11 row-strided f32 row reductions.
 Non-add and rank>1 reductions remain static negative fixtures only. Dot, GEMV,
 GEMM, and generalized math remain staged, and `READY_FOR_TRITON=NO` remains
 locked.
+
+## Phase 12.9 Final Reduction Lock
+
+PHASE12_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_REDUCTIONS
+VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
+VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
+VALUE_REDUCTION_HARDWARE_ISOLATION=PASS
+VALUE_REDUCTION_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_REDUCTION_SOURCES=YES
+REAL_TTIR_REDUCTION_SNAPSHOTS=YES
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_REDUCTION_HARDWARE_ISOLATION=PASS
+TTIR_REDUCTION_MIXED_ACCEPTANCE=PASS
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+EXACT_F32_REDUCTION_NOT_CLAIMED=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+RANK_GT_1_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_REDUCTION_WORKAROUNDS=YES
+READY_FOR_PHASE13_GEMV_ROWWISE_DOT=YES
+READY_FOR_TRITON=NO
+
+Phase 12.9 adds the TTIR mixed reduction acceptance fixture
+`mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton` and final-locks the
+Phase 12 reduction feature. The mixed proof uses source-controlled real Triton
+sources and TTIR snapshots, the C++ TTIR importer path, Phase 8.5 control flow,
+Phase 9 multi-axis launch identity, Phase 10 masks and memory legality, Phase
+11 row-strided memory, Phase 12 i32 and finite-tree f32 add reductions, and
+scalar reduction-output stores.
+
+The final layered regressions pass for both the VC4Value and TTIR mixed suites.
+The final lock keeps exact/default f32 reductions, non-add reductions, rank>1
+reductions, dot, GEMV, GEMM, scans, atomics, and generalized math staged.

@@ -85,6 +85,14 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             repo_root
             / "examples/triton/phase11_strided_ranked_memory/generated/mixed_ttir_strided_memory_axes_mask_cf_b16.ttir.mlir"
         )
+        phase12_mixed_reduction_snapshot = (
+            repo_root
+            / "examples/triton/phase12_reductions/generated/mixed_ttir_reduction_axes_mask_cf_strided_b16.ttir.mlir"
+        )
+        phase12_i32_reduction_snapshot = (
+            repo_root
+            / "examples/triton/phase12_reductions/generated/ttir_reduce_sum_i32_b16.ttir.mlir"
+        )
         if fixture_name == "mixed_ttir_cf_loop_if_tail_vc4triton":
             if not fixture_input.exists() or not phase85_snapshot.exists():
                 fail(f"{fixture_name} snapshot provenance paths are missing")
@@ -105,6 +113,19 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
                 fail(f"{fixture_name} snapshot provenance paths are missing")
             if fixture_input.read_bytes() != phase11_snapshot.read_bytes():
                 fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 11 mixed snapshot")
+        if fixture_name == "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton":
+            fixture_inputs = fixture_dir / "inputs"
+            expected_inputs = {
+                "mixed_ttir_strided_memory_axes_mask_cf_b16.ttir.mlir": phase11_snapshot,
+                "mixed_ttir_reduction_axes_mask_cf_strided_b16.ttir.mlir": phase12_mixed_reduction_snapshot,
+                "ttir_reduce_sum_i32_b16.ttir.mlir": phase12_i32_reduction_snapshot,
+            }
+            for input_name, snapshot in expected_inputs.items():
+                input_path = fixture_inputs / input_name
+                if not input_path.exists() or not snapshot.exists():
+                    fail(f"{fixture_name} snapshot provenance paths are missing for {input_name}")
+                if input_path.read_bytes() != snapshot.read_bytes():
+                    fail(f"{fixture_name} {input_name} does not match {snapshot}")
 
     if "saw_cpp_ttir_importer" in claim_names:
         require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
@@ -157,6 +178,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         if fixture_name in (
             "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
             "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
+            "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton",
         ):
             for marker in ("arith.addf", "arith.cmpf", "arith.select"):
                 require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
@@ -284,6 +306,28 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_row_padding_sentinels" in claim_names:
         require_marker(harness, "verify_sentinels", "saw_row_padding_sentinels harness")
         require_marker(harness, "saw_row_padding_sentinels", "saw_row_padding_sentinels harness")
+
+    if "saw_ttir_reduction_i32_add" in claim_names:
+        require_marker(ttir, "tt.reduce", "saw_ttir_reduction_i32_add TTIR")
+        require_marker(ttir, "arith.addi", "saw_ttir_reduction_i32_add TTIR")
+        require_marker(harness, "verify_i32_reduction", "saw_ttir_reduction_i32_add harness")
+
+    if "saw_ttir_reduction_f32_finite_add" in claim_names:
+        require_marker(ttir, "tt.reduce", "saw_ttir_reduction_f32_finite_add TTIR")
+        require_marker(ttir, "arith.addf", "saw_ttir_reduction_f32_finite_add TTIR")
+        require_marker(harness, "verify_f32_reduction", "saw_ttir_reduction_f32_finite_add harness")
+
+    if "saw_ttir_scalar_reduction_store" in claim_names:
+        require_marker(ttir, "tt.store", "saw_ttir_scalar_reduction_store TTIR")
+        require_marker(harness, "saw_ttir_scalar_reduction_store", "saw_ttir_scalar_reduction_store harness")
+
+    if "saw_f32_finite_tree_policy" in claim_names:
+        require_marker(harness, "max_abs_diff", "saw_f32_finite_tree_policy harness")
+
+    if "saw_no_dot_gemv" in claim_names:
+        if "tt.dot" in ttir or "gemv" in ttir.lower():
+            fail(f"{fixture_name} saw_no_dot_gemv claimed but TTIR contains dot/GEMV marker")
+        require_marker(harness, "saw_no_dot_gemv", "saw_no_dot_gemv harness")
 
     if "saw_select_x_arm" in claim_names:
         require_marker(harness, "saw_x_arm", "saw_select_x_arm harness")

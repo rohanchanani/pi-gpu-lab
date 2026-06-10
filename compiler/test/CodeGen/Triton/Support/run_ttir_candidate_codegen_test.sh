@@ -280,7 +280,9 @@ validate_value_file() {
   local path="$1"
   require_file "$path"
   local ttir_paths=()
-  mapfile -t ttir_paths < <(ttir_input_paths)
+  while IFS= read -r ttir_path; do
+    ttir_paths+=("$ttir_path")
+  done < <(ttir_input_paths)
   python3 - "$path" "${ttir_paths[@]}" <<'PY_VALIDATE_VALUE'
 from pathlib import Path
 import re

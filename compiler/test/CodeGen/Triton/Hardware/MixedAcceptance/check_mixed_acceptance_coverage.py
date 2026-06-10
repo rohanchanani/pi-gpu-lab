@@ -39,6 +39,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_multi_axis_cf_tail_vc4triton",
     "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
     "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
+    "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -78,6 +79,11 @@ REQUIRED_FEATURES = {
     "no_gather_lane_stride",
     "no_hidden_memref_descriptor",
     "row_padding_sentinels",
+    "ttir_reduction_i32_add",
+    "ttir_reduction_f32_finite_add",
+    "ttir_scalar_reduction_store",
+    "f32_finite_tree_policy",
+    "no_dot_gemv",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -152,7 +158,7 @@ def require_expected_field(expected, field, fixture_name, lock_mode):
         fail(f"{fixture_name} expected.json must require nonzero output_hash in lock mode")
 
 
-def validate_ttir_inputs(name, paths):
+def validate_ttir_inputs(name, paths, allow_reduce=False):
     if not paths:
         fail(f"{name} has no real TTIR input snapshots")
     for path in paths:
@@ -166,8 +172,10 @@ def validate_ttir_inputs(name, paths):
     for marker in ("tt.get_program_id", "tt.make_range", "tt.load", "tt.store"):
         if marker not in combined:
             fail(f"{name} TTIR inputs missing {marker}")
-    if "tt.dot" in combined or "tt.reduce" in combined:
+    if "tt.dot" in combined:
         fail(f"{name} TTIR inputs contain unsupported staged ops")
+    if "tt.reduce" in combined and not allow_reduce:
+        fail(f"{name} TTIR inputs contain reduction ops outside the Phase 12 reduction fixture")
 
 
 def validate_fixture(repo_root, fixture, lock_mode):
@@ -198,7 +206,8 @@ def validate_fixture(repo_root, fixture, lock_mode):
             fail(f"{name} missing required path {path}")
 
     inputs = ttir_inputs(fixture_dir)
-    validate_ttir_inputs(name, inputs)
+    tags = set(fixture["feature_tags"])
+    validate_ttir_inputs(name, inputs, allow_reduce="ttir_reduction_f32_finite_add" in tags or "ttir_reduction_i32_add" in tags)
     if name == "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton" and len(inputs) < 2:
         fail(f"{name} must contain at least two real TTIR inputs")
 
@@ -210,7 +219,6 @@ def validate_fixture(repo_root, fixture, lock_mode):
     if expected.get("required", {}).get("lanes") != 16:
         fail(f"{name} expected.json must require lanes=16")
 
-    tags = set(fixture["feature_tags"])
     ttir_text = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in inputs)
     for required in ("real_ttir_input", "cpp_ttir_importer", "active_qpus_12", "sentinel_preserve", "nonzero_output_hash"):
         if required not in tags:
@@ -255,6 +263,14 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims no_gather_lane_stride but TTIR contains lane-varying stride")
     if "no_hidden_memref_descriptor" in tags and "descriptor" in ttir_text.lower():
         fail(f"{name} claims no_hidden_memref_descriptor but TTIR contains descriptor marker")
+    if "ttir_reduction_i32_add" in tags and ("tt.reduce" not in ttir_text or "arith.addi" not in ttir_text):
+        fail(f"{name} claims ttir_reduction_i32_add but TTIR lacks i32 add reduction")
+    if "ttir_reduction_f32_finite_add" in tags and ("tt.reduce" not in ttir_text or "arith.addf" not in ttir_text):
+        fail(f"{name} claims ttir_reduction_f32_finite_add but TTIR lacks f32 add reduction")
+    if "ttir_scalar_reduction_store" in tags and ("tt.store" not in ttir_text or "tt.reduce" not in ttir_text):
+        fail(f"{name} claims ttir_scalar_reduction_store but TTIR lacks reduction scalar store")
+    if "no_dot_gemv" in tags and ("tt.dot" in ttir_text or "gemv" in ttir_text.lower()):
+        fail(f"{name} claims no_dot_gemv but TTIR contains dot/GEMV marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

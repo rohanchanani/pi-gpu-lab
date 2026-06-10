@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 
@@ -74,7 +75,16 @@ def audit_build_dirs(repo: Path, require_optional_build: bool) -> None:
 
 def audit_raw_closure(repo: Path) -> None:
     adapter = repo / "compiler/cmake/VC4TritonFrontendDeps.cmake"
-    for path in (repo / "compiler").rglob("CMakeLists.txt"):
+    compiler_root = repo / "compiler"
+    for root, dirs, files in os.walk(compiler_root):
+        dirs[:] = [
+            d
+            for d in dirs
+            if d not in {"build", "build-triton-llvm"} and not d.startswith(".")
+        ]
+        if "CMakeLists.txt" not in files:
+            continue
+        path = Path(root) / "CMakeLists.txt"
         rel = path.relative_to(repo).as_posix()
         text = read(path)
         if "VC4_TRITON_CPP_OBJECTS" not in text and "VC4_TRITON_CPP_LIBRARIES" not in text:

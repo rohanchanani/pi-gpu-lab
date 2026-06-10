@@ -797,3 +797,45 @@ lowered to value-layer `memref.store`, with scalar masks represented as value
 control flow. Rank>1 reductions, non-add reductions, dot/GEMV/GEMM, scans,
 atomics, and generalized math remain staged. `READY_FOR_TRITON=NO` remains
 locked.
+
+## 27. Phase 12 final reduction TTIR profile lock
+
+PHASE12_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_REDUCTIONS
+VALUE_REDUCTION_CONTRACT=LOCKED
+VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
+VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
+VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
+VALUE_REDUCTION_HARDWARE_ISOLATION=PASS
+VALUE_REDUCTION_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_REDUCTION_SOURCES=YES
+REAL_TTIR_REDUCTION_SNAPSHOTS=YES
+TTIR_REDUCTION_IMPORTER_STATIC=PASS
+TTIR_REDUCTION_HARDWARE_ISOLATION=PASS
+TTIR_REDUCTION_MIXED_ACCEPTANCE=PASS
+F32_REDUCTION_FINITE_TREE_POLICY=YES
+EXACT_F32_REDUCTION_NOT_CLAIMED=YES
+NON_ADD_REDUCTIONS_STAGED=YES
+RANK_GT_1_REDUCTIONS_STAGED=YES
+DOT_GEMV_STAGED_FOR_PHASE13=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_REDUCTION_WORKAROUNDS=YES
+READY_FOR_PHASE13_GEMV_ROWWISE_DOT=YES
+READY_FOR_TRITON=NO
+
+The final TTIR reduction profile accepts controlled real Triton `tl.sum`
+snapshots that lower to `tt.reduce` add over the sole vector dimension and
+store the scalar result through a rank-1 output pointer. The importer
+classifies reducer bodies structurally from SSA values, region operations,
+typed operands/results, and exact attributes. It does not parse printed TTIR or
+special-case fixture names, paths, kernel names, source variable names, or
+public argument names.
+
+The final Phase 12 TTIR mixed fixture combines the reduction bridge with
+elementwise operations, scalar control flow, multi-axis launch identity, tail
+masks, row-strided memory, scalar stores, and strict hardware checks. Non-add
+reducers, rank>1 reducers, dot/GEMV/GEMM, scans, atomics, and exact/default
+f32 reductions remain staged.
