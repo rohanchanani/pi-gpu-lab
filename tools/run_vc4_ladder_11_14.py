@@ -19,6 +19,9 @@ DEFAULT_PHASE_DIRS = [
     "~/Downloads/vc4_phase14_ml_storage_numeric_conversion_package",
 ]
 
+DEFAULT_CODEX_MODEL = "gpt-5.5"
+DEFAULT_CODEX_REASONING_EFFORT = "high"
+
 DEFAULT_EXCLUDE_RE = (
     r"(?i)(^README(?:\.txt|\.md)?$|"
     r"failure|triage|_X_|Phase.*X_|context|"
@@ -217,6 +220,8 @@ def build_codex_command(
     prompt_index: int,
     final_path: Path,
     yolo: bool,
+    model: str,
+    reasoning_effort: str,
     extra_flags: List[str],
     json_events: bool,
     session_id: Optional[str],
@@ -225,6 +230,10 @@ def build_codex_command(
     cmd = [codex, "exec"]
     if json_events:
         cmd.append("--json")
+    cmd.extend([
+        "--model", model,
+        "--config", f"model_reasoning_effort={json.dumps(reasoning_effort)}",
+    ])
     cmd.extend(["--output-last-message", str(final_path)])
     if yolo:
         cmd.append("--dangerously-bypass-approvals-and-sandbox")
@@ -297,6 +306,8 @@ def main() -> int:
     parser.add_argument("--repo", default=".", help="Repository root. Defaults to current directory.")
     parser.add_argument("--logs", default=None, help="Output log directory. Defaults to .vc4_auto/codex_ladder_runner_<timestamp>.")
     parser.add_argument("--codex", default="codex", help="Codex executable. Defaults to codex.")
+    parser.add_argument("--codex-model", default=DEFAULT_CODEX_MODEL, help=f"Codex model. Defaults to {DEFAULT_CODEX_MODEL}.")
+    parser.add_argument("--codex-reasoning-effort", default=DEFAULT_CODEX_REASONING_EFFORT, help=f"Codex reasoning effort. Defaults to {DEFAULT_CODEX_REASONING_EFFORT}.")
     parser.add_argument("--codex-flags", default=os.environ.get("CODEX_LADDER_RUNNER_FLAGS", ""), help="Extra Codex flags appended to every run.")
     parser.add_argument("--no-yolo", action="store_true", help="Disable default --dangerously-bypass-approvals-and-sandbox.")
     parser.add_argument("--no-json", action="store_true", help="Do not pass --json to codex exec.")
@@ -352,6 +363,8 @@ def main() -> int:
         "started_utc": timestamp,
         "phase_dirs": [str(p) for p in phase_dirs],
         "yolo": yolo,
+        "codex_model": args.codex_model,
+        "codex_reasoning_effort": args.codex_reasoning_effort,
         "codex_flags": extra_flags,
         "json_events": json_events,
         "phases": [],
@@ -422,6 +435,8 @@ def main() -> int:
                     prompt_index=prompt_index,
                     final_path=final_path,
                     yolo=yolo,
+                    model=args.codex_model,
+                    reasoning_effort=args.codex_reasoning_effort,
                     extra_flags=extra_flags,
                     json_events=json_events,
                     session_id=session_id,
