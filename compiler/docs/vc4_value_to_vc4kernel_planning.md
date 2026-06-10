@@ -747,3 +747,22 @@ VALUE_INACTIVE_ZERO_LOAD_HARDWARE=PASS
 VALUE_INACTIVE_PRESERVE_STORE_HARDWARE=PASS
 READY_FOR_PHASE10_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
+
+## 26. Phase 10.6 value mask/memory mixed acceptance
+
+Phase 10.6 extends the cumulative VC4Value mixed hardware suite with
+`mixed_value_mask_memory_axis_cf_vc4value`. The fixture keeps memory rank-1 and
+flattened while combining Phase 5 i32/f32 elementwise behavior, Phase 8 scalar
+control flow, Phase 9 multi-axis launch identity, and Phase 10 mask/memory
+legality in one natural kernel.
+
+The mixed fixture checks full, empty, and tail transfer masks, compute-mask
+select that does not feed memory predicates, inactive-zero load behavior,
+inactive-preserve store behavior, repeated launches including `n=0`, strict CPU
+oracles, sentinels, and `active_qpus=12`. The full VC4Value mixed suite passes
+with zero mismatches, zero sentinel mismatches, and zero launch failures.
+
+VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE10_7_TTIR_IMPORTER_MASK_MEMORY_STATIC=YES
+READY_FOR_TRITON=NO

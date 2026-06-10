@@ -143,6 +143,19 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         for marker in ("{3u, 2u, 2u", "{4u, 3u, 2u", "active_qpus=%d"):
             require_marker(harness, marker, "saw_value_multi_axis_launch harness")
 
+    if "saw_value_multi_axis" in claim_names:
+        for marker in (
+            "vc4value.grid_rank = 2",
+            "vc4value.program_id {axis = 0",
+            "vc4value.program_id {axis = 1",
+            "vc4value.num_programs {axis = 0",
+            "%row_base = arith.muli %pid1, %num0",
+            "%block_id = arith.addi %row_base, %pid0",
+        ):
+            require_marker(mlir, marker, "saw_value_multi_axis input")
+        for marker in ("grid_x", "grid_y", "block_id / cfg->grid_x", "active_qpus=%d"):
+            require_marker(harness, marker, "saw_value_multi_axis harness")
+
     if "saw_value_program_id_axis1" in claim_names:
         require_marker(mlir, "vc4value.program_id {axis = 1", "saw_value_program_id_axis1 input")
         require_marker(harness, "(block_id / grid->x) % grid->y", "saw_value_program_id_axis1 harness")
@@ -208,6 +221,63 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         ).read_text()
         require_marker(runner, "--convert-scf-to-cf", "saw_scf_to_cf_boundary runner")
         require_marker(runner, "after-scf-to-cf", "saw_scf_to_cf_boundary runner")
+
+    if "saw_value_control_flow" in claim_names:
+        for marker in ("cf.br ^loop", "cf.cond_br", "arith.cmpi ult"):
+            require_marker(mlir, marker, "saw_value_control_flow input")
+        for marker in ("trip", "use_i32_path", "MIXED_VALUE_MASK_MEMORY_AXIS_CF_CASE"):
+            require_marker(harness, marker, "saw_value_control_flow harness")
+
+    if "saw_value_mask_full" in claim_names:
+        for marker in ("vector.transfer_read %xi[%base], %zero_i32 :", "vector.transfer_write %full_biased"):
+            require_marker(mlir, marker, "saw_value_mask_full input")
+        for marker in ("verify_full_and_policy", "expected_full", "grid_coverage"):
+            require_marker(harness, marker, "saw_value_mask_full harness")
+
+    if "saw_value_mask_empty" in claim_names:
+        for marker in ("%empty = vector.create_mask %c0_index", "vector.transfer_write %empty_value"):
+            require_marker(mlir, marker, "saw_value_mask_empty input")
+        for marker in ("empty_out_i", "SENTINEL_I", "verify_sentinels"):
+            require_marker(harness, marker, "saw_value_mask_empty harness")
+
+    if "saw_value_mask_tail" in claim_names:
+        for marker in ("%mask = vector.create_mask %remaining", "vector.transfer_write %store_f", "vector.transfer_write %store_i"):
+            require_marker(mlir, marker, "saw_value_mask_tail input")
+        for marker in ("verify_tail_results", "verify_sentinels", "sentinel_mismatches"):
+            require_marker(harness, marker, "saw_value_mask_tail harness")
+
+    if "saw_value_compute_mask_select" in claim_names:
+        for marker in ("arith.cmpi sgt", "arith.cmpf olt", "arith.select"):
+            require_marker(mlir, marker, "saw_value_compute_mask_select input")
+        for marker in ("cfg->use_i32_path", "cond ? candidate", "expected_tail_f"):
+            require_marker(harness, marker, "saw_value_compute_mask_select harness")
+
+    if "saw_value_load_inactive_zero" in claim_names:
+        for marker in ("vector.transfer_read %xi[%base], %zero_i32, %mask", "vector.transfer_write %tail_xi, %policy_out_i[%base]"):
+            require_marker(mlir, marker, "saw_value_load_inactive_zero input")
+        for marker in ("expected_policy = logical < cfg->n ? xi_value(logical, cfg) : 0", "policy_out_i"):
+            require_marker(harness, marker, "saw_value_load_inactive_zero harness")
+
+    if "saw_value_store_inactive_preserve" in claim_names:
+        for marker in ("vector.transfer_write %store_f, %tail_out_f[%base], %mask", "vector.transfer_write %store_i, %tail_out_i[%base], %mask"):
+            require_marker(mlir, marker, "saw_value_store_inactive_preserve input")
+        for marker in ("tail_out_f[i] = sentinel_f", "tail_out_i[i] = SENTINEL_I", "verify_sentinels"):
+            require_marker(harness, marker, "saw_value_store_inactive_preserve harness")
+
+    if "saw_no_sparse_memory_mask" in claim_names:
+        for marker in ("%cond_i = arith.cmpi", "%cond_f = arith.cmpf", "arith.select"):
+            require_marker(mlir, marker, "saw_no_sparse_memory_mask compute input")
+        forbidden_transfer_masks = (
+            "vector.transfer_read %xi[%base], %zero_i32, %cond_i",
+            "vector.transfer_read %xf[%base], %zero_f, %cond_f",
+            "vector.transfer_write %store_f, %tail_out_f[%base], %cond_i",
+            "vector.transfer_write %store_f, %tail_out_f[%base], %cond_f",
+            "vector.transfer_write %store_i, %tail_out_i[%base], %cond_i",
+            "vector.transfer_write %store_i, %tail_out_i[%base], %cond_f",
+        )
+        for marker in forbidden_transfer_masks:
+            if marker in mlir:
+                fail(f"saw_no_sparse_memory_mask input uses sparse transfer mask {marker}")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

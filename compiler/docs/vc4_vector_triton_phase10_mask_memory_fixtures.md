@@ -137,3 +137,20 @@ VALUE_INACTIVE_ZERO_LOAD_HARDWARE=PASS
 VALUE_INACTIVE_PRESERVE_STORE_HARDWARE=PASS
 READY_FOR_PHASE10_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
+
+## Phase 10.6 Value Mixed Acceptance
+
+Phase 10.6 adds the cumulative value mixed fixture
+`mixed_value_mask_memory_axis_cf_vc4value`. It combines rank-1 flattened
+multi-axis launch identity, scalar control flow, i32/f32 elementwise paths,
+full/empty/tail memory masks, compute-mask select, inactive-zero transfer
+reads, inactive-preserve transfer writes, repeated launches including `n=0`,
+and `active_qpus=12`.
+
+The full VC4Value mixed suite passes on real VC4 hardware. Sparse transfer
+masks remain static rejects and are not claimed as executable support.
+
+VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE10_7_TTIR_IMPORTER_MASK_MEMORY_STATIC=YES
+READY_FOR_TRITON=NO

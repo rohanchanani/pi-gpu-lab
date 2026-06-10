@@ -1,4 +1,4 @@
-# RUN: python3 %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/check_value_mixed_acceptance_coverage.py --manifest %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/mixed_value_acceptance_manifest.json --repo-root %vc4_repo_root --mode phase9 | FileCheck %s --check-prefix=COVERAGE
+# RUN: python3 %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/check_value_mixed_acceptance_coverage.py --manifest %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/mixed_value_acceptance_manifest.json --repo-root %vc4_repo_root --mode phase10 | FileCheck %s --check-prefix=COVERAGE
 # RUN: python3 %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/audit_value_mixed_fixture_claims.py --claims %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/mixed_value_fixture_claims.json --manifest %vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/MixedAcceptance/mixed_value_acceptance_manifest.json --repo-root %vc4_repo_root | FileCheck %s --check-prefix=CLAIMS
 
 # COVERAGE: PASS VC4Value mixed acceptance coverage

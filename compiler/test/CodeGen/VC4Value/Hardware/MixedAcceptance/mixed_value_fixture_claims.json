@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase9_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase10_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -394,6 +394,79 @@
           "claim_kind": "CHECKED_OUTPUT",
           "evidence": {
             "checked_output": "both branch paths use f32 arith.mulf/addf; the harness checks factor * xf + yf or factor * yf + xf for each active element."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_mask_memory_axis_cf_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_mask_memory_axis_cf_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_mask_memory_axis_cf_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_mask_memory_axis_cf_vc4value/candidate/mixed_value_mask_memory_axis_cf_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses grid_rank=2, program_id axes 0/1, and num_programs axis 0 to flatten block_id; the harness runs 2D grids and checks output indexed by those coordinates."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.br/cf.cond_br for a counted loop and runtime branch; the harness varies trip and use_i32_path so both paths affect checked output."
+          }
+        },
+        {
+          "claim": "saw_value_mask_full",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir performs unmasked full transfer_read/write for full_out_i; the harness checks full_out_i over grid coverage for every launch."
+          }
+        },
+        {
+          "claim": "saw_value_mask_empty",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask %c0_index for empty_out_i; expected.json requires sentinel_mismatches=0 and the harness verifies empty_out_i remains sentinel."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask %remaining for tail loads/stores; tail_out_f/tail_out_i are checked against CPU oracles and inactive lanes against sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses arith.cmpi/cmpf masks only through arith.select; the harness checks both selected arms through i32 and f32 branch cases."
+          }
+        },
+        {
+          "claim": "saw_value_load_inactive_zero",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "policy_out_i stores a tail-masked transfer_read through an unmasked write; the harness requires lanes beyond n but within grid coverage to be zero."
+          }
+        },
+        {
+          "claim": "saw_value_store_inactive_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked tail_out_f/tail_out_i and empty_out_i writes are initialized with sentinels; expected.json requires sentinel_mismatches=0 after repeated launches."
+          }
+        },
+        {
+          "claim": "saw_no_sparse_memory_mask",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir uses only no-mask, vector.create_mask %remaining, and vector.create_mask %c0_index on transfer ops; compute masks from arith.cmpi/cmpf feed arith.select only, and Phase 10 static invalid tests cover sparse transfer-mask rejection."
           }
         }
       ]

@@ -48,6 +48,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
     "mixed_value_cf_completeness_loop_branch_tail_vc4value",
     "mixed_value_multi_axis_cf_tail_vc4value",
+    "mixed_value_mask_memory_axis_cf_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -76,7 +77,14 @@ REQUIRED_FEATURES = {
     "value_multi_axis_launch_identity",
     "value_program_id_axis1",
     "value_program_id_axis2",
+    "value_num_programs_axis0",
     "value_num_programs_axis1",
+    "value_mask_full",
+    "value_mask_empty",
+    "value_compute_mask_select",
+    "value_transfer_read_inactive_zero",
+    "value_transfer_write_inactive_preserve",
+    "value_no_sparse_memory_mask",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -189,20 +197,51 @@ def validate_fixture(repo_root, fixture):
         "value_vector_loop_carried": "vector<16x",
         "value_multi_exit_reducible_cf": "^exit_early",
         "value_scf_to_cf_boundary": "scf.",
-        "value_multi_axis_launch_identity": "vc4value.program_id {axis = 2",
         "value_program_id_axis1": "vc4value.program_id {axis = 1",
         "value_program_id_axis2": "vc4value.program_id {axis = 2",
+        "value_num_programs_axis0": "vc4value.num_programs {axis = 0",
         "value_num_programs_axis1": "vc4value.num_programs {axis = 1",
+        "value_mask_full": "vector.transfer_write",
+        "value_mask_empty": "vector.create_mask %c0_index",
+        "value_compute_mask_select": "arith.select",
+        "value_transfer_read_inactive_zero": "vector.transfer_read",
+        "value_transfer_write_inactive_preserve": "vector.transfer_write",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
             fail(f"{name} claims {tag} but input lacks {marker}")
+    if "value_multi_axis_launch_identity" in tags:
+        has_rank2_flatten = (
+            "vc4value.grid_rank = 2" in mlir
+            and "vc4value.program_id {axis = 1" in mlir
+            and "vc4value.num_programs {axis = 0" in mlir
+            and "%row_base = arith.muli %pid1, %num0" in mlir
+        )
+        has_rank3_flatten = (
+            "vc4value.grid_rank = 3" in mlir
+            and "vc4value.program_id {axis = 2" in mlir
+            and "vc4value.num_programs {axis = 1" in mlir
+        )
+        if not has_rank2_flatten and not has_rank3_flatten:
+            fail(f"{name} claims value_multi_axis_launch_identity without rank-2 or rank-3 flattening")
     if "value_f32_finite_cmp_select" in tags and 'vc4value.fp_domain = "finite"' not in mlir:
         fail(f"{name} uses f32 cmp/select without finite domain policy")
     if "value_i32_transfer_read" in tags and "memref<?xi32" not in mlir:
         fail(f"{name} claims i32 transfer read but input has no i32 global memref")
     if "value_f32_transfer_read" in tags and "memref<?xf32" not in mlir:
         fail(f"{name} claims f32 transfer read but input has no f32 global memref")
+    if "value_no_sparse_memory_mask" in tags:
+        if "vector.create_mask" not in mlir:
+            fail(f"{name} claims no sparse memory mask but input lacks canonical mask construction")
+        sparse_memory_uses = (
+            "vector.transfer_read %xi[%base], %zero_i32, %cond_i",
+            "vector.transfer_read %xf[%base], %zero_f, %cond_f",
+            "vector.transfer_write %store_f, %tail_out_f[%base], %cond",
+            "vector.transfer_write %store_i, %tail_out_i[%base], %cond",
+        )
+        for marker in sparse_memory_uses:
+            if marker in mlir:
+                fail(f"{name} claims no sparse memory mask but input uses {marker}")
 
 
 def validate_manifest(repo_root, manifest):
@@ -214,7 +253,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase9_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase10_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -286,7 +325,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9"):
+    if args.mode not in ("phase5", "phase9", "phase10"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

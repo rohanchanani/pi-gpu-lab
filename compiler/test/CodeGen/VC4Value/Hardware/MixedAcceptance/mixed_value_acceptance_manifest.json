@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase9_mixed_acceptance",
+  "suite_name": "vc4value_phase5_phase10_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -296,6 +296,70 @@
         "f32_tmu_alu",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_value_mask_memory_axis_cf_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_mask_memory_axis_cf_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "cumulative Phase 10 mixed fixture combining rank-1 flattened multi-axis launch identity, scalar control flow, i32/f32 elementwise paths, full/empty/tail masks, compute-mask select, inactive-zero reads, and inactive-preserve stores",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_multi_axis_launch_identity",
+        "value_program_id_axis1",
+        "value_num_programs_axis0",
+        "value_i32_transfer_read",
+        "value_f32_transfer_read",
+        "value_i32_transfer_write",
+        "value_f32_transfer_write",
+        "value_i32_cmp",
+        "value_f32_alu",
+        "value_f32_finite_cmp_select",
+        "value_tail_masks",
+        "value_mask_full",
+        "value_mask_empty",
+        "value_compute_mask_select",
+        "value_transfer_read_inactive_zero",
+        "value_vdw_inactive_preserve",
+        "value_transfer_write_inactive_preserve",
+        "value_no_sparse_memory_mask",
+        "value_cf_loop",
+        "value_cf_cond_br",
+        "value_vector_block_arg",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_value_multi_axis",
+        "saw_value_control_flow",
+        "saw_value_mask_full",
+        "saw_value_mask_empty",
+        "saw_value_mask_tail",
+        "saw_value_compute_mask_select",
+        "saw_value_load_inactive_zero",
+        "saw_value_store_inactive_preserve",
+        "saw_no_sparse_memory_mask"
+      ],
+      "expected_cases_summary": "8 repeated launches, including n=0, 1, 33, full 192, and tail-heavy n=193/257/189 across 2D grids; active_qpus=12; strict CPU oracle, sentinels, inactive-zero, and inactive-preserve checks",
+      "triage_feature_bands": [
+        "value_mask_memory_mixed",
+        "value_multi_axis_launch_identity",
+        "value_cf",
+        "i32_tmu",
+        "f32_tmu_alu",
+        "compute_mask_select",
+        "inactive_zero_load",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -308,7 +372,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -333,7 +398,8 @@
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -344,7 +410,8 @@
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -356,7 +423,8 @@
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -365,7 +433,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -377,7 +446,8 @@
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -388,7 +458,8 @@
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -397,7 +468,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_cf_saxpy_loop_select_tail_vc4value"
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -410,7 +482,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -423,7 +496,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -436,7 +510,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -447,7 +522,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -457,7 +533,8 @@
       "covered_by": [
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -468,7 +545,8 @@
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
         "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_completeness_loop_branch_tail_vc4value",
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -476,7 +554,8 @@
       "id": "value_multi_axis_launch_identity",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -484,7 +563,8 @@
       "id": "value_program_id_axis1",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_multi_axis_cf_tail_vc4value"
+        "mixed_value_multi_axis_cf_tail_vc4value",
+        "mixed_value_mask_memory_axis_cf_vc4value"
       ],
       "required": true
     },
@@ -559,10 +639,66 @@
         "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
+    },
+    {
+      "id": "value_num_programs_axis0",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_mask_full",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_mask_empty",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_compute_mask_select",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_transfer_read_inactive_zero",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_transfer_write_inactive_preserve",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_sparse_memory_mask",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_mask_memory_axis_cf_vc4value"
+      ],
+      "required": true
     }
   ],
   "isolation_backstops": [
     "value_i32_add_select_tail_vc4value"
   ],
-  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, and Phase 9 multi-axis launch identity."
+  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, Phase 9 multi-axis launch identity, and Phase 10 mask/memory legality."
 }
