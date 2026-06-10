@@ -1,0 +1,44 @@
+{
+  "phase": "phase13_gemv_demo",
+  "TRITON_TAG": "v3.7.0",
+  "triton_version": "3.7.0",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "python_semantic_importer_used": false,
+  "FULL_PHASE13_LOCK": "NO",
+  "READY_FOR_TRITON": "NO",
+  "snapshots": [
+    {
+      "name": "gemv_row_dot_f32_b16",
+      "SOURCE": "examples/triton/phase13_gemv_demo/sources/gemv_row_dot_f32_b16.py",
+      "TTIR": "examples/triton/phase13_gemv_demo/generated/gemv_row_dot_f32_b16.ttir.mlir",
+      "KERNEL_NAME": "gemv_row_dot_f32_b16_kernel",
+      "SIGNATURE": "*fp32,*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase13_gemv_demo/sources/gemv_row_dot_f32_b16.py --kernel-name gemv_row_dot_f32_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase13_gemv_demo/generated/gemv_row_dot_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase13_demo_0_source_snapshot/metadata/gemv_row_dot_f32_b16.json",
+      "CLASSIFICATION": "ACCEPTED_DEMO_LOWERABLE",
+      "BLOCK_SIZE": 16,
+      "K_RUNTIME_SCALAR": "YES",
+      "LDA_RUNTIME_SCALAR": "YES",
+      "TL_DOT_USED": "NO",
+      "FULL_PHASE13_LOCK": "NO",
+      "READY_FOR_TRITON": "NO",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_runtime_k_i32",
+        "saw_runtime_lda_i32",
+        "saw_program_id_axis0_row",
+        "saw_row_strided_a_load",
+        "saw_contiguous_x_load",
+        "saw_tail_mask_from_k",
+        "saw_vector_f32_multiply",
+        "saw_tl_sum_product",
+        "saw_tt_reduce_axis0_add",
+        "saw_scalar_y_store",
+        "saw_no_tl_dot",
+        "saw_no_block_pointer",
+        "saw_no_multiblock_k_accumulation"
+      ]
+    }
+  ]
+}
