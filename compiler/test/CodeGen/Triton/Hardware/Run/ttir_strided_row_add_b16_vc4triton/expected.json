@@ -1,0 +1,20 @@
+{
+  "name": "ttir_strided_row_add_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_row_strided_memory": 1,
+    "saw_value_strided_address": 1,
+    "saw_no_gather_lane_stride": 1,
+    "saw_ttir_two_input_strided": 1,
+    "saw_row_padding_sentinels": 1,
+    "saw_phase10_tail_mask": 1
+  }
+}

@@ -12,6 +12,11 @@ VALUE_MEMREF_DIM_METADATA_HARDWARE=PASS
 VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
 TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_STRIDED_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_ROW_STRIDED_COPY_HARDWARE=PASS
+TTIR_ROW_STRIDED_ADD_HARDWARE=PASS
+TTIR_ROW_STRIDED_INOUT_TAIL_HARDWARE=PASS
+TTIR_STRIDED_EMPTY_REPEAT_HARDWARE=PASS
 TTIR_ROW_STRIDED_POINTER_LOWERING=YES
 TTIR_LANE_VARYING_STRIDE_GATHER_REJECTS=PASS
 TTIR_COLUMN_SLICE_REJECTS=PASS
@@ -29,6 +34,7 @@ HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
 READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE11_9_TTIR_MIXED_FINAL_LOCK=YES
 READY_FOR_PHASE11_7_TTIR_IMPORTER_STRIDED_MEMORY_STATIC=YES
 READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
@@ -111,5 +117,18 @@ accepted offsets are scalar base terms plus one contiguous `tt.make_range(0,
 public argument names. Lane-varying stride/gather, column/vertical slices,
 block pointers, and rank-2 tensor forms remain staged with exact diagnostics.
 The accepted snapshots pass the full static pipeline through scheduled VC4.
+
+Phase 11.8 proves the accepted TTIR row-strided memory snapshots on real VC4
+hardware with targeted isolation fixtures:
+`ttir_strided_row_copy_b16_vc4triton`,
+`ttir_strided_row_add_b16_vc4triton`,
+`ttir_strided_row_inout_tail_b16_vc4triton`, and
+`ttir_strided_empty_repeat_vc4triton`. The fixtures run through the C++ TTIR
+importer and the standard value-to-VC4Kernel-to-SSAVC4-to-scheduled-VC4 path,
+use active_qpus=12, strict CPU oracles, row-padding sentinels, output hashes,
+and checked `saw_*` fields for real TTIR snapshots, the C++ importer,
+row-strided scalar pointer expressions, Phase 10 tail masks, and no
+gather/lane-stride support. The staged gather and column-slice fixtures remain
+static negative coverage, not hardware acceptance.
 
 `READY_FOR_TRITON=NO` remains locked.

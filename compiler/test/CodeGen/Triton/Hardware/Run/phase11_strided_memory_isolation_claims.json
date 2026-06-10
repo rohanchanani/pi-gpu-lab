@@ -1,0 +1,94 @@
+{
+  "phase": "Phase11.8",
+  "fixtures": [
+    {
+      "name": "ttir_strided_row_copy_b16_vc4triton",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_copy_b16.py",
+      "snapshot": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_copy_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.get_program_id x", "tt.get_program_id y", "tt.make_range", "arith.muli", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_row_padding_sentinels", "saw_phase10_tail_mask"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_strided_scalar_pointer_expression", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "phase9_multi_axis_axes", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "phase10_tail_mask", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_padding_sentinels", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_gather_lane_stride", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_strided_row_add_b16_vc4triton",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_add_b16.py",
+      "snapshot": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_add_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.get_program_id x", "tt.get_program_id y", "tt.make_range", "arith.addf", "arith.muli", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_two_input_strided", "saw_row_padding_sentinels", "saw_phase10_tail_mask"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_strided_scalar_pointer_expression", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "multi_buffer_strided_memory", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase9_multi_axis_axes", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "phase10_tail_mask", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_padding_sentinels", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_gather_lane_stride", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_strided_row_inout_tail_b16_vc4triton",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_inout_tail_b16.py",
+      "snapshot": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_inout_tail_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.get_program_id x", "tt.get_program_id y", "tt.make_range", "arith.mulf", "arith.addf", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_strided_inout_tail", "saw_value_store_inactive_preserve", "saw_phase10_tail_mask"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_strided_scalar_pointer_expression", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "inout_tail_preserve", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase9_multi_axis_axes", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "phase10_tail_mask", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_gather_lane_stride", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_strided_empty_repeat_vc4triton",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_copy_b16.py",
+      "snapshot": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_copy_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.get_program_id x", "tt.get_program_id y", "tt.make_range", "arith.muli", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_repeat_invocation", "saw_empty_rows_cols", "saw_row_padding_sentinels"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_strided_scalar_pointer_expression", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "empty_rows_or_cols", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_padding_sentinels", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_gather_lane_stride", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "name": "lane_varying_stride_gather",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StridedMemory/invalid-ttir-lane-varying-stride-gather.mlir",
+      "diagnostic": "lane-varying stride/gather pointer expression staged"
+    },
+    {
+      "name": "column_slice_noncontiguous",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StridedMemory/invalid-ttir-column-slice-noncontiguous.mlir",
+      "diagnostic": "non-contiguous column slice pointer expression staged"
+    }
+  ]
+}

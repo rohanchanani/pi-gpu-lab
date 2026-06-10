@@ -1,0 +1,5 @@
+# RUN: python3 %S/Hardware/Run/audit_phase11_strided_memory_isolation_claims.py %S/../../../.. | FileCheck %s
+
+# CHECK: TTIR_STRIDED_MEMORY_CLAIM_AUDIT=PASS
+# CHECK: fixtures=4
+# CHECK: static_negative=2
