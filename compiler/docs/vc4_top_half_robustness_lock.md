@@ -110,3 +110,14 @@ hardening, TTIR mixed claims, and no toolchain/generator drift.
 
 No TTIR was regenerated, no Triton or LLVM toolchain was created/installed/built,
 and `READY_FOR_TRITON=NO` remains true.
+
+## Phase 10.7 Mask/Memory Importer Audit Extension
+
+The top-half robustness audit now includes Phase 10 mask/memory importer
+checks. The audit locks structural TTIR memory-mask classification, exact
+staged diagnostics for sparse memory masks and nonzero load `other`, no
+fixture/name/path special casing, no TTIR text parsing, no regex or substring
+semantic classification, and no direct lower-half output.
+
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_TRITON=NO

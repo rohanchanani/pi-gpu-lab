@@ -25,6 +25,6 @@ module {
   } loc(#loc)
 } loc(#loc)
 
-// CHECK: tail mask left operand not canonical offset
+// CHECK: sparse or unknown tt.store memory mask
 // CHECK: staged TTIR target-profile feature
 // CHECK: READY_FOR_TRITON remains NO

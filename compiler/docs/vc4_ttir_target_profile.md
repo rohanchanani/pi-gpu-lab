@@ -655,3 +655,28 @@ Future staged forms observed or reserved by Phase 6 are:
 real TTIR generation, parse inventory, corpus snapshots, and an importer
 skeleton only. Full Triton support requires later semantic TTIR-to-value
 lowering and hardware proof.
+
+## 22. Phase 10.7 mask/memory importer profile
+
+Phase 10.7 statically accepts the controlled TTIR mask/memory forms emitted by
+real Triton 3.7.0:
+
+- `tt.load` and `tt.store` with no mask as full transfers;
+- canonical tail memory masks formed by `offsets < scalar_bound`;
+- compute masks from vector comparisons when they feed `arith.select`;
+- rank-1 identity pointer arithmetic for `i32`/`f32` `tensor<16x...>` forms.
+
+The importer stages sparse or unknown `tt.load`/`tt.store` memory masks,
+nonzero `tt.load` `other`, rank-2/shape-changing memory forms, and block
+pointers. The classification is structural and does not use source names,
+fixture paths, printed TTIR, or generated-output names.
+
+TTIR_MASK_MEMORY_IMPORTER_STATIC=PASS
+TTIR_CANONICAL_TAIL_MASK_LOWERING=YES
+TTIR_FULL_NO_MASK_LOWERING=YES
+TTIR_COMPUTE_MASK_SELECT_LOWERING=YES
+TTIR_SPARSE_MEMORY_MASK_REJECTS=PASS
+TTIR_NONZERO_LOAD_OTHER_REJECTS=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE10_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO

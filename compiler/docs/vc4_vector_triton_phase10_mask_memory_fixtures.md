@@ -75,11 +75,9 @@ mask operands.
 
 ## Current Import Smoke
 
-Current value-import smoke is intentionally recorded as
-`EXPECTED_PENDING_IMPORTER_REPAIR`. Tail, compute-select, and mixed accepted
-snapshots already import. The accepted no-mask full-transfer snapshot currently
-stages at the importer because no-mask `tt.store` support is not implemented
-yet.
+Phase 10.7 resolves the importer repair that was pending in Phase 10.2. Tail,
+no-mask full-transfer, compute-select, and mixed accepted snapshots now import
+to the value surface and pass the full static pipeline.
 
 The staged snapshots produce precise staged diagnostics for sparse memory masks
 and nonzero load `other`.
@@ -153,4 +151,32 @@ masks remain static rejects and are not claimed as executable support.
 VALUE_MASK_MEMORY_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
 READY_FOR_PHASE10_7_TTIR_IMPORTER_MASK_MEMORY_STATIC=YES
+READY_FOR_TRITON=NO
+
+## Phase 10.7 TTIR Importer Static Lowering
+
+Phase 10.7 extends `TritonToVC4Value` to lower the controlled real TTIR
+mask/memory forms into the already hardware-proven value forms. Classification
+is structural over SSA/use-defs and typed operations. It does not inspect
+fixture names, kernel names, paths, or printed TTIR.
+
+Accepted Phase 10 TTIR snapshots pass:
+
+```text
+TTIR -> value -> value verifier -> scf-to-cf -> vc4kernel -> ssavc4 -> vc4
+```
+
+The accepted forms are canonical `offsets < n` tail masks, full/no-mask
+transfers, and compute masks feeding `arith.select`. Sparse or unknown memory
+masks and nonzero `tt.load` `other` values reject with exact staged
+diagnostics.
+
+TTIR_MASK_MEMORY_IMPORTER_STATIC=PASS
+TTIR_CANONICAL_TAIL_MASK_LOWERING=YES
+TTIR_FULL_NO_MASK_LOWERING=YES
+TTIR_COMPUTE_MASK_SELECT_LOWERING=YES
+TTIR_SPARSE_MEMORY_MASK_REJECTS=PASS
+TTIR_NONZERO_LOAD_OTHER_REJECTS=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE10_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO

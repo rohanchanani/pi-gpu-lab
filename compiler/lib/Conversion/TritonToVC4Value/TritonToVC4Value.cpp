@@ -634,31 +634,37 @@ static Value createVectorTransferRead(OpBuilder &builder, Location loc,
                                       Value source, Value index, Value padding,
                                       Value mask, VectorType resultType) {
   MLIRContext *ctx = builder.getContext();
+  SmallVector<Value, 4> operands = {source, index, padding};
+  if (mask)
+    operands.push_back(mask);
   SmallVector<NamedAttribute, 4> attrs;
   attrs.push_back(builder.getNamedAttr(
       "permutation_map", AffineMapAttr::get(getRank1IdentityMap(ctx))));
   attrs.push_back(builder.getNamedAttr(
       "in_bounds", builder.getArrayAttr({builder.getBoolAttr(false)})));
   attrs.push_back(builder.getNamedAttr(
-      "operandSegmentSizes", DenseI32ArrayAttr::get(ctx, {1, 1, 1, 1})));
+      "operandSegmentSizes",
+      DenseI32ArrayAttr::get(ctx, {1, 1, 1, mask ? 1 : 0})));
   return createGenericOpWithResult(builder, loc, "vector.transfer_read",
-                                   {source, index, padding, mask}, attrs,
-                                   resultType);
+                                   operands, attrs, resultType);
 }
 
 static void createVectorTransferWrite(OpBuilder &builder, Location loc,
                                       Value value, Value dest, Value index,
                                       Value mask) {
   MLIRContext *ctx = builder.getContext();
+  SmallVector<Value, 4> operands = {value, dest, index};
+  if (mask)
+    operands.push_back(mask);
   SmallVector<NamedAttribute, 4> attrs;
   attrs.push_back(builder.getNamedAttr(
       "permutation_map", AffineMapAttr::get(getRank1IdentityMap(ctx))));
   attrs.push_back(builder.getNamedAttr(
       "in_bounds", builder.getArrayAttr({builder.getBoolAttr(false)})));
   attrs.push_back(builder.getNamedAttr(
-      "operandSegmentSizes", DenseI32ArrayAttr::get(ctx, {1, 1, 1, 1})));
-  createGenericOp(builder, loc, "vector.transfer_write", {value, dest, index, mask},
-                  attrs);
+      "operandSegmentSizes",
+      DenseI32ArrayAttr::get(ctx, {1, 1, 1, mask ? 1 : 0})));
+  createGenericOp(builder, loc, "vector.transfer_write", operands, attrs);
 }
 
 struct TTIRArgInfo {
@@ -1036,19 +1042,54 @@ private:
     common.offsetValue = offset;
 
     Value mask;
-    for (Operation *store : stores) {
-      if (store->getNumOperands() != 3)
-        return emitStagedDiagnostic(store, "tt.store without canonical mask operand");
-      if (!mask)
-        mask = store->getOperand(2);
-      else if (mask != store->getOperand(2))
-        return emitStagedDiagnostic(store, "multiple distinct store masks");
+    SmallVector<Operation *, 8> memoryOps;
+    funcOp->walk([&](Operation *op) {
+      if (hasName(op, kTTLoadOpName) || hasName(op, kTTStoreOpName))
+        memoryOps.push_back(op);
+    });
+    for (Operation *memoryOp : memoryOps) {
+      bool isLoad = hasName(memoryOp, kTTLoadOpName);
+      bool isStore = hasName(memoryOp, kTTStoreOpName);
+      unsigned operands = memoryOp->getNumOperands();
+      if (isLoad) {
+        if (operands == 1)
+          continue;
+        if (operands != 3)
+          return emitStagedDiagnostic(memoryOp,
+                                      "tt.load without pointer, mask, other=0");
+        if (!isZeroLikeConstant(memoryOp->getOperand(2).getDefiningOp()))
+          return emitStagedDiagnostic(memoryOp, "tt.load nonzero other value");
+        Value candidateMask = memoryOp->getOperand(1);
+        if (!matchesCanonicalTailMask(candidateMask, offset))
+          return emitStagedDiagnostic(memoryOp,
+                                      "sparse or unknown tt.load memory mask");
+        if (!mask)
+          mask = candidateMask;
+        else if (mask != candidateMask)
+          return emitStagedDiagnostic(memoryOp,
+                                      "multiple distinct transfer tail masks");
+      } else if (isStore) {
+        if (operands == 2)
+          continue;
+        if (operands != 3)
+          return emitStagedDiagnostic(memoryOp,
+                                      "tt.store without pointer, value, mask");
+        Value candidateMask = memoryOp->getOperand(2);
+        if (!matchesCanonicalTailMask(candidateMask, offset))
+          return emitStagedDiagnostic(memoryOp,
+                                      "sparse or unknown tt.store memory mask");
+        if (!mask)
+          mask = candidateMask;
+        else if (mask != candidateMask)
+          return emitStagedDiagnostic(memoryOp,
+                                      "multiple distinct transfer tail masks");
+      }
     }
-    if (!mask)
-      return emitInternalError(funcOp, "missing tail mask after store scan");
-    if (failed(verifyCanonicalTailMask(mask, offset)))
-      return failure();
-    common.tailMaskValue = mask;
+    if (mask) {
+      if (failed(recordCanonicalTailMask(mask, offset)))
+        return failure();
+      common.tailMaskValue = mask;
+    }
     return success();
   }
 
@@ -1152,28 +1193,50 @@ private:
     return false;
   }
 
-  LogicalResult verifyCanonicalTailMask(Value mask, Value offset) {
+  std::optional<BlockArgument> matchCanonicalTailMask(Value mask,
+                                                     Value offset) const {
     Operation *cmp = mask.getDefiningOp();
     auto cmpi = llvm::dyn_cast_or_null<arith::CmpIOp>(cmp);
     if (!cmpi)
-      return emitStagedDiagnostic(cmp ? cmp : funcOp,
-                                  "tail mask not formed by arith.cmpi");
+      return std::nullopt;
     if (cmpi.getPredicate() != arith::CmpIPredicate::slt)
-      return emitStagedDiagnostic(cmp, "tail mask predicate other than slt");
+      return std::nullopt;
     if (cmpi.getOperand(0) != offset)
-      return emitStagedDiagnostic(cmp, "tail mask left operand not canonical offset");
+      return std::nullopt;
 
     Operation *rhsSplat = cmpi.getOperand(1).getDefiningOp();
     if (!hasName(rhsSplat, kTTSplatOpName) || rhsSplat->getNumOperands() != 1)
-      return emitStagedDiagnostic(cmp, "tail mask right operand not scalar size splat");
+      return std::nullopt;
     auto sizeArg = llvm::dyn_cast<BlockArgument>(rhsSplat->getOperand(0));
     if (!sizeArg)
-      return emitStagedDiagnostic(rhsSplat, "tail mask size is not a function argument");
+      return std::nullopt;
     auto it = argIndex.find(sizeArg);
     if (it == argIndex.end())
-      return emitInternalError(rhsSplat, "tail mask size argument missing from arg table");
+      return std::nullopt;
     if (!isScalarI32(args[it->second].sourceType))
-      return emitStagedDiagnostic(rhsSplat, "tail mask bound is not an i32 scalar argument");
+      return std::nullopt;
+    return sizeArg;
+  }
+
+  bool matchesCanonicalTailMask(Value mask, Value offset) const {
+    return matchCanonicalTailMask(mask, offset).has_value();
+  }
+
+  LogicalResult recordCanonicalTailMask(Value mask, Value offset) {
+    std::optional<BlockArgument> matchedSizeArg =
+        matchCanonicalTailMask(mask, offset);
+    if (!matchedSizeArg)
+      return emitStagedDiagnostic(mask.getDefiningOp() ? mask.getDefiningOp()
+                                                       : funcOp,
+                                  "tail mask not formed by canonical offsets < bound");
+    Operation *cmp = mask.getDefiningOp();
+    Operation *rhsSplat =
+        llvm::cast<arith::CmpIOp>(cmp).getOperand(1).getDefiningOp();
+    BlockArgument sizeArg = *matchedSizeArg;
+    auto it = argIndex.find(sizeArg);
+    if (it == argIndex.end())
+      return emitInternalError(rhsSplat,
+                               "tail mask size argument missing from arg table");
     args[it->second].role = TTIRArgumentRole::ScalarTailBound;
     common.sizeArg = sizeArg;
     canonicalInfrastructureValues.insert(rhsSplat->getResult(0));
@@ -1346,9 +1409,11 @@ private:
         if (!elemType)
           return sourceFunc->emitOpError("unsupported pointer element type");
         auto memorySpace = mlir::vc4value::GlobalMemorySpaceAttr::get(ctx);
+        int64_t extent = planner.getCommonPlan().sizeArg
+                             ? ShapedType::kDynamic
+                             : static_cast<int64_t>(kPhase7VectorWidth);
         argTypes.push_back(MemRefType::get(
-            {ShapedType::kDynamic}, elemType, MemRefLayoutAttrInterface(),
-            memorySpace));
+            {extent}, elemType, MemRefLayoutAttrInterface(), memorySpace));
         continue;
       }
       Type converted = convertScalarArgType(arg.sourceType, arg.role, builder);
@@ -1414,10 +1479,6 @@ private:
 
   LogicalResult emitCommonPrefix() {
     const CommonPlan &common = planner.getCommonPlan();
-    Value n = lookup(common.sizeArg);
-    if (!n)
-      return emitInternalError(planner.getFuncOp(), "tail size argument not mapped");
-
     for (Operation *programId : common.programIds) {
       std::optional<int64_t> axis = planner.getLaunchIdentityAxis(programId);
       if (!axis)
@@ -1680,11 +1741,14 @@ private:
   LogicalResult lowerTTLoad(Operation *op) {
     if (op->getNumResults() == 1 && !planner.isRequiredDataValue(op->getResult(0)))
       return emitStagedDiagnostic(op, "dead tt.load outside ignored-dead proof whitelist");
-    if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    if ((op->getNumOperands() != 1 && op->getNumOperands() != 3) ||
+        op->getNumResults() != 1)
       return emitStagedDiagnostic(op, "tt.load without pointer, mask, other=0");
-    Operation *other = op->getOperand(2).getDefiningOp();
-    if (!isZeroLikeConstant(other))
-      return emitStagedDiagnostic(op, "tt.load other value other than zero");
+    if (op->getNumOperands() == 3) {
+      Operation *other = op->getOperand(2).getDefiningOp();
+      if (!isZeroLikeConstant(other))
+        return emitStagedDiagnostic(op, "tt.load nonzero other value");
+    }
 
     FailureOr<PointerExpr> ptr = planner.classifyPointer(op->getOperand(0));
     if (failed(ptr))
@@ -1702,17 +1766,22 @@ private:
     FailureOr<Value> transferIndex = ensureTransferIndex(ptr->offsetValue, op);
     if (failed(transferIndex))
       return failure();
-    FailureOr<Value> mask = ensureTailMask(op->getOperand(1), op);
-    if (failed(mask))
-      return failure();
+    Value mask;
+    if (op->getNumOperands() == 3) {
+      FailureOr<Value> maybeMask = ensureTailMask(op->getOperand(1), op,
+                                                  "sparse or unknown tt.load memory mask");
+      if (failed(maybeMask))
+        return failure();
+      mask = *maybeMask;
+    }
     bindValue(op->getResult(0),
               createVectorTransferRead(builder, op->getLoc(), memref,
-                                       *transferIndex, pad, *mask, vectorType));
+                                       *transferIndex, pad, mask, vectorType));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTStore(Operation *op) {
-    if (op->getNumOperands() != 3)
+    if (op->getNumOperands() != 2 && op->getNumOperands() != 3)
       return emitStagedDiagnostic(op, "tt.store without pointer, value, mask");
     FailureOr<PointerExpr> ptr = planner.classifyPointer(op->getOperand(0));
     if (failed(ptr))
@@ -1726,11 +1795,16 @@ private:
     FailureOr<Value> transferIndex = ensureTransferIndex(ptr->offsetValue, op);
     if (failed(transferIndex))
       return failure();
-    FailureOr<Value> mask = ensureTailMask(op->getOperand(2), op);
-    if (failed(mask))
-      return failure();
+    Value mask;
+    if (op->getNumOperands() == 3) {
+      FailureOr<Value> maybeMask = ensureTailMask(
+          op->getOperand(2), op, "sparse or unknown tt.store memory mask");
+      if (failed(maybeMask))
+        return failure();
+      mask = *maybeMask;
+    }
     createVectorTransferWrite(builder, op->getLoc(), value, memref,
-                              *transferIndex, *mask);
+                              *transferIndex, mask);
     return finishLowering(op, LoweringOutcome::LoweredZeroResult);
   }
 
@@ -1759,7 +1833,9 @@ private:
                                              "arith.andi required use staged");
     if (hasName(op, "arith.cmpi") &&
         op->getResult(0) == planner.getCommonPlan().tailMaskValue) {
-      FailureOr<Value> mask = ensureTailMask(op->getResult(0), op);
+      FailureOr<Value> mask =
+          ensureTailMask(op->getResult(0), op,
+                         "sparse or unknown TTIR memory mask");
       return failed(mask) ? failure()
                           : finishLowering(
                                 op, LoweringOutcome::LoweredWithResultsBound);
@@ -2019,14 +2095,15 @@ private:
         .getResult();
   }
 
-  FailureOr<Value> ensureTailMask(Value mask, Operation *user) {
+  FailureOr<Value> ensureTailMask(Value mask, Operation *user,
+                                  StringRef sparseDiagnostic) {
     if (mask != planner.getCommonPlan().tailMaskValue)
-      return emitStagedDiagnostic(user, "non-canonical control-flow tail mask");
+      return emitStagedDiagnostic(user, sparseDiagnostic);
 
     Operation *cmp = mask.getDefiningOp();
     auto cmpi = llvm::dyn_cast_or_null<arith::CmpIOp>(cmp);
     if (!cmpi)
-      return emitStagedDiagnostic(user, "tail mask not formed by arith.cmpi");
+      return emitStagedDiagnostic(user, sparseDiagnostic);
     FailureOr<Value> index = ensureTransferIndex(cmpi.getOperand(0), user);
     if (failed(index))
       return failure();

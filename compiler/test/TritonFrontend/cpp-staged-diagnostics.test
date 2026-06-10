@@ -19,7 +19,7 @@
 # RUN: not %vc4_triton_opt %t/nonzero_other.ttir.mlir --convert-triton-to-vc4-value -o %t/nonzero_other.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=LOAD-OTHER
 
 # RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind store_nomask --out %t/store_nomask.ttir.mlir
-# RUN: not %vc4_triton_opt %t/store_nomask.ttir.mlir --convert-triton-to-vc4-value -o %t/store_nomask.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=STORE-NOMASK
+# RUN: %vc4_triton_opt %t/store_nomask.ttir.mlir --convert-triton-to-vc4-value -o - | FileCheck %s --check-prefix=STORE-NOMASK
 
 # RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind store_scatter --out %t/store_scatter.ttir.mlir
 # RUN: not %vc4_triton_opt %t/store_scatter.ttir.mlir --convert-triton-to-vc4-value -o %t/store_scatter.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=STORE-SPARSE
@@ -47,13 +47,12 @@
 # RANK2: staged TTIR target-profile feature
 # RANK2: READY_FOR_TRITON remains NO
 
-# LOAD-OTHER: tt.load other value other than zero
+# LOAD-OTHER: tt.load nonzero other value
 # LOAD-OTHER: staged TTIR target-profile feature
 # LOAD-OTHER: READY_FOR_TRITON remains NO
 
-# STORE-NOMASK: tt.store without canonical mask operand
-# STORE-NOMASK: staged TTIR target-profile feature
-# STORE-NOMASK: READY_FOR_TRITON remains NO
+# STORE-NOMASK: vector.transfer_write
+# STORE-NOMASK-NOT: tt.store
 
 # STORE-SPARSE: multiple distinct pointer offset expressions
 # STORE-SPARSE: staged TTIR target-profile feature
