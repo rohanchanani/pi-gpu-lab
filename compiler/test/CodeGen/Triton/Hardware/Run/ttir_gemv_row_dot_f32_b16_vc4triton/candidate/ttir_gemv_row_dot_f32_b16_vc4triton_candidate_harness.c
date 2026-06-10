@@ -60,6 +60,22 @@ static uint32_t rotl32_local(uint32_t value, uint32_t amount) {
     return amount == 0u ? value : ((value << amount) | (value >> (32u - amount)));
 }
 
+static uint32_t min_u32(uint32_t a, uint32_t b) {
+    return a < b ? a : b;
+}
+
+static void print_demo_banner(void) {
+    printk("\n");
+    printk("=== Accelerated TTIR GEMV-v0 hardware demo ===\n");
+    printk("Pipeline: real Triton source -> real TTIR -> C++ importer -> value -> VC4Kernel -> SSAVC4 -> scheduled VC4 -> hardware\n");
+    printk("Kernel: one QPU program row computes y[row] = sum_j A[row * LDA + j] * X[j]\n");
+    printk("Sweep: rows={1,2,7,13}, K={0,1,2,7,15,16}, LDA={16,17,23}; active_qpus=%d block_x=%d\n",
+           (int)ACTIVE_QPUS, (int)LANES);
+    printk("Checks: CPU oracle, output sentinels, A/X padding sentinels, finite f32 tolerance=%f\n",
+           F32_TOLERANCE);
+    printk("\n");
+}
+
 static float a_value(uint32_t case_id, uint32_t row, uint32_t col) {
     int32_t whole = (int32_t)((case_id * 5u + row * 3u + col * 7u) % 17u) - 8;
     float value = (float)whole * 0.25f;
@@ -168,7 +184,35 @@ static uint32_t hash_case(const struct gemv_case *c) {
     return hash;
 }
 
+static void print_case_preview(uint32_t case_id, const struct gemv_case *c,
+                               int mismatches, int sentinels, uint32_t hash,
+                               float max_abs_diff) {
+    uint32_t sample_terms = min_u32(c->k, 4u);
+    float expected0 = c->rows == 0u ? 0.0f : expected_row(case_id, 0u, c->k);
+    float got0 = c->rows == 0u ? 0.0f : y_values[GUARD];
+    printk("GEMV demo case %d/%d: rows=%d K=%d LDA=%d grid.x=%d block.x=%d\n",
+           (int)(case_id + 1u), (int)(sizeof(cases) / sizeof(cases[0])),
+           (int)c->rows, (int)c->k, (int)c->lda,
+           (int)(c->rows == 0u ? 1u : c->rows), (int)LANES);
+    printk("  row 0 sample:");
+    if (sample_terms == 0u) {
+        printk(" empty K -> expected 0.000000");
+    } else {
+        for (uint32_t col = 0; col < sample_terms; col++)
+            printk(" A[%d]=%f*X[%d]=%f", (int)col, a_value(case_id, 0u, col),
+                   (int)col, x_value(case_id, col));
+        if (c->k > sample_terms)
+            printk(" ...");
+    }
+    printk("\n");
+    printk("  compare row0: device=%f oracle=%f diff=%f; case_mismatches=%d sentinels=%d hash=%x max_abs_diff=%f\n",
+           got0, expected0, absf_local(got0 - expected0), mismatches, sentinels,
+           hash, max_abs_diff);
+}
+
 void notmain(void) {
+    print_demo_banner();
+
     struct vc4_program *program = 0;
     if (vc4_program_create(&program, 0) < 0 || !program)
         panic("ttir_gemv_row_dot_f32_b16 program create failed");
@@ -216,6 +260,7 @@ void notmain(void) {
         sentinel_mismatches += sentinels;
         output_hash ^= hash + 0x9e3779b9u + (case_id << 6) + (case_id >> 2);
         output_hash = rotl32_local(output_hash, 7u);
+        print_case_preview(case_id, c, mismatches, sentinels, hash, max_abs_diff);
         printk("TTIR_GEMV_ROW_DOT_CASE case=%d rows=%d k=%d lda=%d block_x=%d mismatches=%d sentinel_mismatches=%d hash=%x max_abs_diff=%f\n",
                (int)case_id, (int)c->rows, (int)c->k, (int)c->lda, (int)LANES,
                mismatches, sentinels, hash, max_abs_diff);
@@ -224,6 +269,14 @@ void notmain(void) {
     int elapsed = timer_get_usec() - start;
     const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 &&
                           launch_failures == 0 && output_hash != 0u) ? "PASS" : "FAIL";
+    printk("\n");
+    printk("=== GEMV demo summary: %s ===\n", status);
+    printk("Ran %d hardware launches with active_qpus=%d, block.x=%d, rows up to %d, K up to %d, LDA up to %d\n",
+           (int)(sizeof(cases) / sizeof(cases[0])), (int)ACTIVE_QPUS, (int)LANES,
+           (int)MAX_ROWS, (int)MAX_K, (int)MAX_LDA);
+    printk("Comparison: total_mismatches=%d sentinel_mismatches=%d launch_failures=%d max_abs_diff=%f output_hash=%u\n",
+           total_mismatches, sentinel_mismatches, launch_failures, max_abs_diff,
+           output_hash);
     printk("VC4_TEST_RESULT name=ttir_gemv_row_dot_f32_b16_vc4triton status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d block_x=%d max_rows=%d max_k=%d max_lda=%d output_hash=%u output_hash_nonzero=%d max_abs_diff=%f saw_real_triton_source=1 saw_real_ttir_snapshot=1 saw_cpp_ttir_importer=%d saw_ttir_gemv_rowwise_dot=1 saw_ttir_product_reduction=1 saw_ttir_scalar_result_store=1 saw_ttir_row_strided_A=1 saw_ttir_contiguous_X=1 saw_phase12_reduction_path=1 saw_f32_finite_tree_policy=1 saw_no_tl_dot_tt_dot=1 saw_no_multiblock_k_accumulation=1 runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
            status, (int)(sizeof(cases) / sizeof(cases[0])), total_mismatches,
            sentinel_mismatches, launch_failures, ACTIVE_QPUS, LANES, LANES,
