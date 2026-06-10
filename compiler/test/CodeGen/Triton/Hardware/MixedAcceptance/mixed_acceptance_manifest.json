@@ -197,6 +197,92 @@
         "f32_cmp_select",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_multi_axis_cf_tail_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_multi_axis_cf_tail_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 9 TTIR mixed kernel combining f32 elementwise load/store, scalar coherent control flow, canonical tail masks, and 2D/3D multi-axis launch identity",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "ttir_elementwise",
+        "ttir_tail_mask",
+        "ttir_scf_if",
+        "ttir_scf_for_or_while",
+        "ttir_cf_control_flow",
+        "ttir_multi_axis_launch",
+        "ttir_program_id_axis1",
+        "ttir_program_id_axis2",
+        "ttir_num_programs_axis1",
+        "value_multi_axis_launch",
+        "f32_alu",
+        "f32_cmp_select",
+        "active_qpus_12",
+        "sentinel_preserve",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash",
+        "saw_real_ttir_input",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_program_id_axis0",
+        "saw_arange_make_range_16",
+        "saw_masked_load_other_zero",
+        "saw_masked_store_tail",
+        "saw_tmu_load",
+        "saw_vdw_preserve_store",
+        "saw_tail_mask_clamp_overlaunch",
+        "saw_ttir_elementwise",
+        "saw_ttir_tail_mask",
+        "saw_ttir_scf_if",
+        "saw_ttir_scf_for_or_while",
+        "saw_ttir_cf_control_flow",
+        "saw_ttir_multi_axis_launch",
+        "saw_ttir_program_id_axis1",
+        "saw_ttir_program_id_axis2",
+        "saw_ttir_num_programs_axis1",
+        "saw_value_multi_axis_launch",
+        "saw_f32_alu",
+        "saw_f32_cmp_select",
+        "saw_sentinel_preserve",
+        "saw_nonzero_output_hash"
+      ],
+      "expected_cases_summary": "14 mixed grid/n/trip/flag/threshold/scale cases over 2D and 3D grids; active_qpus=12; scalar if, while, multi-axis launch, tails, overlaunch, and sentinels checked",
+      "triage_feature_bands": [
+        "ttir_import",
+        "ttir_control_flow",
+        "ttir_multi_axis_launch",
+        "f32_tmu",
+        "f32_alu",
+        "f32_cmp_select",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -428,6 +514,46 @@
       "verification_kind": "ttir_audit_and_checked_output",
       "covered_by": [
         "mixed_ttir_cf_loop_if_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_multi_axis_launch",
+      "verification_kind": "ttir_audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_multi_axis_cf_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_program_id_axis1",
+      "verification_kind": "ttir_audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_multi_axis_cf_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_program_id_axis2",
+      "verification_kind": "ttir_audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_multi_axis_cf_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_num_programs_axis1",
+      "verification_kind": "ttir_audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_multi_axis_cf_tail_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_multi_axis_launch",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_multi_axis_cf_tail_vc4triton"
       ],
       "required": true
     }

@@ -73,11 +73,20 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             repo_root
             / "examples/triton/phase8_5_control_flow/generated/mixed_ttir_cf_loop_if_tail_b16.ttir.mlir"
         )
+        phase9_snapshot = (
+            repo_root
+            / "examples/triton/phase9_multi_axis_launch/generated/mixed_ttir_multi_axis_cf_tail_b16.ttir.mlir"
+        )
         if fixture_name == "mixed_ttir_cf_loop_if_tail_vc4triton":
             if not fixture_input.exists() or not phase85_snapshot.exists():
                 fail(f"{fixture_name} snapshot provenance paths are missing")
             if fixture_input.read_bytes() != phase85_snapshot.read_bytes():
                 fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 8.5 mixed snapshot")
+        if fixture_name == "mixed_ttir_multi_axis_cf_tail_vc4triton":
+            if not fixture_input.exists() or not phase9_snapshot.exists():
+                fail(f"{fixture_name} snapshot provenance paths are missing")
+            if fixture_input.read_bytes() != phase9_snapshot.read_bytes():
+                fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 9 mixed snapshot")
 
     if "saw_cpp_ttir_importer" in claim_names:
         require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
@@ -117,8 +126,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(harness, "verify_sentinels", "preserve harness")
 
     if "saw_tail_mask_clamp_overlaunch" in claim_names:
-        require_marker(harness, "rounded_waves", "saw_tail_mask_clamp_overlaunch harness")
-        require_marker(harness, "1000u", "saw_tail_mask_clamp_overlaunch harness")
+        if "rounded_waves" not in harness:
+            require_marker(harness, "active_elements", "saw_tail_mask_clamp_overlaunch harness")
+            require_marker(harness, "total_elements", "saw_tail_mask_clamp_overlaunch harness")
+        else:
+            require_marker(harness, "1000u", "saw_tail_mask_clamp_overlaunch harness")
 
     if "saw_ttir_elementwise" in claim_names:
         for marker in ("arith.addf", "arith.subf", "arith.mulf", "arith.cmpf", "arith.select"):
@@ -169,6 +181,23 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_nonzero_output_hash" in claim_names:
         require_marker(harness, "output_hash != 0u", "saw_nonzero_output_hash harness")
+
+    if "saw_ttir_multi_axis_launch" in claim_names:
+        for marker in ("tt.get_program_id y", "tt.get_program_id z", "tt.get_num_programs y"):
+            require_marker(ttir, marker, "saw_ttir_multi_axis_launch TTIR")
+        require_marker(harness, "grid_z", "saw_ttir_multi_axis_launch harness")
+
+    if "saw_ttir_program_id_axis1" in claim_names:
+        require_marker(ttir, "tt.get_program_id y", "saw_ttir_program_id_axis1 TTIR")
+
+    if "saw_ttir_program_id_axis2" in claim_names:
+        require_marker(ttir, "tt.get_program_id z", "saw_ttir_program_id_axis2 TTIR")
+
+    if "saw_ttir_num_programs_axis1" in claim_names:
+        require_marker(ttir, "tt.get_num_programs y", "saw_ttir_num_programs_axis1 TTIR")
+
+    if "saw_value_multi_axis_launch" in claim_names:
+        require_marker(harness, "saw_value_multi_axis_launch", "saw_value_multi_axis_launch harness")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

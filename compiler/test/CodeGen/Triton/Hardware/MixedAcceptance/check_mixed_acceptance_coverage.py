@@ -36,6 +36,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
     "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
     "mixed_ttir_cf_loop_if_tail_vc4triton",
+    "mixed_ttir_multi_axis_cf_tail_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -57,6 +58,11 @@ REQUIRED_FEATURES = {
     "ttir_scf_if",
     "ttir_scf_for_or_while",
     "ttir_cf_control_flow",
+    "ttir_multi_axis_launch",
+    "ttir_program_id_axis1",
+    "ttir_program_id_axis2",
+    "ttir_num_programs_axis1",
+    "value_multi_axis_launch",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -204,6 +210,16 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_scf_for_or_while but TTIR lacks scf.for/scf.while")
     if "ttir_cf_control_flow" in tags and ("scf.if" not in ttir_text or ("scf.for" not in ttir_text and "scf.while" not in ttir_text)):
         fail(f"{name} claims ttir_cf_control_flow but TTIR lacks mixed control-flow forms")
+    if "ttir_multi_axis_launch" in tags:
+        for marker in ("tt.get_program_id y", "tt.get_program_id z", "tt.get_num_programs y"):
+            if marker not in ttir_text:
+                fail(f"{name} claims ttir_multi_axis_launch but TTIR lacks {marker}")
+    if "ttir_program_id_axis1" in tags and "tt.get_program_id y" not in ttir_text:
+        fail(f"{name} claims ttir_program_id_axis1 but TTIR lacks tt.get_program_id y")
+    if "ttir_program_id_axis2" in tags and "tt.get_program_id z" not in ttir_text:
+        fail(f"{name} claims ttir_program_id_axis2 but TTIR lacks tt.get_program_id z")
+    if "ttir_num_programs_axis1" in tags and "tt.get_num_programs y" not in ttir_text:
+        fail(f"{name} claims ttir_num_programs_axis1 but TTIR lacks tt.get_num_programs y")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):
