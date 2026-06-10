@@ -725,3 +725,25 @@ NONZERO_LOAD_OTHER_REJECTS=PASS
 VALUE_MASK_MEMORY_STATIC=PASS
 READY_FOR_PHASE10_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
+
+## 25. Phase 10.5 value mask/memory hardware isolation
+
+Phase 10.5 proves the Phase 10.4 value mask classifier and memory legality
+subset on real VC4 hardware with targeted isolation fixtures. The fixtures run
+with `active_qpus=12`, strict CPU oracles, sentinel preservation checks,
+expected JSON result checking, and the existing VC4Value hardware runner.
+
+The hardware-proven subset covers full, empty, and clamped tail transfer masks,
+compute compare/select masks that do not feed memory predicates, zero-other
+masked loads with inactive-zero behavior, TMU safe-offset policy, and
+inactive-preserve stores. Sparse transfer masks remain static rejects.
+
+VALUE_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_MASK_FULL_HARDWARE=PASS
+VALUE_MASK_EMPTY_HARDWARE=PASS
+VALUE_MASK_TAIL_HARDWARE=PASS
+VALUE_COMPUTE_MASK_SELECT_HARDWARE=PASS
+VALUE_INACTIVE_ZERO_LOAD_HARDWARE=PASS
+VALUE_INACTIVE_PRESERVE_STORE_HARDWARE=PASS
+READY_FOR_PHASE10_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO

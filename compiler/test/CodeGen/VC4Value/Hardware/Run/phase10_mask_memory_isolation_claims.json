@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase10_mask_memory_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_mask_tail_full_empty_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_tail_full_empty_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_tail_full_empty_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_tail_full_empty_vc4value/candidate/value_mask_tail_full_empty_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_mask_empty", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_mask_empty", "input_marker": "vector.create_mask %c0", "oracle_marker": "verify_empty"},
+        {"claim": "saw_value_mask_full", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_mask_full", "input_marker": "vector.transfer_write %full_values", "oracle_marker": "verify_full"},
+        {"claim": "saw_value_mask_tail", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_mask_tail", "input_marker": "vector.create_mask %remaining", "oracle_marker": "verify_tail"},
+        {"claim": "saw_value_create_mask_clamp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_create_mask_clamp", "input_marker": "vector.create_mask %remaining", "oracle_marker": "n_cases"},
+        {"claim": "sparse_transfer_masks_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-mask-memory-sparse-transfer-read.mlir", "invalid-mask-memory-sparse-transfer-write.mlir"]}
+      ]
+    },
+    {
+      "name": "value_mask_compute_select_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_compute_select_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_compute_select_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_compute_select_tail_vc4value/candidate/value_mask_compute_select_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_compute_mask_select", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_compute_mask_select", "input_marker": "arith.select", "oracle_marker": "expected_i_values"},
+        {"claim": "saw_value_memory_tail_mask", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_memory_tail_mask", "input_marker": "vector.transfer_write %fsel, %out_f[%base], %mask", "oracle_marker": "verify_sentinels"},
+        {"claim": "saw_no_sparse_memory_mask", "kind": "PHASE_GUARD", "expected_field": "saw_no_sparse_memory_mask", "forbidden_input_markers": ["vector.transfer_write %fsel, %out_f[%base], %fm", "vector.transfer_write %isel, %out_i[%base], %im"]}
+      ]
+    },
+    {
+      "name": "value_mask_memory_policy_other_zero_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_memory_policy_other_zero_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_memory_policy_other_zero_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_memory_policy_other_zero_vc4value/candidate/value_mask_memory_policy_other_zero_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_load_inactive_zero", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_load_inactive_zero", "input_marker": "vector.transfer_read %x[%base], %zero, %mask", "oracle_marker": "verify_full_policy"},
+        {"claim": "saw_value_store_inactive_preserve", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_store_inactive_preserve", "input_marker": "vector.transfer_write %values, %tail_out[%base], %mask", "oracle_marker": "verify_tail_preserve"},
+        {"claim": "saw_value_tmu_safe_offset", "kind": "CHECKED_AUDIT", "expected_field": "saw_value_tmu_safe_offset", "lowered_marker": "inactive_load = #vc4kernel.inactive_load<zero>"}
+      ]
+    },
+    {
+      "name": "value_mask_empty_launch_repeat_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_empty_launch_repeat_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_empty_launch_repeat_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_mask_empty_launch_repeat_vc4value/candidate/value_mask_empty_launch_repeat_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "vector.create_mask %remaining", "oracle_marker": "n_cases"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    }
+  ]
+}
