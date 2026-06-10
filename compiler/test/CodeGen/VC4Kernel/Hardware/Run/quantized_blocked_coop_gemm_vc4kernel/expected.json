@@ -1,0 +1,25 @@
+{
+  "name": "quantized_blocked_coop_gemm_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "m": 12,
+    "n": 16,
+    "k": 24,
+    "k_tile": 12,
+    "saw_cooperative_block": 1,
+    "saw_vdr_a_b_tiles": 1,
+    "saw_vpm_shared_tiles": 1,
+    "saw_barrier": 1,
+    "saw_f16_unpack": 1,
+    "saw_f32_accumulate": 1,
+    "saw_f16_pack": 1,
+    "saw_tmu_bias": 1,
+    "saw_vdw_store": 1
+  }
+}

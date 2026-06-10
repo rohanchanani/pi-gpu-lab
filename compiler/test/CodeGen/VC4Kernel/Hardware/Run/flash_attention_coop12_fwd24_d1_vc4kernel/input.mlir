@@ -24,7 +24,6 @@ module {
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %zero = vc4kernel.fragment_const {value = dense<0.000000e+00> : vector<16xf32>} : vector<16xf32>
     %neg_inf = vc4kernel.fragment_const {value = dense<-3.4028234663852886E+38> : vector<16xf32>} : vector<16xf32>
-    %log2e = vc4kernel.fragment_const {value = dense<1.4426950408889634> : vector<16xf32>} : vector<16xf32>
     %scale_v = vc4kernel.splat %scale : f32 -> vector<16xf32>
     %tile = vc4kernel.vpm_alloc {rows = 24 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
 
@@ -51,11 +50,9 @@ module {
     %score0 = vc4kernel.fragment_alu.mul %qk0, %scale_v {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %m0_new = vc4kernel.fragment_alu.add %m0_step, %score0 {opcode = #vc4kernel.add_alu_opcode<fmax>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %old0_delta = vc4kernel.fragment_alu.add %m0_step, %m0_new {opcode = #vc4kernel.add_alu_opcode<fsub>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %old0_log2 = vc4kernel.fragment_alu.mul %old0_delta, %log2e {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %alpha0 = vc4kernel.fragment_sfu %old0_log2 {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
+    %alpha0 = vc4kernel.fragment_sfu %old0_delta {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
     %score0_delta = vc4kernel.fragment_alu.add %score0, %m0_new {opcode = #vc4kernel.add_alu_opcode<fsub>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %score0_log2 = vc4kernel.fragment_alu.mul %score0_delta, %log2e {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %p0 = vc4kernel.fragment_sfu %score0_log2 {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
+    %p0 = vc4kernel.fragment_sfu %score0_delta {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
     %l0_scaled = vc4kernel.fragment_alu.mul %l0_step, %alpha0 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %l0_new = vc4kernel.fragment_alu.add %l0_scaled, %p0 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc0_scaled = vc4kernel.fragment_alu.mul %acc0_step, %alpha0 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -86,11 +83,9 @@ module {
     %score1 = vc4kernel.fragment_alu.mul %qk1, %scale_v {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %m1_new = vc4kernel.fragment_alu.add %m1_step, %score1 {opcode = #vc4kernel.add_alu_opcode<fmax>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %old1_delta = vc4kernel.fragment_alu.add %m1_step, %m1_new {opcode = #vc4kernel.add_alu_opcode<fsub>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %old1_log2 = vc4kernel.fragment_alu.mul %old1_delta, %log2e {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %alpha1 = vc4kernel.fragment_sfu %old1_log2 {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
+    %alpha1 = vc4kernel.fragment_sfu %old1_delta {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
     %score1_delta = vc4kernel.fragment_alu.add %score1, %m1_new {opcode = #vc4kernel.add_alu_opcode<fsub>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %score1_log2 = vc4kernel.fragment_alu.mul %score1_delta, %log2e {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    %p1 = vc4kernel.fragment_sfu %score1_log2 {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
+    %p1 = vc4kernel.fragment_sfu %score1_delta {kind = #vc4kernel.sfu_kind<exp>, fp_policy = #vc4kernel.fp_math_policy<approx_sfu>, domain = #vc4kernel.fp_domain<finite>} : vector<16xf32> -> vector<16xf32>
     %l1_scaled = vc4kernel.fragment_alu.mul %l1_step, %alpha1 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %l1_new = vc4kernel.fragment_alu.add %l1_scaled, %p1 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc1_scaled = vc4kernel.fragment_alu.mul %acc1_step, %alpha1 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
