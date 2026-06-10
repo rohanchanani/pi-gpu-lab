@@ -206,12 +206,20 @@ READY_FOR_TRITON=NO
 ### Phase 8.5R3 controlled control-flow importer subset
 
 ```text
+PHASE85_STATIC_TTIR_CONTROL_FLOW_LOCK=YES
+TTIR_CONTROL_FLOW_FEATURE_DRIVEN_FIXTURES=YES
+REAL_TRITON_CF_SOURCES=YES
+REAL_TTIR_CF_SNAPSHOTS=YES
 PHASE85_TTIR_REGION_LOWERING_FRAMEWORK=YES
+TTIR_REGION_LOWERING_FRAMEWORK=YES
 PHASE85_CONTROLLED_TTIR_CF_STATIC_PIPELINE=PASS
+TTIR_CF_STATIC_PIPELINE=PASS
 VECTOR_INDEX_CAST_IMPORTER_BOILERPLATE_REMOVED=YES
 ARITH_SITOFP_STAGED_BY_BODY_FEATURE=YES
 FRONTEND_ROBUSTNESS_AUDIT=PASS
+NO_TTIR_TOOLCHAIN_REBUILD=YES
 READY_FOR_PHASE85R4_STATIC_AUDITS_CONTRACT_LOCK=YES
+READY_FOR_PHASE85R5_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 ```
 
@@ -241,6 +249,12 @@ is staged by body feature and is not accepted merely because it appears inside
 control flow. Dot, reduce, gather/scatter, block pointers, tensor descriptors,
 atomics, subword forms, SFU/math expansion, TTGIR, TritonGPU, NVGPU, NVVM, GPU,
 and lower-half dialects remain outside this control-flow feature band.
+
+Phase 8.5R4 locks the static contract before hardware. The controlled sources
+and generated TTIR snapshots are source-controlled provenance artifacts, later
+implementation and hardware phases consume those snapshots without TTIR
+regeneration, and the accepted control-flow snapshots statically reach scheduled
+VC4 through the normal value, VC4Kernel, SSAVC4, and scheduled VC4 path.
 
 ## 6. Launch and program IDs
 
