@@ -1,0 +1,7 @@
+# Optional real-Triton TTIR generator environment.
+# These are small Python runtime/tooling dependencies for the pinned local
+# Triton checkout lane. Triton itself is intentionally not listed here; use
+# tools/vc4_setup_ttir_generator.py with an explicit pinned local checkout.
+filelock==3.29.1
+numpy==2.4.6
+packaging==26.2

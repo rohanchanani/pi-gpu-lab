@@ -32,16 +32,17 @@ def load_triton(required_major_minor: str):
         from triton.backends.compiler import GPUTarget
     except Exception as exc:
         fail(
-            "Triton is required for this optional tool. Install pinned Phase 6 "
-            "Triton with `python -m pip install 'triton==3.7.0'` or the "
-            f"documented source fallback. Import failed: {exc}"
+            "Triton is required for this optional tool. Create the pinned "
+            "local generator environment with tools/vc4_setup_ttir_generator.py "
+            f"or use the documented source fallback. Import failed: {exc}"
         )
 
     version = getattr(triton, "__version__", "<missing>")
     if not str(version).startswith(required_major_minor + "."):
         fail(
             f"expected Triton {required_major_minor}.x, found {version}. "
-            "Use tools/requirements-triton-phase6.txt or the pinned v3.7.0 source fallback."
+            "Use tools/vc4_setup_ttir_generator.py with the pinned v3.7.0 "
+            "source fallback."
         )
     return triton, ir, GPUTarget, Path(inspect.getfile(triton)).resolve()
 
@@ -201,4 +202,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

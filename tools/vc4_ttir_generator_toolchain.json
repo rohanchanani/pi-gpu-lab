@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "triton": {
+    "tag": "v3.7.0",
+    "source_head": "5f3f125e8f63c24613f1f73b937442864f263f94",
+    "major_minor": "3.7"
+  },
+  "llvm": {
+    "hash": "ac5dc54d509169d387fcfd495d71853d81c46484"
+  },
+  "requirements": "tools/requirements-triton-generator.txt",
+  "default_output": ".vc4_auto/ttir_generator",
+  "smoke": {
+    "source": "compiler/test/CodeGen/Triton/Snapshots/ControlFlow/sources/scalar_if_probe.py",
+    "kernel_name": "scalar_if_probe_kernel",
+    "signature": "*fp32,*fp32,i32,i32,16",
+    "required_ttir": ["tt.func", "scf.if", "scf.yield", "tt.load", "tt.store"],
+    "forbidden_ttir": ["ttg.", "triton_gpu.", "nvgpu.", "nvvm.", "arith.sitofp"]
+  },
+  "ready_for_triton": "NO"
+}
