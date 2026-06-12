@@ -4,6 +4,10 @@ PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
+VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
 VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
@@ -25,6 +29,7 @@ RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -505,6 +510,10 @@ isolation phase.
 ## 14.1 Phase 13 GEMV / row-wise dot planning
 
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
+VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 VALUE_TO_VC4KERNEL_PLANNED_COVERAGE=YES
@@ -513,6 +522,7 @@ TL_DOT_TT_DOT_STAGED=YES
 VECTOR_CONTRACT_STAGED=YES
 MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 Phase 13 GEMV-v0 lowers only the explicit value composite:
@@ -569,6 +579,27 @@ and must cover:
 `tl.dot`, `tt.dot`, `vector.contract`, rank-2 tile values, fma policy,
 multi-block K accumulation, atomics, f16/subword dot inputs, and exact/default
 f32 dot remain staged.
+
+Phase 13.4 statically proves this composite path through existing lowerers:
+`arith.mulf` / `arith.muli` lowers through `vc4kernel.fragment_alu.mul`,
+`vector.reduction <add>` lowers through `vc4kernel.fragment_reduce`, and the
+scalar result store lowers through the Phase 12 one-lane VDW
+inactive-preserve scalar-store path. No `vc4kernel.dot` or GEMV-specific target
+operation is introduced.
+
+The i32 row-dot status is `PASS` when the existing
+`vc4value.i32_mul_policy = "mul24_safe"` policy is present. Missing i32
+multiply policy remains a deterministic reject.
+
+The Phase 13.4 static reject coverage preserves:
+
+- `vector.contract is staged for Phase 15/contract`;
+- `tt.dot is staged`;
+- `multi-block K accumulation is staged`;
+- `exact f32 dot requires unsupported exact reduction policy`;
+- `unsupported GEMV element type`.
+
+Hardware isolation remains Phase 13.5 work.
 
 ## 15. Math and SFU planning
 

@@ -173,6 +173,12 @@ static bool isI32OrF32(Type type) {
   return type.isSignlessInteger(32) || type.isF32();
 }
 
+static bool isVector16Rank1(Type type) {
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  return vectorType && !vectorType.isScalable() && vectorType.getRank() == 1 &&
+         vectorType.getDimSize(0) == 16;
+}
+
 static bool getStridesAndOffset(MemRefType type,
                                 SmallVectorImpl<int64_t> &strides,
                                 int64_t &offset) {
@@ -479,6 +485,32 @@ static LogicalResult emitRawSCFDiagnostic(Operation *op) {
          << "raw scf operation cannot lower directly to VC4Kernel; run "
          << "explicit upstream --convert-scf-to-cf before "
          << "--convert-vc4-value-to-vc4kernel. READY_FOR_TRITON remains NO";
+}
+
+static bool isVectorMulOp(Operation *op) {
+  if (!op || op->getNumResults() != 1)
+    return false;
+  StringRef name = op->getName().getStringRef();
+  return name == "arith.mulf" || name == "arith.muli";
+}
+
+static bool isDotCompositeProduct(Operation *op) {
+  if (!isVectorMulOp(op) || !isVector16Rank1(op->getResult(0).getType()))
+    return false;
+  for (Operation *user : op->getResult(0).getUsers()) {
+    auto reduction = llvm::dyn_cast<vector::ReductionOp>(user);
+    if (reduction && reduction.getKind() == vector::CombiningKind::ADD &&
+        reduction.getVector() == op->getResult(0))
+      return true;
+  }
+  return false;
+}
+
+static bool isDotCompositeReductionValue(Value value) {
+  auto reduction = value.getDefiningOp<vector::ReductionOp>();
+  if (!reduction || reduction.getKind() != vector::CombiningKind::ADD)
+    return false;
+  return isDotCompositeProduct(reduction.getVector().getDefiningOp());
 }
 
 enum class MemoryMaskKind {
@@ -1011,6 +1043,9 @@ private:
 
   LogicalResult lowerOperation(Operation *op) {
     StringRef name = op->getName().getStringRef();
+    if (name == "tt.dot")
+      return op->emitOpError()
+             << "tt.dot is staged. READY_FOR_TRITON remains NO";
     if (name == "vc4value.program_id")
       return lowerProgramId(op);
     if (name == "vc4value.num_programs")
@@ -1027,6 +1062,10 @@ private:
       return lowerTransferWrite(op);
     if (auto reduction = llvm::dyn_cast<vector::ReductionOp>(op))
       return lowerVectorReduction(reduction);
+    if (llvm::isa<vector::ContractionOp>(op))
+      return op->emitOpError()
+             << "vector.contract is staged for Phase 15/contract. "
+             << "READY_FOR_TRITON remains NO";
     if (name == "vector.multi_reduction")
       return emitStagedDiagnostic(op, "vector.multi_reduction is staged");
     if (auto constant = llvm::dyn_cast<arith::ConstantOp>(op))
@@ -1221,6 +1260,14 @@ private:
     Type resultType = op.getType();
     Location loc = op.getLoc();
 
+    if (isVector16Rank1(resultType) && !isVector16I32(resultType) &&
+        !isVector16F32(resultType)) {
+      for (Operation *user : op.getResult().getUsers()) {
+        if (isDotCompositeProduct(user))
+          return op.emitOpError("unsupported GEMV element type");
+      }
+    }
+
     if (resultType.isIndex()) {
       auto integer = llvm::dyn_cast<IntegerAttr>(value);
       if (!integer)
@@ -1285,14 +1332,26 @@ private:
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return emitPhase5Diagnostic(op, "binary arith shape");
 
+    Type sourceType = op->getResult(0).getType();
+    Type resultType = lowerValueType(sourceType, ctx);
+    StringRef name = op->getName().getStringRef();
+
+    if ((name == "arith.mulf" || name == "arith.muli") &&
+        isDotCompositeProduct(op) && !isVector16I32(sourceType) &&
+        !isVector16F32(sourceType))
+      return op->emitOpError("unsupported GEMV element type");
+
+    if (name == "arith.addf" && resultType.isF32() &&
+        ((isDotCompositeReductionValue(op->getOperand(0)) &&
+          !isZeroConstant(op->getOperand(1))) ||
+         (isDotCompositeReductionValue(op->getOperand(1)) &&
+          !isZeroConstant(op->getOperand(0)))))
+      return op->emitOpError("multi-block K accumulation is staged");
+
     Value lhs = lookupValue(op, op->getOperand(0));
     Value rhs = lookupValue(op, op->getOperand(1));
     if (!lhs || !rhs)
       return failure();
-
-    Type sourceType = op->getResult(0).getType();
-    Type resultType = lowerValueType(sourceType, ctx);
-    StringRef name = op->getName().getStringRef();
 
     if (resultType.isSignlessInteger(32) || resultType.isF32()) {
       if (name == "arith.addi")
@@ -1515,12 +1574,19 @@ private:
       return reduction.emitOpError("accumulator vector.reduction is staged");
 
     if (!elementType.isSignlessInteger(32) && !elementType.isF32())
-      return reduction.emitOpError("unsupported reduction element type");
+      return isDotCompositeProduct(reduction.getVector().getDefiningOp())
+                 ? reduction.emitOpError("unsupported GEMV element type")
+                 : reduction.emitOpError("unsupported reduction element type");
     if (resultType != elementType)
-      return reduction.emitOpError("unsupported reduction element type");
+      return isDotCompositeProduct(reduction.getVector().getDefiningOp())
+                 ? reduction.emitOpError("unsupported GEMV element type")
+                 : reduction.emitOpError("unsupported reduction element type");
     if (elementType.isF32() && !hasFiniteReductionPolicy(reduction))
-      return reduction.emitOpError(
-          "f32 vector.reduction requires explicit finite-tree policy");
+      return isDotCompositeProduct(reduction.getVector().getDefiningOp())
+                 ? reduction.emitOpError(
+                       "exact f32 dot requires unsupported exact reduction policy")
+                 : reduction.emitOpError(
+                       "f32 vector.reduction requires explicit finite-tree policy");
 
     Value input = lookupValue(reduction, reduction.getVector());
     if (!input)
