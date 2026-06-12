@@ -3,21 +3,28 @@
 PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
 VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
 F32_REDUCTION_FINITE_TREE_POLICY=YES
+F32_DOT_FINITE_TREE_POLICY=YES
 NON_ADD_REDUCTIONS_STAGED=YES
-DOT_GEMV_STAGED_FOR_PHASE13=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 SPARSE_MEMORY_MASKS_STAGED=YES
 NONZERO_LOAD_OTHER_STAGED=YES
 RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -494,6 +501,74 @@ subset:
 
 No hardware proof is claimed by Phase 12.4; Phase 12.5 is the hardware
 isolation phase.
+
+## 14.1 Phase 13 GEMV / row-wise dot planning
+
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
+VALUE_TO_VC4KERNEL_PLANNED_COVERAGE=YES
+F32_DOT_FINITE_TREE_POLICY=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 13 GEMV-v0 lowers only the explicit value composite:
+
+```text
+vector<16xT> load A row slice
+vector<16xT> load X vector slice
+arith.mul{f,i}
+vector.reduction <add>
+scalar memref.store
+```
+
+There is no first-class value dot op. The planner must recognize the standard
+SSA composition structurally and lower through the existing elementwise,
+memory, reduction, and scalar-store planning layers. It must not special-case
+fixture names, source variable names, TTIR snapshot paths, or printed IR.
+
+The accepted f32 form is finite-input finite-tree only. `arith.mulf` feeds
+`vector.reduction <add>` over `vector<16xf32>` to a scalar `f32`, with
+`vc4value.fp_domain = "finite"` and
+`vc4value.reduction_policy = "finite_tree"` present on the reduction or
+containing kernel. The target result is not exact IEEE left-to-right summation
+and not an FMA contraction.
+
+The accepted i32 form uses `arith.muli` over `vector<16xi32>` feeding
+`vector.reduction <add>` to scalar `i32`. The existing integer multiply policy
+continues to apply: executable lowering requires
+`vc4value.i32_mul_policy = "mul24_safe"` before selecting the VC4 mul24 path.
+
+Tail dots reuse Phase 10 inactive-zero loads. The reduction itself is
+unmasked; inactive lanes must already contain the add identity. Row-wise GEMV-v0
+uses Phase 11 row-strided memory for A, rank-1 contiguous or scalar-strided
+memory for X, K at most one `vector<16>` block for full row-dot output, and the
+Phase 12 scalar reduction-output store for Y.
+
+Partial K-block dots are accepted only as independent partial outputs: one
+program computes one `(row, kblock)` product/reduction and stores one scalar
+partial. Cross-block accumulation into final `y[row]`, atomics, and
+cross-program accumulation remain staged.
+
+Planned Phase 13.4 static coverage is recorded in
+`compiler/docs/vc4_vector_triton_phase13_value_to_vc4kernel_planned_coverage.md`
+and must cover:
+
+- f32 vector multiply -> finite-tree f32 add reduction -> scalar store;
+- i32 vector multiply -> i32 add reduction -> scalar store with i32 mul policy;
+- tail inactive-zero dot;
+- row-strided dot value pattern;
+- partial K-block dot value pattern;
+- vector.contract staged/reject;
+- exact/default f32 dot without finite-tree policy reject;
+- multi-block K accumulation staged/reject when outside Phase 13 scope.
+
+`tl.dot`, `tt.dot`, `vector.contract`, rank-2 tile values, fma policy,
+multi-block K accumulation, atomics, f16/subword dot inputs, and exact/default
+f32 dot remain staged.
 
 ## 15. Math and SFU planning
 

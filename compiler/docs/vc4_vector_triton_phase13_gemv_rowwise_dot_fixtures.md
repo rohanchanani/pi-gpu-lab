@@ -1,12 +1,18 @@
 PHASE13_CONTROLLED_TRITON_GEMV_ROWWISE_DOT_FIXTURES=YES
 REAL_TRITON_GEMV_ROWWISE_DOT_SOURCES=YES
 REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
 F32_DOT_FINITE_TREE_POLICY=YES
+TL_DOT_TT_DOT_STAGED=YES
 TL_DOT_TT_DOT_FIXTURE_STAGED=YES
 MULTIBLOCK_K_ACCUMULATION_FIXTURE_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 VECTOR_CONTRACT_STAGED=YES
 READY_FOR_PHASE13_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 13 GEMV Row-Wise Dot Fixtures
@@ -40,6 +46,25 @@ Accepted snapshots are:
 The mixed fixture combines Phase 8.5 scalar control flow, Phase 9 axes, Phase
 10 masks, Phase 11 row-strided memory, Phase 12 reductions, and the Phase 13
 row-dot composite.
+
+## Value Contract Handoff
+
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
+F32_DOT_FINITE_TREE_POLICY=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 13.3 locks the value form that corresponds to these controlled TTIR
+fixtures: elementwise multiply over `vector<16>` followed by add reduction and
+scalar store. F32 dots use finite-input finite-tree policy. I32 dots are
+surface-accepted under the existing integer multiply policy. K is limited to one
+`vector<16>` block for full row-dot outputs; partial K-block dots store one
+independent scalar partial and do not accumulate across K blocks.
 
 ## Staged Scope
 

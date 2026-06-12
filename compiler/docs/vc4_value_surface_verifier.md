@@ -3,17 +3,24 @@
 PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 F32_REDUCTION_FINITE_TREE_POLICY=YES
+F32_DOT_FINITE_TREE_POLICY=YES
 NON_ADD_REDUCTIONS_STAGED=YES
-DOT_GEMV_STAGED_FOR_PHASE13=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 SPARSE_MEMORY_MASKS_STAGED=YES
 NONZERO_LOAD_OTHER_STAGED=YES
 RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -264,6 +271,57 @@ The Phase 12 verifier contract stages or rejects:
 
 The f32 policy is finite-tree target semantics only. Phase 12 makes no exact
 IEEE left-to-right sum claim, and NaN/Inf behavior is not accepted.
+
+## 10.2 Phase 13 GEMV / row-wise dot contract
+
+PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
+VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
+F32_DOT_FINITE_TREE_POLICY=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 13 admits GEMV-v0 / row-wise dot as a composition of already locked value
+forms. It does not add a first-class value dot operation.
+
+The accepted Phase 13 value forms are:
+
+- `F32_VECTOR16_DOT_COMPOSITE`: elementwise `arith.mulf` over
+  `vector<16xf32>`, with the product feeding `vector.reduction <add>` to an
+  `f32` scalar. Inputs must be finite and the reduction policy must be
+  explicit finite-tree. The result is a scalar f32 value; no exact IEEE sum or
+  fused multiply-add claim is made.
+- `I32_VECTOR16_DOT_COMPOSITE`: elementwise `arith.muli` over
+  `vector<16xi32>`, with the product feeding `vector.reduction <add>` to an
+  `i32` scalar. The existing integer multiply policy applies; executable
+  lowering requires the current `vc4value.i32_mul_policy = "mul24_safe"`
+  contract.
+- `TAIL_DOT_BY_INACTIVE_ZERO`: tail dots do not require a masked reduction op.
+  Inactive lanes are zero through Phase 10 transfer-read `other=0` /
+  inactive-zero semantics, and the dot reduction remains unmasked.
+- `ROW_STRIDED_GEMV_V0`: the A row is represented with Phase 11 row-strided
+  memory, X is rank-1 contiguous or scalar-strided accepted memory, K is at
+  most one `vector<16>` block for a full row-dot output, and the output is a
+  scalar `memref.store` accepted by Phase 12.
+- `PARTIAL_KBLOCK_DOT`: a program computes one partial dot for a `(row,
+  kblock)` pair and stores that scalar partial result. There is no cross-kblock
+  accumulation in Phase 13.
+
+The staged Phase 13 forms are:
+
+- `tl.dot` / `tt.dot`;
+- `vector.contract`;
+- a dot-shaped custom value op;
+- multi-block K accumulation into final `y[row]`;
+- atomics or cross-program accumulation;
+- rank-2 tile values;
+- fma policy, f16/subword inputs, and exact/default f32 dot.
+
+This verifier contract proves only value-surface admission and staged
+classification. Executable GEMV lowering and static proof are Phase 13.4 work.
 
 ## 11. Sparse store policy
 
