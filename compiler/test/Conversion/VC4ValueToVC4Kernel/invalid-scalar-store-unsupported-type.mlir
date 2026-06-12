@@ -9,4 +9,5 @@ func.func @invalid_scalar_store_unsupported_type(
   return
 }
 
-// CHECK: unsupported transfer element type
+// CHECK: public kernel argument type 'f16' is not Phase 5 lowerable
+// CHECK: READY_FOR_TRITON remains NO

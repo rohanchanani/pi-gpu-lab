@@ -14,6 +14,6 @@ func.func @write_nonidentity_layout(
   return
 }
 
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
+// CHECK: expected rank-1 contiguous i32/f32/f16 #vc4value.global memref
 // CHECK: not Phase 5 lowerable
 // CHECK: staged value-surface feature

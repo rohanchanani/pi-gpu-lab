@@ -8,6 +8,6 @@ func.func @write_rank2(%out: memref<4x16xf32, #vc4value.global> {vc4value.arg_na
   return
 }
 
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
+// CHECK: expected rank-1 contiguous i32/f32/f16 #vc4value.global memref
 // CHECK: not Phase 5 lowerable
 // CHECK: staged value-surface feature

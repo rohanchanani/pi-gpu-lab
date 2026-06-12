@@ -8,7 +8,7 @@ func.func @read_rank2(%in: memref<4x16xf32, #vc4value.global> {vc4value.arg_name
   return
 }
 
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
+// CHECK: expected rank-1 contiguous i32/f32/f16 #vc4value.global memref
 // CHECK: not Phase 5 lowerable
 // CHECK: staged value-surface feature
 // CHECK: READY_FOR_TRITON remains NO

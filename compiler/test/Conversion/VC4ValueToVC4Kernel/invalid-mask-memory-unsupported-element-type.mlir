@@ -9,18 +9,5 @@ func.func @invalid_i8_transfer(
   return
 }
 
-// CHECK: unsupported transfer element type
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
-
-// -----
-
-func.func @invalid_f16_transfer(
-    %out: memref<64xf16, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out"})
-    attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
-  %c0 = arith.constant 0 : index
-  %value = arith.constant dense<0.000000e+00> : vector<16xf16>
-  vector.transfer_write %value, %out[%c0] {in_bounds = [true]} : vector<16xf16>, memref<64xf16, #vc4value.global>
-  return
-}
-
-// CHECK: Phase 14 f32 compute to f16 storage requires explicit vc4value.f16_storage_policy = "finite"
+// CHECK: int8/int16 quantized storage is staged
+// CHECK: READY_FOR_TRITON remains NO

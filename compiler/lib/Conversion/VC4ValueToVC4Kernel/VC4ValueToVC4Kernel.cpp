@@ -80,6 +80,7 @@ constexpr llvm::StringLiteral kScalarRoleAttr("vc4value.scalar_role");
 constexpr llvm::StringLiteral kFPDomainAttr("vc4value.fp_domain");
 constexpr llvm::StringLiteral kReductionPolicyAttr("vc4value.reduction_policy");
 constexpr llvm::StringLiteral kI32MulPolicyAttr("vc4value.i32_mul_policy");
+constexpr llvm::StringLiteral kF16StoragePolicyAttr("vc4value.f16_storage_policy");
 constexpr llvm::StringLiteral kShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kStrideArgsAttr("vc4value.stride_args");
 
@@ -98,8 +99,15 @@ constexpr llvm::StringLiteral kFragmentALUMulOpName("vc4kernel.fragment_alu.mul"
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentSelectOpName("vc4kernel.fragment_select");
 constexpr llvm::StringLiteral kFragmentReduceOpName("vc4kernel.fragment_reduce");
+constexpr llvm::StringLiteral kFragmentUnpackOpName("vc4kernel.fragment_unpack");
+constexpr llvm::StringLiteral kFragmentPackOpName("vc4kernel.fragment_pack");
 constexpr llvm::StringLiteral kTMULoadFragmentOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreFragmentOpName("vc4kernel.vdw_store_fragment");
+constexpr llvm::StringLiteral kVPMAllocOpName("vc4kernel.vpm_alloc");
+constexpr llvm::StringLiteral kVPMReadFragmentOpName("vc4kernel.vpm_read_fragment");
+constexpr llvm::StringLiteral kVPMWriteFragmentOpName("vc4kernel.vpm_write_fragment");
+constexpr llvm::StringLiteral kVDRLoadRectToVPMOpName("vc4kernel.vdr_load_rect_to_vpm");
+constexpr llvm::StringLiteral kVDWStoreRectFromVPMOpName("vc4kernel.vdw_store_rect_from_vpm");
 
 static bool hasStringAttr(Operation *op, StringRef name, StringRef expected) {
   auto attr = llvm::dyn_cast_or_null<StringAttr>(op->getAttr(name));
@@ -138,12 +146,24 @@ static bool isVector16F32(Type type) {
   return isVectorOf(type, 16, [](Type elem) { return elem.isF32(); });
 }
 
+static bool isVector16F16(Type type) {
+  return isVectorOf(type, 16, [](Type elem) { return elem.isF16(); });
+}
+
 static bool isVector16I32OrIndex(Type type) {
   return isVector16I32(type) || isVector16Index(type);
 }
 
 static bool isVector16Data(Type type) {
   return isVector16I32(type) || isVector16F32(type);
+}
+
+static bool hasF16Type(Type type) {
+  if (type.isF16())
+    return true;
+  if (auto vectorType = llvm::dyn_cast<VectorType>(type))
+    return hasF16Type(vectorType.getElementType());
+  return false;
 }
 
 static bool isScalarI32OrIndex(Type type) {
@@ -172,6 +192,22 @@ static bool hasGlobalMemorySpace(MemRefType type) {
 
 static bool isI32OrF32(Type type) {
   return type.isSignlessInteger(32) || type.isF32();
+}
+
+static bool isI32F32OrF16(Type type) {
+  return isI32OrF32(type) || type.isF16();
+}
+
+static bool isBF16OrFP8StorageElement(Type type) {
+  if (type.isBF16())
+    return true;
+  if (auto floatType = llvm::dyn_cast<FloatType>(type))
+    return floatType.getWidth() == 8;
+  return false;
+}
+
+static bool isQuantizedSubwordStorageElement(Type type) {
+  return type.isSignlessInteger(8) || type.isSignlessInteger(16);
 }
 
 static bool isVector16Rank1(Type type) {
@@ -223,6 +259,31 @@ static bool isRank2StridedOuterDynamicGlobalMemref(Type type) {
 static bool isPhase11LowerableGlobalMemref(Type type) {
   return isRank1IdentityGlobalMemref(type) || isRank2IdentityGlobalMemref(type) ||
          isRank2StridedOuterDynamicGlobalMemref(type);
+}
+
+static bool isPhase14StorageNumericGlobalMemref(Type type) {
+  auto memrefType = llvm::dyn_cast<MemRefType>(type);
+  if (!memrefType || !hasGlobalMemorySpace(memrefType) ||
+      !isI32F32OrF16(memrefType.getElementType()))
+    return false;
+
+  if (memrefType.getRank() == 1)
+    return memrefType.getLayout().isIdentity();
+
+  if (memrefType.getRank() != 2 ||
+      !ShapedType::isDynamic(memrefType.getDimSize(0)) ||
+      !ShapedType::isDynamic(memrefType.getDimSize(1)))
+    return false;
+
+  if (memrefType.getLayout().isIdentity())
+    return true;
+
+  SmallVector<int64_t, 2> strides;
+  int64_t offset = 0;
+  if (!getStridesAndOffset(memrefType, strides, offset))
+    return false;
+  return strides.size() == 2 && ShapedType::isDynamic(strides[0]) &&
+         !ShapedType::isDynamic(strides[1]) && strides[1] == 1 && offset == 0;
 }
 
 static bool isRank1IdentityTransferMap(Operation *op) {
@@ -312,6 +373,12 @@ static StringRef getElementTypeName(Type type) {
   return "unknown";
 }
 
+static StringRef getStorageElementTypeName(Type type) {
+  if (type.isF16())
+    return "u16";
+  return getElementTypeName(type);
+}
+
 static Type lowerValueType(Type type, MLIRContext *ctx) {
   Builder builder(ctx);
   if (type.isIndex())
@@ -327,6 +394,10 @@ static Type lowerValueType(Type type, MLIRContext *ctx) {
 
 static Type getVector16I32(MLIRContext *ctx) {
   return VectorType::get({16}, IntegerType::get(ctx, 32));
+}
+
+static Type getVector16F32(MLIRContext *ctx) {
+  return VectorType::get({16}, Float32Type::get(ctx));
 }
 
 static Type getPred16(MLIRContext *ctx) {
@@ -416,6 +487,80 @@ static Value createFragmentSelect(OpBuilder &builder, Location loc, Value pred,
                                   Type resultType) {
   return createOpWithResult(builder, loc, kFragmentSelectOpName,
                             {pred, trueValue, falseValue}, {}, resultType);
+}
+
+static Value createF16StorageUnpack(OpBuilder &builder, Location loc,
+                                    Value carrier) {
+  MLIRContext *ctx = builder.getContext();
+  return createOpWithResult(
+      builder, loc, kFragmentUnpackOpName, carrier,
+      {builder.getNamedAttr(
+           "source", mlir::vc4kernel::SubwordTypeAttr::get(
+                         ctx, mlir::vc4kernel::SubwordType::f16)),
+       builder.getNamedAttr(
+           "layout", mlir::vc4kernel::SubwordLayoutAttr::get(
+                         ctx, mlir::vc4kernel::SubwordLayout::packed)),
+       builder.getNamedAttr(
+           "policy", mlir::vc4kernel::UnpackPolicyAttr::get(
+                         ctx, mlir::vc4kernel::UnpackPolicy::to_f32))},
+      getVector16F32(ctx));
+}
+
+static Value createF16StoragePack(OpBuilder &builder, Location loc,
+                                  Value f32Fragment) {
+  MLIRContext *ctx = builder.getContext();
+  return createOpWithResult(
+      builder, loc, kFragmentPackOpName, f32Fragment,
+      {builder.getNamedAttr(
+           "dest", mlir::vc4kernel::SubwordTypeAttr::get(
+                       ctx, mlir::vc4kernel::SubwordType::f16)),
+       builder.getNamedAttr(
+           "layout", mlir::vc4kernel::SubwordLayoutAttr::get(
+                         ctx, mlir::vc4kernel::SubwordLayout::packed)),
+       builder.getNamedAttr(
+           "policy", mlir::vc4kernel::PackPolicyAttr::get(
+                         ctx, mlir::vc4kernel::PackPolicy::from_f32))},
+      getVector16I32(ctx));
+}
+
+static SmallVector<NamedAttribute, 8>
+getPackedW16VPMAttrs(OpBuilder &builder, StringRef memoryPath,
+                     StringRef coherency, bool dmaAccess) {
+  MLIRContext *ctx = builder.getContext();
+  mlir::vc4kernel::MemoryPath path =
+      memoryPath == "vdr"
+          ? mlir::vc4kernel::MemoryPath::vdr_global_to_vpm
+          : memoryPath == "vdw" ? mlir::vc4kernel::MemoryPath::vdw_global_store
+                                 : mlir::vc4kernel::MemoryPath::vpm_qpu;
+  mlir::vc4kernel::Coherency coherencyValue =
+      coherency == "vpm" ? mlir::vc4kernel::Coherency::vpm_local
+                          : mlir::vc4kernel::Coherency::dma_ordered;
+  SmallVector<NamedAttribute, 8> attrs = {
+      builder.getNamedAttr(
+          "orientation", mlir::vc4kernel::VPMOrientationAttr::get(
+                             ctx, mlir::vc4kernel::VPMOrientation::horizontal)),
+      builder.getNamedAttr(
+          "width", mlir::vc4kernel::VPMWidthAttr::get(
+                       ctx, mlir::vc4kernel::VPMWidth::w16)),
+      builder.getNamedAttr(
+          "subword", mlir::vc4kernel::VPMSubwordAttr::get(
+                         ctx, mlir::vc4kernel::VPMSubword::packed)),
+      builder.getNamedAttr(
+          "subword_selector", builder.getI32IntegerAttr(0)),
+      builder.getNamedAttr(
+          "memory_path", mlir::vc4kernel::MemoryPathAttr::get(ctx, path)),
+      builder.getNamedAttr(
+          "coherency", mlir::vc4kernel::CoherencyAttr::get(ctx, coherencyValue))};
+  attrs.push_back(builder.getNamedAttr(
+      dmaAccess ? "vpm_pitch" : "stride", builder.getI32IntegerAttr(1)));
+  return attrs;
+}
+
+static NamedAttribute getOperandSegmentSizesAttr(OpBuilder &builder,
+                                                 ArrayRef<int32_t> sizes) {
+  return builder.getNamedAttr(
+      "operandSegmentSizes",
+      builder.getDenseI32ArrayAttr(sizes));
 }
 
 static DenseElementsAttr getI32VectorDenseAttr(OpBuilder &builder,
@@ -549,6 +694,7 @@ struct MemoryAddressPlan {
   Value basePointer;
   Value elementBaseIndex;
   int64_t elementBytes = 4;
+  bool f16Storage = false;
   ClassifiedMemoryMask mask;
   Operation *source = nullptr;
   StringRef reason;
@@ -562,6 +708,7 @@ struct ClassifiedMemoryTransfer {
   Value vectorValue;
   Value padding;
   Type vectorType;
+  Type storageCarrierType;
   MemoryAddressPlan addressPlan;
   std::string acceptedPath;
   std::string stagedReason;
@@ -700,22 +847,32 @@ private:
   FailureOr<Type> lowerPublicArgType(BlockArgument arg) {
     Type type = arg.getType();
     if (auto memrefType = llvm::dyn_cast<MemRefType>(type)) {
-      if (!isPhase11LowerableGlobalMemref(type)) {
+      if (!isPhase14StorageNumericGlobalMemref(type)) {
         InFlightDiagnostic diag =
             arg.getOwner()->getParentOp()->emitOpError();
+        Type elementType = memrefType.getElementType();
+        if (isBF16OrFP8StorageElement(elementType)) {
+          diag << "bf16/fp8 storage is staged. READY_FOR_TRITON remains NO";
+          return failure();
+        }
+        if (isQuantizedSubwordStorageElement(elementType)) {
+          diag << "int8/int16 quantized storage is staged. "
+               << "READY_FOR_TRITON remains NO";
+          return failure();
+        }
         bool supportedGlobalElement =
             hasGlobalMemorySpace(memrefType) &&
-            isI32OrF32(memrefType.getElementType());
+            isI32F32OrF16(elementType);
         if (!supportedGlobalElement)
           diag << "unsupported transfer element type; ";
         else
           diag << "ranked or strided memory beyond Phase 10 unless covered by "
                << "Phase 11 row-slice skeletons; ";
-        diag << "expected rank-1 contiguous i32/f32 #vc4value.global memref "
-             << "or rank-2 row-slice i32/f32 #vc4value.global memref "
+        diag << "expected rank-1 contiguous i32/f32/f16 #vc4value.global memref "
+             << "or rank-2 row-slice i32/f32/f16 #vc4value.global memref "
              << "for Phase 11 argument " << arg.getArgNumber()
              << "; not Phase 5 lowerable unless accepted by the Phase 11 "
-             << "row-slice contract; staged value-surface feature. "
+             << "row-slice and Phase 14 f16 storage contracts; staged value-surface feature. "
              << "READY_FOR_TRITON remains NO";
         return failure();
       }
@@ -778,7 +935,8 @@ private:
       attrs.push_back(builder.getNamedAttr("kind", builder.getStringAttr("buffer")));
       attrs.push_back(builder.getNamedAttr("direction", direction));
       attrs.push_back(builder.getNamedAttr(
-          "elem_type", builder.getStringAttr(getElementTypeName(memrefType.getElementType()))));
+          "elem_type", builder.getStringAttr(
+                           getStorageElementTypeName(memrefType.getElementType()))));
       return builder.getDictionaryAttr(attrs);
     }
 
@@ -1158,6 +1316,17 @@ private:
       return emitStagedDiagnostic(op, "vector.multi_reduction is staged");
     if (auto constant = llvm::dyn_cast<arith::ConstantOp>(op))
       return lowerConstant(constant);
+    if (name == "arith.extf")
+      return lowerExtF(op);
+    if (name == "arith.truncf")
+      return lowerTruncF(op);
+    if (name == "arith.sitofp" || name == "arith.uitofp")
+      return op->emitOpError()
+             << "i32 to f32 numeric cast staged by lower-half gap. "
+             << "READY_FOR_TRITON remains NO";
+    if (name == "arith.fptosi" || name == "arith.fptoui")
+      return op->emitOpError()
+             << "fp-to-int numeric cast is staged. READY_FOR_TRITON remains NO";
     if (llvm::isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::ShLIOp,
                   arith::AddFOp, arith::SubFOp, arith::MulFOp>(op))
       return lowerBinaryArith(op);
@@ -1375,6 +1544,13 @@ private:
                                             llvm::cast<TypedAttr>(value));
       return success();
     }
+    if (resultType.isF16()) {
+      if (!isZeroConstant(op.getResult()))
+        return emitStagedDiagnostic(op.getOperation(),
+                                    "nonzero scalar f16 constant");
+      state.values[op.getResult()] = createI32Constant(builder, loc, 0);
+      return success();
+    }
 
     auto dense = llvm::dyn_cast<DenseElementsAttr>(value);
     if (!dense)
@@ -1416,6 +1592,50 @@ private:
                                 "constant result type outside Phase 5 subset");
   }
 
+  LogicalResult lowerExtF(Operation *op) {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return emitPhase5Diagnostic(op, "arith.extf shape");
+    if (!isVector16F16(op->getOperand(0).getType()) ||
+        !isVector16F32(op->getResult(0).getType()))
+      return emitStagedDiagnostic(
+          op, "unsupported numeric conversion; only f16 storage extf to f32 "
+              "compute is accepted in Phase 14");
+    Value carrier = lookupValue(op, op->getOperand(0));
+    if (!carrier)
+      return failure();
+    if (!isVector16I32(carrier.getType()))
+      return op->emitOpError()
+             << "f16 storage extf requires raw i32 storage carrier. "
+             << "READY_FOR_TRITON remains NO";
+    state.values[op->getResult(0)] =
+        createF16StorageUnpack(builder, op->getLoc(), carrier);
+    return success();
+  }
+
+  LogicalResult lowerTruncF(Operation *op) {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return emitPhase5Diagnostic(op, "arith.truncf shape");
+    if (!isVector16F32(op->getOperand(0).getType()) ||
+        !isVector16F16(op->getResult(0).getType()))
+      return emitStagedDiagnostic(
+          op, "unsupported numeric conversion; only f32 compute truncf to "
+              "f16 storage is accepted in Phase 14");
+    if (!hasFiniteF16StoragePolicy(op))
+      return op->emitOpError()
+             << "f16 storage store requires explicit finite storage policy. "
+             << "READY_FOR_TRITON remains NO";
+    Value f32 = lookupValue(op, op->getOperand(0));
+    if (!f32)
+      return failure();
+    if (!isVector16F32(f32.getType()))
+      return op->emitOpError()
+             << "f16 storage truncf requires f32 compute fragment. "
+             << "READY_FOR_TRITON remains NO";
+    state.values[op->getResult(0)] =
+        createF16StoragePack(builder, op->getLoc(), f32);
+    return success();
+  }
+
   LogicalResult lowerBinaryArith(Operation *op) {
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return emitPhase5Diagnostic(op, "binary arith shape");
@@ -1423,6 +1643,10 @@ private:
     Type sourceType = op->getResult(0).getType();
     Type resultType = lowerValueType(sourceType, ctx);
     StringRef name = op->getName().getStringRef();
+
+    if (hasF16Type(sourceType))
+      return op->emitOpError()
+             << "native f16 arithmetic is staged. READY_FOR_TRITON remains NO";
 
     if ((name == "arith.mulf" || name == "arith.muli") &&
         isDotCompositeProduct(op) && !isVector16I32(sourceType) &&
@@ -1873,35 +2097,53 @@ private:
                   " memref outside rank-1 contiguous i32/f32 #vc4value.global");
     }
 
-    if (!isPhase11LowerableGlobalMemref(memref.getType())) {
+    Type elementType = memrefType.getElementType();
+    if (isBF16OrFP8StorageElement(elementType))
+      return emitStagedDiagnostic(op, "bf16/fp8 storage is staged. "
+                                      "READY_FOR_TRITON remains NO");
+    if (isQuantizedSubwordStorageElement(elementType))
+      return emitStagedDiagnostic(op, "int8/int16 quantized storage is staged. "
+                                      "READY_FOR_TRITON remains NO");
+
+    if (!isPhase14StorageNumericGlobalMemref(memref.getType())) {
       return emitStagedDiagnostic(
           op, Twine("memory form outside Phase 11 row-slice skeletons; ") +
                   accessName +
                   " memref outside rank-1 contiguous or rank-2 row-slice "
-                  "i32/f32 #vc4value.global");
+                  "i32/f32/f16 #vc4value.global");
     }
 
-    Type elementType = memrefType.getElementType();
-    if (!isI32OrF32(elementType)) {
+    if (!isI32F32OrF16(elementType)) {
       return emitStagedDiagnostic(
           op, Twine("unsupported transfer element type; ") + accessName +
                   " memref outside rank-1 contiguous or rank-2 row-slice "
-                  "i32/f32 #vc4value.global");
+                  "i32/f32/f16 #vc4value.global");
     }
     return success();
   }
 
   LogicalResult diagnoseVectorType(Operation *op, Type vectorType,
                                    StringRef accessName) {
-    if (isVector16I32(vectorType) || isVector16F32(vectorType))
+    if (isVector16I32(vectorType) || isVector16F32(vectorType) ||
+        isVector16F16(vectorType))
       return success();
+    if (auto typedVector = llvm::dyn_cast<VectorType>(vectorType)) {
+      Type elementType = typedVector.getElementType();
+      if (isBF16OrFP8StorageElement(elementType))
+        return emitStagedDiagnostic(op, "bf16/fp8 storage is staged. "
+                                        "READY_FOR_TRITON remains NO");
+      if (isQuantizedSubwordStorageElement(elementType))
+        return emitStagedDiagnostic(
+            op, "int8/int16 quantized storage is staged. "
+                "READY_FOR_TRITON remains NO");
+    }
     if (accessName == "transfer_read")
       return emitStagedDiagnostic(
           op, "unsupported transfer element type; transfer_read result type "
-              "outside vector<16xi32/f32>");
+              "outside vector<16xi32/f32/f16>");
     return emitStagedDiagnostic(
         op, "unsupported transfer element type; transfer_write value outside "
-            "vector<16xi32/f32>");
+            "vector<16xi32/f32/f16>");
   }
 
   LogicalResult checkTransferElementMatch(Operation *op, Value memref,
@@ -1916,6 +2158,17 @@ private:
               "vector element type must match");
     }
     return success();
+  }
+
+  Type getTransferCarrierType(Type vectorType) {
+    if (isVector16F16(vectorType))
+      return getVector16I32(ctx);
+    return lowerValueType(vectorType, ctx);
+  }
+
+  bool hasFiniteF16StoragePolicy(Operation *op) {
+    return hasStringAttr(op, kF16StoragePolicyAttr, "finite") ||
+           hasStringAttr(func.getOperation(), kF16StoragePolicyAttr, "finite");
   }
 
   FailureOr<MemoryAddressPlan>
@@ -1959,6 +2212,8 @@ private:
         return failure();
       plan.kind = MemoryAddressPlan::Kind::Rank1ContiguousOrScalarComputed;
       plan.elementBaseIndex = loweredIndex;
+      plan.elementBytes = memrefType.getElementType().isF16() ? 2 : 4;
+      plan.f16Storage = memrefType.getElementType().isF16();
       plan.reason = "rank-1 scalar-computed contiguous lane transfer";
       return plan;
     }
@@ -1980,7 +2235,7 @@ private:
       return failure();
 
     Value stride;
-    if (isRank2IdentityGlobalMemref(memref.getType())) {
+    if (memrefType.getLayout().isIdentity()) {
       FailureOr<Value> cols = lookupShapeArgForDim(
           op, memref, 1,
           "rank-2 row-slice requires explicit vc4value.shape_args metadata");
@@ -1989,22 +2244,20 @@ private:
       stride = *cols;
       plan.kind = MemoryAddressPlan::Kind::Rank2RowSliceIdentity;
       plan.reason = "rank-2 identity row-major row-slice transfer";
-    } else if (isRank2StridedOuterDynamicGlobalMemref(memref.getType())) {
+    } else {
       FailureOr<Value> outerStride = lookupOuterStrideArg(op, memref);
       if (failed(outerStride))
         return failure();
       stride = *outerStride;
       plan.kind = MemoryAddressPlan::Kind::Rank2RowSliceStridedOuterDynamic;
       plan.reason = "rank-2 dynamic outer stride row-slice transfer";
-    } else {
-      return emitStagedDiagnostic(
-          op, "rank-2 memory layout outside identity or dynamic-outer-strided "
-              "row-slice skeleton");
     }
 
     Value rowBase = builder.create<arith::MulIOp>(op->getLoc(), row, stride);
     plan.elementBaseIndex =
         builder.create<arith::AddIOp>(op->getLoc(), rowBase, col);
+    plan.elementBytes = memrefType.getElementType().isF16() ? 2 : 4;
+    plan.f16Storage = memrefType.getElementType().isF16();
     return plan;
   }
 
@@ -2021,6 +2274,7 @@ private:
     transfer.vectorType = op->getResult(0).getType();
     if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_read")))
       return failure();
+    transfer.storageCarrierType = getTransferCarrierType(transfer.vectorType);
 
     Value memref = read.getBase();
     if (failed(diagnoseTransferMemref(op, memref, "transfer_read")))
@@ -2065,12 +2319,17 @@ private:
     transfer.vectorType = transfer.vectorValue.getType();
     if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_write")))
       return failure();
+    transfer.storageCarrierType = getTransferCarrierType(transfer.vectorType);
 
     Value memref = write.getBase();
     if (failed(diagnoseTransferMemref(op, memref, "transfer_write")))
       return failure();
     if (failed(checkTransferElementMatch(op, memref, transfer.vectorType)))
       return failure();
+    if (isVector16F16(transfer.vectorType) && !hasFiniteF16StoragePolicy(op))
+      return op->emitOpError()
+             << "f16 storage store requires explicit finite storage policy. "
+             << "READY_FOR_TRITON remains NO";
 
     transfer.memref = memref;
 
@@ -2118,10 +2377,122 @@ private:
     return offsets;
   }
 
+  FailureOr<Value> createScalarByteOffset(Operation *op, Value loweredElemIndex,
+                                          int64_t elemBytes) {
+    if (!loweredElemIndex.getType().isSignlessInteger(32))
+      return op->emitOpError("transfer index must lower to scalar i32");
+    if (elemBytes == 1)
+      return loweredElemIndex;
+    int64_t shift = elemBytes == 2 ? 1 : elemBytes == 4 ? 2 : -1;
+    if (shift < 0)
+      return op->emitOpError("unsupported element byte width");
+    return builder.create<arith::ShLIOp>(
+        op->getLoc(), loweredElemIndex,
+        createI32Constant(builder, op->getLoc(), shift))
+        .getResult();
+  }
+
+  Value createPhase14F16VPMTile(Location loc) {
+    return createOpWithResult(
+        builder, loc, kVPMAllocOpName, {},
+        {builder.getNamedAttr("rows", builder.getI32IntegerAttr(1)),
+         builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4))},
+        mlir::vc4kernel::VPMTileType::get(ctx));
+  }
+
+  LogicalResult lowerF16TransferRead(Operation *op,
+                                     const ClassifiedMemoryTransfer &transfer) {
+    const MemoryAddressPlan &plan = transfer.addressPlan;
+    FailureOr<Value> byteOffset =
+        createScalarByteOffset(op, plan.elementBaseIndex, /*elemBytes=*/2);
+    if (failed(byteOffset))
+      return failure();
+
+    Location loc = op->getLoc();
+    Value tile = createPhase14F16VPMTile(loc);
+    Value row = createI32Constant(builder, loc, 0);
+    Value one = createI32Constant(builder, loc, 1);
+    Value pitch = createI32Constant(builder, loc, 32);
+
+    SmallVector<NamedAttribute, 10> vdrAttrs =
+        getPackedW16VPMAttrs(builder, "vdr", "dma", /*dmaAccess=*/true);
+    vdrAttrs.push_back(builder.getNamedAttr("max_rows",
+                                            builder.getI32IntegerAttr(1)));
+    vdrAttrs.push_back(builder.getNamedAttr("max_cols",
+                                            builder.getI32IntegerAttr(16)));
+    vdrAttrs.push_back(builder.getNamedAttr("elem_bytes",
+                                            builder.getI32IntegerAttr(2)));
+    vdrAttrs.push_back(builder.getNamedAttr("dst_x",
+                                            builder.getI32IntegerAttr(0)));
+    vdrAttrs.push_back(
+        getOperandSegmentSizesAttr(builder, {1, 1, 1, 1, 1, 1, 1, 0, 0}));
+    createOp(builder, loc, kVDRLoadRectToVPMOpName,
+             {plan.basePointer, *byteOffset, tile, row, one, plan.mask.count,
+              pitch},
+             vdrAttrs);
+
+    SmallVector<NamedAttribute, 8> readAttrs =
+        getPackedW16VPMAttrs(builder, "vpm", "vpm", /*dmaAccess=*/false);
+    readAttrs.push_back(
+        getOperandSegmentSizesAttr(builder, {1, 1, 1, 0, 0}));
+    Value raw = createOpWithResult(builder, loc, kVPMReadFragmentOpName,
+                                   {tile, row, plan.mask.predicate}, readAttrs,
+                                   getVector16I32(ctx));
+    state.values[op->getResult(0)] = raw;
+    return success();
+  }
+
+  LogicalResult lowerF16TransferWrite(Operation *op,
+                                      const ClassifiedMemoryTransfer &transfer,
+                                      Value packedValue) {
+    const MemoryAddressPlan &plan = transfer.addressPlan;
+    FailureOr<Value> byteOffset =
+        createScalarByteOffset(op, plan.elementBaseIndex, /*elemBytes=*/2);
+    if (failed(byteOffset))
+      return failure();
+
+    Location loc = op->getLoc();
+    Value tile = createPhase14F16VPMTile(loc);
+    Value row = createI32Constant(builder, loc, 0);
+    Value one = createI32Constant(builder, loc, 1);
+    Value pitch = createI32Constant(builder, loc, 32);
+
+    SmallVector<NamedAttribute, 8> writeAttrs =
+        getPackedW16VPMAttrs(builder, "vpm", "vpm", /*dmaAccess=*/false);
+    writeAttrs.push_back(
+        getOperandSegmentSizesAttr(builder, {1, 1, 1, 1, 0, 0}));
+    createOp(builder, loc, kVPMWriteFragmentOpName,
+             {tile, row, packedValue, plan.mask.predicate}, writeAttrs);
+
+    SmallVector<NamedAttribute, 11> vdwAttrs =
+        getPackedW16VPMAttrs(builder, "vdw", "dma", /*dmaAccess=*/true);
+    vdwAttrs.push_back(builder.getNamedAttr("max_rows",
+                                            builder.getI32IntegerAttr(1)));
+    vdwAttrs.push_back(builder.getNamedAttr("max_cols",
+                                            builder.getI32IntegerAttr(16)));
+    vdwAttrs.push_back(builder.getNamedAttr("elem_bytes",
+                                            builder.getI32IntegerAttr(2)));
+    vdwAttrs.push_back(builder.getNamedAttr("src_x",
+                                            builder.getI32IntegerAttr(0)));
+    vdwAttrs.push_back(builder.getNamedAttr(
+        "inactive_store", mlir::vc4kernel::InactiveStoreAttr::get(
+                              ctx, mlir::vc4kernel::InactiveStore::preserve)));
+    vdwAttrs.push_back(
+        getOperandSegmentSizesAttr(builder, {1, 1, 1, 1, 1, 1, 1, 0, 0}));
+    createOp(builder, loc, kVDWStoreRectFromVPMOpName,
+             {tile, row, plan.basePointer, *byteOffset, one, plan.mask.count,
+              pitch},
+             vdwAttrs);
+    return success();
+  }
+
   LogicalResult lowerTransferRead(Operation *op) {
     FailureOr<ClassifiedMemoryTransfer> legality = classifyTransferRead(op);
     if (failed(legality))
       return failure();
+
+    if (legality->addressPlan.f16Storage)
+      return lowerF16TransferRead(op, *legality);
 
     const MemoryAddressPlan &plan = legality->addressPlan;
     std::optional<Value> offsetMask;
@@ -2142,7 +2513,7 @@ private:
                                              ctx, mlir::vc4kernel::Coherency::readonly_tmu)),
          builder.getNamedAttr("inactive_load", mlir::vc4kernel::InactiveLoadAttr::get(
                                                  ctx, mlir::vc4kernel::InactiveLoad::zero))},
-        legality->vectorType);
+        legality->storageCarrierType);
     state.values[op->getResult(0)] = result;
     return success();
   }
@@ -2155,6 +2526,14 @@ private:
     Value value = lookupValue(op, legality->vectorValue);
     if (!value)
       return failure();
+    if (value.getType() != legality->storageCarrierType)
+      return op->emitOpError()
+             << "transfer_write storage carrier type mismatch. "
+             << "READY_FOR_TRITON remains NO";
+
+    if (legality->addressPlan.f16Storage)
+      return lowerF16TransferWrite(op, *legality, value);
+
     const MemoryAddressPlan &plan = legality->addressPlan;
     // Do not poison store offsets.  Inactive preservation is the VDW policy;
     // sparse/unknown masks must be rejected before reaching this path.

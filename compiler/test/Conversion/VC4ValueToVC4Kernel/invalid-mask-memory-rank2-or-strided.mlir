@@ -10,7 +10,7 @@ func.func @invalid_rank2_transfer(
 }
 
 // CHECK: ranked or strided memory beyond Phase 10
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
+// CHECK: expected rank-1 contiguous i32/f32/f16 #vc4value.global memref
 
 // -----
 
