@@ -143,6 +143,33 @@ static bool isNativeF16ArithmeticOp(StringRef name) {
          name == "arith.maxnumf" || name == "arith.minnumf";
 }
 
+static bool isNarrowIntegerArithmeticOp(StringRef name) {
+  return name == "arith.addi" || name == "arith.subi" ||
+         name == "arith.muli" || name == "arith.divsi" ||
+         name == "arith.divui" || name == "arith.remsi" ||
+         name == "arith.remui" || name == "arith.andi" ||
+         name == "arith.ori" || name == "arith.xori" ||
+         name == "arith.shli" || name == "arith.shrsi" ||
+         name == "arith.shrui";
+}
+
+static bool isI8OrI16Type(Type type) {
+  if (auto integerType = dyn_cast<IntegerType>(type))
+    return integerType.isSignlessInteger(8) ||
+           integerType.isSignlessInteger(16);
+  if (auto vectorType = dyn_cast<VectorType>(type))
+    return isI8OrI16Type(vectorType.getElementType());
+  return false;
+}
+
+static bool isI32ToF32CastOp(StringRef name) {
+  return name == "arith.sitofp" || name == "arith.uitofp";
+}
+
+static bool isFpToIntCastOp(StringRef name) {
+  return name == "arith.fptosi" || name == "arith.fptoui";
+}
+
 static Operation *getEnclosingFunc(Operation *op) {
   for (Operation *parent = op->getParentOp(); parent;
        parent = parent->getParentOp()) {
@@ -920,6 +947,26 @@ static bool isAllowedPhase12ScalarStore(memref::StoreOp storeOp) {
   return memRefType.getElementType() == valueType;
 }
 
+static void checkPhase14F16StorageWrite(vector::TransferWriteOp writeOp,
+                                        bool &sawError) {
+  auto memRefType = dyn_cast<MemRefType>(writeOp.getBase().getType());
+  auto vectorType = dyn_cast<VectorType>(writeOp.getVectorType());
+  if (!memRefType || !vectorType || !memRefType.getElementType().isF16() ||
+      !vectorType.getElementType().isF16())
+    return;
+
+  Operation *func = getEnclosingFunc(writeOp);
+  bool hasFiniteF16StoragePolicy =
+      hasStringAttr(writeOp, "vc4value.f16_storage_policy", "finite") ||
+      (func && hasStringAttr(func, "vc4value.f16_storage_policy", "finite"));
+  if (!hasFiniteF16StoragePolicy) {
+    writeOp.emitError()
+        << "Phase 14 f32 compute to f16 storage requires explicit "
+        << "vc4value.f16_storage_policy = \"finite\"";
+    sawError = true;
+  }
+}
+
 struct VerifyValueSurfacePass
     : public PassWrapper<VerifyValueSurfacePass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VerifyValueSurfacePass)
@@ -946,7 +993,29 @@ struct VerifyValueSurfacePass
           (llvm::any_of(op->getOperandTypes(), hasF16Type) ||
            llvm::any_of(op->getResultTypes(), hasF16Type))) {
         op->emitError() << "native f16 arithmetic is not legal in the "
-                        << "Phase 3.5 VC4 value surface";
+                        << "Phase 14 VC4 value surface";
+        sawError = true;
+      }
+
+      if (isNarrowIntegerArithmeticOp(opName) &&
+          (llvm::any_of(op->getOperandTypes(), isI8OrI16Type) ||
+           llvm::any_of(op->getResultTypes(), isI8OrI16Type))) {
+        op->emitError()
+            << "int8/int16 quantized arithmetic and storage policy are staged "
+            << "in the Phase 14 VC4 value surface";
+        sawError = true;
+      }
+
+      if (isI32ToF32CastOp(opName)) {
+        op->emitError()
+            << "i32 to f32 numeric cast staged by lower-half gap in Phase 14";
+        sawError = true;
+      }
+
+      if (isFpToIntCastOp(opName)) {
+        op->emitError()
+            << "fp-to-int numeric casts are staged in the Phase 14 VC4 value "
+            << "surface";
         sawError = true;
       }
 
@@ -1020,6 +1089,9 @@ struct VerifyValueSurfacePass
 
       if (auto reductionOp = dyn_cast<vector::ReductionOp>(op))
         checkVectorReductionOp(reductionOp, sawError);
+
+      if (auto writeOp = dyn_cast<vector::TransferWriteOp>(op))
+        checkPhase14F16StorageWrite(writeOp, sawError);
 
       if (isForbiddenMemRefSideEffectOp(opName)) {
         op->emitError()

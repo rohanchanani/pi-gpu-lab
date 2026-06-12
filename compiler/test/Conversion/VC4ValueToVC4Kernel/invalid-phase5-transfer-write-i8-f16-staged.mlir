@@ -21,5 +21,4 @@ func.func @write_f16(%out: memref<64xf16, #vc4value.global> {vc4value.arg_name =
   return
 }
 
-// CHECK: expected rank-1 contiguous i32/f32 #vc4value.global memref
-// CHECK: staged value-surface feature
+// CHECK: Phase 14 f32 compute to f16 storage requires explicit vc4value.f16_storage_policy = "finite"

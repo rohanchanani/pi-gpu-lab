@@ -4,13 +4,21 @@ PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
+VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
+VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 F32_DOT_FINITE_TREE_POLICY=YES
+F16_STORAGE_FINITE_POLICY=YES
+I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+NATIVE_F16_ARITHMETIC_STAGED=YES
+BF16_FP8_STAGED=YES
+INT8_INT16_QUANTIZED_STORAGE_STAGED=YES
 NON_ADD_REDUCTIONS_STAGED=YES
 TL_DOT_TT_DOT_STAGED=YES
 VECTOR_CONTRACT_STAGED=YES
@@ -21,6 +29,7 @@ RANK2_STRIDED_MEMORY_STAGED=YES
 READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
+READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -415,11 +424,61 @@ Approximate SFU is explicit policy only; exact/default math must not silently
 lower to SFU. Later lowering phases must distinguish exact, finite, and
 approximate policy before mapping math to VC4Kernel mechanisms.
 
-## 14. Subword and f16 storage boundary
+## 14. Phase 14 ML storage and numeric conversion contract
 
-Subword and f16 storage lowering is staged for later phases. f16 storage
-conversion is a future value feature through storage conversion plus f32
-compute; native f16 arithmetic remains rejected by the locked VC4Kernel surface.
+PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
+VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
+VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
+F16_STORAGE_FINITE_POLICY=YES
+I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+NATIVE_F16_ARITHMETIC_STAGED=YES
+BF16_FP8_STAGED=YES
+INT8_INT16_QUANTIZED_STORAGE_STAGED=YES
+READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
+READY_FOR_TRITON=NO
+
+Accepted Phase 14 value-surface forms are:
+
+- `F16_STORAGE_TO_F32_COMPUTE`: `vector.transfer_read` of `vector<16xf16>`
+  from rank-1 flattened or Phase 11 row-strided `#vc4value.global` f16
+  storage, followed by `arith.extf` to `vector<16xf32>`.
+- `F32_COMPUTE_TO_F16_STORAGE`: finite f32 compute followed by
+  `arith.truncf vector<16xf32> -> vector<16xf16>` and
+  `vector.transfer_write` to f16 global storage. This requires explicit
+  `vc4value.f16_storage_policy = "finite"` on the transfer or containing
+  kernel.
+- `F16_ROW_STRIDED_STORAGE`: Phase 11 flattened or row-slice memory forms may
+  carry f16 element type when lane transfers remain contiguous `vector<16>`.
+- `F16_GEMV_V0_INPUT_STORAGE`: the Phase 13 row-wise dot composite may read
+  f16 A/X inputs, promote them to f32, multiply in f32, reduce with the existing
+  finite-tree f32 policy, and store scalar f32 output.
+
+Phase 14 does not claim exact/default f16 rounding semantics. The finite f16
+storage policy is a storage-conversion policy over finite values, not native
+f16 arithmetic and not a broad IEEE conversion proof.
+
+Staged Phase 14 value forms are:
+
+- native f16 arithmetic;
+- f16 reduction or f16 accumulation;
+- bf16/fp8 native conversion or arithmetic;
+- int8/i16 quantized storage, scale, zero-point, and narrow quantized
+  arithmetic policy;
+- i32/index-to-f32 casts, staged by the current lower-half numeric-cast gap;
+- `arith.fptosi`, `arith.fptoui`, and fp-to-int casts;
+- exact/default numeric casts without explicit policy;
+- saturation and rich rounding-mode conversions;
+- approximate SFU/math and softmax.
+
+The verifier enforces this as a surface and policy boundary only. It does not
+emit f16 pack/unpack, does not lower value IR to VC4Kernel, does not import
+TTIR, and does not run hardware.
+
+## 14.2 Subword and f16 storage boundary
+
+Subword lowering remains staged for later phases. f16 storage conversion is a
+Phase 14 value feature through storage conversion plus f32 compute; native f16
+arithmetic remains rejected by the locked VC4Kernel surface.
 
 Native bf16/fp8 arithmetic or conversion remains outside the locked VC4Kernel
 surface unless a future phase proves an emulation strategy and updates the

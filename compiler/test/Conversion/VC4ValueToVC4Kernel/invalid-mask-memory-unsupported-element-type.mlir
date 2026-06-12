@@ -23,5 +23,4 @@ func.func @invalid_f16_transfer(
   return
 }
 
-// CHECK: unsupported transfer element type
-// CHECK: READY_FOR_TRITON remains NO
+// CHECK: Phase 14 f32 compute to f16 storage requires explicit vc4value.f16_storage_policy = "finite"

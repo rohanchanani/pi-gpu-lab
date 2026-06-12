@@ -4,6 +4,7 @@ PHASE10_VALUE_MASK_CLASSIFIER_CONTRACT=LOCKED
 PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
 VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
@@ -21,11 +22,18 @@ VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
+VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
+VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_I32_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_STATIC=PASS
 VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 F32_DOT_FINITE_TREE_POLICY=YES
+F16_STORAGE_FINITE_POLICY=YES
+I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+NATIVE_F16_ARITHMETIC_STAGED=YES
+BF16_FP8_STAGED=YES
+INT8_INT16_QUANTIZED_STORAGE_STAGED=YES
 NON_ADD_REDUCTIONS_STAGED=YES
 TL_DOT_TT_DOT_STAGED=YES
 VECTOR_CONTRACT_STAGED=YES
@@ -39,6 +47,7 @@ READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE13_7_TTIR_IMPORTER_GEMV_STATIC=YES
+READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -632,6 +641,61 @@ stores, and Phase 13 f32 row-wise dot plus partial K-block dot. The full mixed
 suite passed on hardware with `active_qpus=12` where applicable and no result,
 sentinel, or launch failures. `tl.dot`, `tt.dot`, `vector.contract`, and
 multi-block K accumulation remain explicitly staged.
+
+## 14.2 Phase 14 ML storage and numeric conversion planning
+
+PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
+VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
+VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
+F16_STORAGE_FINITE_POLICY=YES
+I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+NATIVE_F16_ARITHMETIC_STAGED=YES
+BF16_FP8_STAGED=YES
+INT8_INT16_QUANTIZED_STORAGE_STAGED=YES
+READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 14 accepts the following value-surface contract for planned lowering:
+
+- f16 storage loads from Phase 10 rank-1 identity or Phase 11 row-strided
+  contiguous lane transfers may produce `vector<16xf16>`, then immediately
+  widen through `arith.extf` to `vector<16xf32>` for compute.
+- f32 compute values may narrow through
+  `arith.truncf vector<16xf32> -> vector<16xf16>` and write to f16 storage only
+  when the transfer or containing kernel carries
+  `vc4value.f16_storage_policy = "finite"`.
+- Phase 13 row-wise dot may use f16 A/X storage inputs when both inputs widen
+  to f32 before multiply and the reduction remains the existing finite-tree f32
+  add reduction.
+- Inactive f16 load lanes reuse the Phase 10 inactive-zero policy. The f16
+  transfer `other` value must be zero.
+
+The planner must map accepted f16 storage through the locked VC4Kernel
+pack/unpack storage-conversion surface. It must not create native f16 ALU,
+f16 reduction, bf16/fp8 conversion, int8/int16 quantized storage policy, SFU
+math, `tt.dot`, `vector.contract`, or GEMM forms in Phase 14.
+
+The i32/index-to-f32 cast status is `STAGED_BY_LOWER_HALF_GAP`. Phase 14.4 may
+only change this status if it proves a real lower-half path. Until then,
+`arith.sitofp`/`arith.uitofp` must diagnose:
+`i32 to f32 numeric cast staged by lower-half gap`.
+
+Planned Phase 14.4 static coverage is recorded in
+`compiler/docs/vc4_vector_triton_phase14_value_to_vc4kernel_planned_coverage.md`
+and must cover:
+
+- f16 `vector.transfer_read` plus `arith.extf` lowers;
+- f32 compute plus `arith.truncf` plus f16 `vector.transfer_write` lowers;
+- f16 row-strided storage lowers;
+- f16 row-dot input storage lowers through f32 compute;
+- f16 store missing finite policy rejects;
+- native f16 arithmetic rejects;
+- f32-to-i32 casts reject;
+- bf16/fp8/int8 staged forms reject;
+- i32-to-f32 stages by lower-half gap unless Phase 14.4 proves support.
+
+No hardware proof is claimed by Phase 14.3. No executable lowering is
+implemented by this contract lock.
 
 ## 15. Math and SFU planning
 
