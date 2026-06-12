@@ -1,0 +1,78 @@
+# REQUIRES: vc4-triton-cpp-frontend
+# RUN: mkdir -p %t
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_phase14_storage_numeric_snapshots.py" "%vc4_repo_root" | FileCheck %s --check-prefix=MANIFEST
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_load_f32_compute_store_f32_b16.ttir.mlir" -o %t/f16_load.mlir
+# RUN: FileCheck %s --check-prefix=F16-LOAD --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/f16_load.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_compute_store_f16_b16.ttir.mlir" -o %t/f16_store.mlir
+# RUN: FileCheck %s --check-prefix=F16-STORE --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/f16_store.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_row_dot_f32_accum_b16.ttir.mlir" -o %t/f16_row_dot.mlir
+# RUN: FileCheck %s --check-prefix=F16-DOT --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/f16_row_dot.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.ttir.mlir" -o %t/mixed.mlir
+# RUN: FileCheck %s --check-prefix=MIXED --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/mixed.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_i32_to_f32_cast_b16.ttir.mlir" -o %t/i32_to_f32.mlir
+# RUN: FileCheck %s --check-prefix=I32-F32 --input-file=%t/i32_to_f32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_native_f16_arithmetic_reject_b16.ttir.mlir" -o %t/native_f16.mlir
+# RUN: FileCheck %s --check-prefix=NATIVE-F16 --input-file=%t/native_f16.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_to_i32_cast_reject_b16.ttir.mlir" -o %t/f32_to_i32.mlir
+# RUN: FileCheck %s --check-prefix=F32-I32 --input-file=%t/f32_to_i32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_bf16_or_fp8_reject_b16.ttir.mlir" -o %t/bf16.mlir
+# RUN: FileCheck %s --check-prefix=BF16 --input-file=%t/bf16.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase14_ml_storage_numeric/generated/ttir_int8_quantized_storage_reject_b16.ttir.mlir" -o %t/int8.mlir
+# RUN: FileCheck %s --check-prefix=INT8 --input-file=%t/int8.mlir
+
+# MANIFEST: PHASE14_STORAGE_NUMERIC_MANIFEST_AUDIT=PASS
+# MANIFEST: PHASE14_ACCEPTED_SNAPSHOTS=4
+# MANIFEST: PHASE14_STAGED_SNAPSHOTS=5
+# MANIFEST: READY_FOR_TRITON=NO
+
+# F16-LOAD: tt.func public @ttir_f16_load_f32_compute_store_f32_b16
+# F16-LOAD: !tt.ptr<f16>
+# F16-LOAD: arith.truncf
+# F16-LOAD: tt.load
+# F16-LOAD: arith.extf
+# F16-LOAD: arith.addf
+# F16-LOAD: tt.store
+
+# F16-STORE: tt.func public @ttir_f32_compute_store_f16_b16
+# F16-STORE: !tt.ptr<f16>
+# F16-STORE: arith.addf
+# F16-STORE: arith.truncf
+# F16-STORE: tt.store
+
+# F16-DOT: tt.func public @ttir_f16_row_dot_f32_accum_b16
+# F16-DOT: !tt.ptr<f16>
+# F16-DOT: arith.extf
+# F16-DOT: arith.mulf
+# F16-DOT: tt.store
+# F16-DOT: tt.reduce
+# F16-DOT: arith.addf
+
+# MIXED: tt.func public @mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16
+# MIXED: tt.get_program_id x
+# MIXED: tt.get_program_id y
+# MIXED: !tt.ptr<f16>
+# MIXED: arith.extf
+# MIXED: arith.mulf
+# MIXED: scf.if
+# MIXED: tt.store
+# MIXED: tt.reduce
+
+# I32-F32: tt.func public @ttir_i32_to_f32_cast_b16
+# I32-F32: arith.sitofp
+
+# NATIVE-F16: tt.func public @ttir_native_f16_arithmetic_reject_b16
+# NATIVE-F16: tensor<16xf16>
+# NATIVE-F16: arith.addf
+
+# F32-I32: tt.func public @ttir_f32_to_i32_cast_reject_b16
+# F32-I32: arith.fptosi
+
+# BF16: tt.func public @ttir_bf16_or_fp8_reject_b16
+# BF16: !tt.ptr<bf16>
+# BF16: tensor<16xbf16>
+# BF16: arith.extf
+
+# INT8: tt.func public @ttir_int8_quantized_storage_reject_b16
+# INT8: !tt.ptr<i8>
+# INT8: tensor<16xi8>
+# INT8: arith.addi

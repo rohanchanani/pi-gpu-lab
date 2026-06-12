@@ -1,0 +1,189 @@
+{
+  "phase": "phase14_ml_storage_numeric",
+  "TRITON_TAG": "v3.7.0",
+  "triton_version": "3.7.0",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "python_semantic_importer_used": false,
+  "READY_FOR_TRITON": "NO",
+  "accepted_policy": {
+    "block_size": 16,
+    "f16_storage_policy": "finite_storage_conversion_explicit_policy",
+    "compute_policy": "f16_storage_promoted_to_f32_compute",
+    "f32_to_f16_store_form": "explicit_arith_truncf_before_typed_f16_store",
+    "tl_dot_used_in_accepted_fixtures": false,
+    "tt_dot_used_in_accepted_fixtures": false,
+    "vector_contract_used_in_accepted_fixtures": false,
+    "approx_math_or_softmax_used_in_accepted_fixtures": false
+  },
+  "snapshots": [
+    {
+      "name": "ttir_f16_load_f32_compute_store_f32_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_load_f32_compute_store_f32_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_load_f32_compute_store_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_f16_load_f32_compute_store_f32_b16",
+      "signature": "*fp16,*fp32,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_load_f32_compute_store_f32_b16.py --kernel-name ttir_f16_load_f32_compute_store_f32_b16 --signature '*fp16,*fp32,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_load_f32_compute_store_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_f16_load_f32_compute_store_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "finite_f16_storage_policy_caveat": "finite f16 storage conversion only; not native f16 arithmetic or exact IEEE conversion proof",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_f16_pointer_input",
+        "saw_f16_typed_tt_load",
+        "saw_f16_load_other_zero_from_truncf",
+        "saw_arith_extf_f16_to_f32",
+        "saw_f32_compute",
+        "saw_f32_typed_store",
+        "saw_phase10_tail_mask",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_f32_compute_store_f16_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_compute_store_f16_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_compute_store_f16_b16.ttir.mlir",
+      "kernel_name": "ttir_f32_compute_store_f16_b16",
+      "signature": "*fp32,*fp16,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_compute_store_f16_b16.py --kernel-name ttir_f32_compute_store_f16_b16 --signature '*fp32,*fp16,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_compute_store_f16_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_f32_compute_store_f16_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "finite_f16_storage_policy_caveat": "finite f32 compute to f16 storage conversion only; not native f16 arithmetic",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_f32_typed_tt_load",
+        "saw_f32_compute",
+        "saw_arith_truncf_f32_to_f16",
+        "saw_f16_typed_tt_store",
+        "saw_phase10_tail_mask",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_f16_row_dot_f32_accum_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_row_dot_f32_accum_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_row_dot_f32_accum_b16.ttir.mlir",
+      "kernel_name": "ttir_f16_row_dot_f32_accum_b16",
+      "signature": "*fp16,*fp16,*fp32,16,16,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_row_dot_f32_accum_b16.py --kernel-name ttir_f16_row_dot_f32_accum_b16 --signature '*fp16,*fp16,*fp32,16,16,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_row_dot_f32_accum_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_f16_row_dot_f32_accum_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "finite_f16_storage_policy_caveat": "finite f16 storage inputs promoted to finite f32 dot/reduction; not native f16 arithmetic",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_row_strided_f16_a_load",
+        "saw_contiguous_f16_x_load",
+        "saw_arith_extf_f16_to_f32",
+        "saw_f32_mulf",
+        "saw_tt_reduce_axis0_add_f32",
+        "saw_scalar_f32_store",
+        "saw_phase13_row_dot_composite",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.ttir.mlir",
+      "kernel_name": "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16",
+      "signature": "*fp16,*fp16,*fp32,*fp32,16,16,16,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.py --kernel-name mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16 --signature '*fp16,*fp16,*fp32,*fp32,16,16,16,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "finite_f16_storage_policy_caveat": "finite f16 storage inputs promoted to finite f32 row-dot/reduction; f32 stores only",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_phase9_axes",
+        "saw_phase10_tail_masks",
+        "saw_phase11_row_strided_f16_memory",
+        "saw_phase12_tt_reduce_add_f32",
+        "saw_phase13_dot_composite",
+        "saw_scf_if",
+        "saw_scalar_f32_stores",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_i32_to_f32_cast_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_i32_to_f32_cast_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_i32_to_f32_cast_b16.ttir.mlir",
+      "kernel_name": "ttir_i32_to_f32_cast_b16",
+      "signature": "*i32,*fp32,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_i32_to_f32_cast_b16.py --kernel-name ttir_i32_to_f32_cast_b16 --signature '*i32,*fp32,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_i32_to_f32_cast_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_i32_to_f32_cast_b16.json",
+      "expected_classification": "ACCEPTED_IF_I32_TO_F32_SUPPORTED",
+      "current_phase14_2_status": "STAGED_BY_LOWER_HALF_GAP",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_arith_sitofp_tensor_16xi32_to_16xf32",
+        "saw_i32_load",
+        "saw_f32_store"
+      ]
+    },
+    {
+      "name": "ttir_native_f16_arithmetic_reject_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_native_f16_arithmetic_reject_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_native_f16_arithmetic_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_native_f16_arithmetic_reject_b16",
+      "signature": "*fp16,*fp16,*fp16,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_native_f16_arithmetic_reject_b16.py --kernel-name ttir_native_f16_arithmetic_reject_b16 --signature '*fp16,*fp16,*fp16,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_native_f16_arithmetic_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_native_f16_arithmetic_reject_b16.json",
+      "expected_classification": "STAGED_NATIVE_F16_ARITHMETIC",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_arith_addf_tensor_16xf16",
+        "saw_f16_typed_loads",
+        "saw_f16_typed_store"
+      ]
+    },
+    {
+      "name": "ttir_f32_to_i32_cast_reject_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_to_i32_cast_reject_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_to_i32_cast_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_f32_to_i32_cast_reject_b16",
+      "signature": "*fp32,*i32,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_to_i32_cast_reject_b16.py --kernel-name ttir_f32_to_i32_cast_reject_b16 --signature '*fp32,*i32,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_to_i32_cast_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_f32_to_i32_cast_reject_b16.json",
+      "expected_classification": "STAGED_FP_TO_INT_CAST",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_arith_fptosi_tensor_16xf32_to_16xi32",
+        "saw_f32_load",
+        "saw_i32_store"
+      ]
+    },
+    {
+      "name": "ttir_bf16_or_fp8_reject_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_bf16_or_fp8_reject_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_bf16_or_fp8_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_bf16_or_fp8_reject_b16",
+      "signature": "*bf16,*fp32,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_bf16_or_fp8_reject_b16.py --kernel-name ttir_bf16_or_fp8_reject_b16 --signature '*bf16,*fp32,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_bf16_or_fp8_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_bf16_or_fp8_reject_b16.json",
+      "expected_classification": "STAGED_BF16_FP8",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_bf16_pointer_input",
+        "saw_bf16_typed_load",
+        "saw_arith_extf_bf16_to_f32"
+      ]
+    },
+    {
+      "name": "ttir_int8_quantized_storage_reject_b16",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_int8_quantized_storage_reject_b16.py",
+      "generated_ttir": "examples/triton/phase14_ml_storage_numeric/generated/ttir_int8_quantized_storage_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_int8_quantized_storage_reject_b16",
+      "signature": "*i8,*i8,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase14_ml_storage_numeric/sources/ttir_int8_quantized_storage_reject_b16.py --kernel-name ttir_int8_quantized_storage_reject_b16 --signature '*i8,*i8,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase14_ml_storage_numeric/generated/ttir_int8_quantized_storage_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase14_2_controlled_fixtures/metadata/ttir_int8_quantized_storage_reject_b16.json",
+      "expected_classification": "STAGED_INT8_INT16_QUANT_STORAGE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_i8_pointer_input",
+        "saw_i8_typed_load",
+        "saw_i8_typed_store",
+        "saw_i8_arithmetic"
+      ]
+    }
+  ]
+}
