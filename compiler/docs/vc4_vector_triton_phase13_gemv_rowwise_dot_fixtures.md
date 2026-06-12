@@ -4,8 +4,13 @@ REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
-VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
+VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
+VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -18,6 +23,7 @@ VECTOR_CONTRACT_STAGED=YES
 READY_FOR_PHASE13_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 13 GEMV Row-Wise Dot Fixtures
@@ -57,8 +63,13 @@ row-dot composite.
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
-VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
+VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
+VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 F32_DOT_FINITE_TREE_POLICY=YES
@@ -67,20 +78,29 @@ VECTOR_CONTRACT_STAGED=YES
 MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 Phase 13.3 locks the value form that corresponds to these controlled TTIR
 fixtures: elementwise multiply over `vector<16>` followed by add reduction and
-scalar store. F32 dots use finite-input finite-tree policy. I32 dots are
-surface-accepted under the existing integer multiply policy. K is limited to one
-`vector<16>` block for full row-dot outputs; partial K-block dots store one
-independent scalar partial and do not accumulate across K blocks.
+scalar store. F32 dots use finite-input finite-tree policy. I32 row dots remain
+surface-admissible, but executable lowering is staged by the current i32
+multiply policy after Phase 13.5 hardware isolation showed that `mul24_safe` is
+not an exact signed i32 dot policy. K is limited to one `vector<16>` block for
+full row-dot outputs; partial K-block dots store one independent scalar partial
+and do not accumulate across K blocks.
 
 Phase 13.4 statically proves the accepted value composite. The path remains
 standard value IR to VC4Kernel through existing fragment multiply, add
 reduction, and scalar-store lowerers. `tl.dot`, `tt.dot`, `vector.contract`, and
 multi-block K accumulation remain staged. No hardware proof is claimed by this
 static package.
+
+Phase 13.5 hardware isolation proves the f32 row-wise dot, partial K-block dot,
+and empty/repeat launch value fixtures on hardware with `active_qpus=12`,
+sentinels, and CPU oracles. I32 row-dot hardware is not required because the
+current executable i32 multiply policy is staged for dot composites after the
+strict isolation fixture exposed non-exact signed i32 products.
 
 ## Staged Scope
 
@@ -119,5 +139,5 @@ The controlled inventory for this package is:
 
 ## Handoff
 
-Phase 13.3 should lock the value-surface contract for the accepted row-wise dot
-forms before implementation. `READY_FOR_TRITON=NO` remains true.
+Phase 13.6 should add value mixed acceptance fixtures for the accepted row-wise
+dot forms. `READY_FOR_TRITON=NO` remains true.

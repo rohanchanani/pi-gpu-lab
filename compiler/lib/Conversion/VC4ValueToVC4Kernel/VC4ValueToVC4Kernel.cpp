@@ -56,6 +56,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -569,6 +570,7 @@ struct LoweringState {
   DenseMap<Value, Value> reductionFragments;
   DenseMap<Value, Value> predicates;
   DenseMap<Value, ClassifiedMemoryMask> memoryMasks;
+  DenseSet<Value> i32DotProducts;
 };
 
 class KernelLowerer {
@@ -1387,6 +1389,8 @@ private:
         if (!hasStringAttr(func.getOperation(), kI32MulPolicyAttr, "mul24_safe"))
           return emitPhase5Diagnostic(
               op, "vector i32 muli requires vc4value.i32_mul_policy = \"mul24_safe\" in Phase 5");
+        if (isDotCompositeProduct(op))
+          state.i32DotProducts.insert(op->getResult(0));
         state.values[op->getResult(0)] = createMulPipe(
             builder, op->getLoc(), {lhs, rhs}, mlir::vc4kernel::MulALUOpcode::mul24, resultType);
       } else {
@@ -1587,6 +1591,9 @@ private:
                        "exact f32 dot requires unsupported exact reduction policy")
                  : reduction.emitOpError(
                        "f32 vector.reduction requires explicit finite-tree policy");
+    if (elementType.isSignlessInteger(32) &&
+        state.i32DotProducts.contains(reduction.getVector()))
+      return reduction.emitOpError("i32 dot is staged by current i32 multiply policy");
 
     Value input = lookupValue(reduction, reduction.getVector());
     if (!input)

@@ -294,11 +294,10 @@ The accepted Phase 13 value forms are:
   `f32` scalar. Inputs must be finite and the reduction policy must be
   explicit finite-tree. The result is a scalar f32 value; no exact IEEE sum or
   fused multiply-add claim is made.
-- `I32_VECTOR16_DOT_COMPOSITE`: elementwise `arith.muli` over
-  `vector<16xi32>`, with the product feeding `vector.reduction <add>` to an
-  `i32` scalar. The existing integer multiply policy applies; executable
-  lowering requires the current `vc4value.i32_mul_policy = "mul24_safe"`
-  contract.
+- `I32_VECTOR16_DOT_COMPOSITE`: surface-admissible, but executable lowering is
+  staged by the current i32 multiply policy. Phase 13.5 hardware isolation
+  showed that `vc4value.i32_mul_policy = "mul24_safe"` does not prove exact
+  signed i32 dot results for multiply plus reduction.
 - `TAIL_DOT_BY_INACTIVE_ZERO`: tail dots do not require a masked reduction op.
   Inactive lanes are zero through Phase 10 transfer-read `other=0` /
   inactive-zero semantics, and the dot reduction remains unmasked.

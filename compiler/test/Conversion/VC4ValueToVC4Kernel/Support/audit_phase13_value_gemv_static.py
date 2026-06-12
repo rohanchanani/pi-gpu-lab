@@ -58,6 +58,8 @@ def main() -> None:
             "unsupported GEMV element type diagnostic")
     require(source, 'vc4value.i32_mul_policy = \\"mul24_safe\\"',
             "i32 multiply policy diagnostic")
+    require(source, "i32 dot is staged by current i32 multiply policy",
+            "i32 dot staged policy diagnostic")
 
     for forbidden in [
         "vc4kernel.dot",
@@ -73,7 +75,7 @@ def main() -> None:
     for line in [
         "VALUE_GEMV_ROWWISE_DOT_STATIC=PASS",
         "VALUE_GEMV_F32_ROW_DOT_STATIC=PASS",
-        "VALUE_GEMV_I32_ROW_DOT_STATUS=PASS",
+        "VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY",
         "VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS",
         "F32_DOT_FINITE_TREE_POLICY=YES",
         "TL_DOT_TT_DOT_STAGED=YES",

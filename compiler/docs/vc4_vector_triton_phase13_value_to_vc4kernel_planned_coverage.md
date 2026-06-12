@@ -18,9 +18,9 @@ Phase 13.4 should add static conversion tests for:
 
 - f32 `vector<16xf32>` elementwise `arith.mulf` feeding finite-tree
   `vector.reduction <add>` and scalar `memref.store`;
-- i32 `vector<16xi32>` elementwise `arith.muli` feeding
-  `vector.reduction <add>` and scalar `memref.store` when
-  `vc4value.i32_mul_policy = "mul24_safe"` is present;
+- deterministic staging for i32 `vector<16xi32>` elementwise `arith.muli`
+  feeding `vector.reduction <add>` and scalar `memref.store` under the current
+  `vc4value.i32_mul_policy = "mul24_safe"` contract;
 - tail row dots whose inactive lanes are zeroed by Phase 10 transfer reads;
 - row-strided GEMV-v0 value patterns using Phase 11 rank-2 row-slice memory;
 - partial K-block dots that store one scalar partial per `(row, kblock)`;

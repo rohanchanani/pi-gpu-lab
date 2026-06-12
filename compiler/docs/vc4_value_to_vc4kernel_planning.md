@@ -6,8 +6,13 @@ PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
-VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
+VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
+VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
 VALUE_REDUCTION_TO_VC4KERNEL_STATIC=PASS
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
@@ -30,6 +35,7 @@ READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -512,8 +518,13 @@ isolation phase.
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
-VALUE_GEMV_I32_ROW_DOT_STATUS=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_STATIC=PASS
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
+VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
+VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 VALUE_TO_VC4KERNEL_PLANNED_COVERAGE=YES
@@ -523,6 +534,7 @@ VECTOR_CONTRACT_STAGED=YES
 MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 Phase 13 GEMV-v0 lowers only the explicit value composite:
@@ -547,10 +559,11 @@ The accepted f32 form is finite-input finite-tree only. `arith.mulf` feeds
 containing kernel. The target result is not exact IEEE left-to-right summation
 and not an FMA contraction.
 
-The accepted i32 form uses `arith.muli` over `vector<16xi32>` feeding
-`vector.reduction <add>` to scalar `i32`. The existing integer multiply policy
-continues to apply: executable lowering requires
-`vc4value.i32_mul_policy = "mul24_safe"` before selecting the VC4 mul24 path.
+The i32 dot composite is staged by the current integer multiply policy.
+Phase 13.5 hardware isolation showed that the existing
+`vc4value.i32_mul_policy = "mul24_safe"` path does not prove exact signed i32
+dot results after multiply and reduction. Standalone i32 reductions and
+standalone i32 mul24 policy uses remain governed by their existing contracts.
 
 Tail dots reuse Phase 10 inactive-zero loads. The reduction itself is
 unmasked; inactive lanes must already contain the add identity. Row-wise GEMV-v0
@@ -568,7 +581,8 @@ Planned Phase 13.4 static coverage is recorded in
 and must cover:
 
 - f32 vector multiply -> finite-tree f32 add reduction -> scalar store;
-- i32 vector multiply -> i32 add reduction -> scalar store with i32 mul policy;
+- i32 vector multiply -> i32 add reduction -> scalar store stages by current
+  i32 mul policy;
 - tail inactive-zero dot;
 - row-strided dot value pattern;
 - partial K-block dot value pattern;
@@ -581,15 +595,15 @@ multi-block K accumulation, atomics, f16/subword dot inputs, and exact/default
 f32 dot remain staged.
 
 Phase 13.4 statically proves this composite path through existing lowerers:
-`arith.mulf` / `arith.muli` lowers through `vc4kernel.fragment_alu.mul`,
+`arith.mulf` lowers through `vc4kernel.fragment_alu.mul`,
 `vector.reduction <add>` lowers through `vc4kernel.fragment_reduce`, and the
 scalar result store lowers through the Phase 12 one-lane VDW
 inactive-preserve scalar-store path. No `vc4kernel.dot` or GEMV-specific target
-operation is introduced.
+operation is introduced. The i32 multiply-plus-add-reduction dot composite is
+staged until an exact signed i32 dot policy is locked.
 
-The i32 row-dot status is `PASS` when the existing
-`vc4value.i32_mul_policy = "mul24_safe"` policy is present. Missing i32
-multiply policy remains a deterministic reject.
+The i32 row-dot status is `STAGED_BY_I32_POLICY`. Missing i32 multiply policy
+and present-but-insufficient i32 dot policy remain deterministic rejects.
 
 The Phase 13.4 static reject coverage preserves:
 
@@ -599,7 +613,10 @@ The Phase 13.4 static reject coverage preserves:
 - `exact f32 dot requires unsupported exact reduction policy`;
 - `unsupported GEMV element type`.
 
-Hardware isolation remains Phase 13.5 work.
+Phase 13.5 hardware isolation proves the f32 row-dot, partial K-block, and
+empty/repeat value fixtures on real hardware with `active_qpus=12`. I32 row-dot
+hardware is not required because i32 dot composites are staged by the current
+i32 multiply policy.
 
 ## 15. Math and SFU planning
 

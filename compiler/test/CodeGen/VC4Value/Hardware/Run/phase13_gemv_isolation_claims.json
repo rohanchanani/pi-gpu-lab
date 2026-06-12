@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase13_gemv_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_gemv_row_dot_f32_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_gemv_row_dot_f32_tail_vc4value",
+      "claims": [
+        {"claim": "f32_row_wise_dot", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_gemv_f32_row_dot", "input_marker": "arith.mulf %av, %xv : vector<16xf32>", "oracle_marker": "expected_dot"},
+        {"claim": "f32_finite_dot_policy_tolerance", "kind": "CHECKED_OUTPUT", "expected_field": "saw_f32_dot_finite_tree_policy", "input_marker": "vc4value.reduction_policy = \"finite_tree\"", "oracle_marker": "F32_TOLERANCE"},
+        {"claim": "scalar_dot_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_dot_store", "input_marker": "memref.store %dot_result, %y[%row]", "oracle_marker": "verify_sentinels"},
+        {"claim": "tail_inactive_zero_dot_inputs", "kind": "CHECKED_OUTPUT", "expected_field": "saw_tail_inactive_zero_dot_inputs", "input_marker": "vector.transfer_read %a[%row, %c0], %zero, %mask", "oracle_marker": "for (uint32_t c = 0; c < k; c++)"},
+        {"claim": "row_strided_A", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_row_strided_A", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "r * lda + c"},
+        {"claim": "x_vector_contiguous", "kind": "CHECKED_OUTPUT", "expected_field": "saw_contiguous_x_vector", "input_marker": "memref<?xf32, #vc4value.global>", "oracle_marker": "x_value"},
+        {"claim": "tt_dot_vector_contract_multiblock_static_rejects", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-gemv-tt-dot-staged.mlir", "invalid-gemv-vector-contract-staged.mlir", "invalid-gemv-multiblock-k-accumulation-staged.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_gemv_partial_kblock_f32_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_gemv_partial_kblock_f32_vc4value",
+      "claims": [
+        {"claim": "partial_kblock_dot", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_gemv_partial_kblock", "input_marker": "%kbase = arith.muli %kblock, %c16 : index", "oracle_marker": "expected_partial"},
+        {"claim": "no_multiblock_accumulation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_no_multiblock_accumulation", "input_marker": "memref.store %dot_result, %partials[%out]", "oracle_marker": "expected_partial"},
+        {"claim": "f32_finite_dot_policy_tolerance", "kind": "CHECKED_OUTPUT", "expected_field": "saw_f32_dot_finite_tree_policy", "input_marker": "vc4value.reduction_policy = \"finite_tree\"", "oracle_marker": "F32_TOLERANCE"},
+        {"claim": "scalar_dot_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_dot_store", "input_marker": "memref.store %dot_result, %partials[%out]", "oracle_marker": "verify_sentinels"},
+        {"claim": "tt_dot_vector_contract_multiblock_static_rejects", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-gemv-tt-dot-staged.mlir", "invalid-gemv-vector-contract-staged.mlir", "invalid-gemv-multiblock-k-accumulation-staged.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_gemv_empty_repeat_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_gemv_empty_repeat_vc4value",
+      "claims": [
+        {"claim": "empty_repeat_launch", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "cf.cond_br %nonempty, ^dot, ^exit", "oracle_marker": "cases[]"},
+        {"claim": "empty_k_sentinel_preserve", "kind": "CHECKED_OUTPUT", "expected_field": "saw_empty_k_sentinel_preserve", "input_marker": "arith.cmpi ugt, %k, %c0 : index", "oracle_marker": "k == 0u"},
+        {"claim": "f32_row_wise_dot", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_gemv_f32_row_dot", "input_marker": "arith.mulf %av, %xv : vector<16xf32>", "oracle_marker": "expected_dot"},
+        {"claim": "i32_dot_staged_by_policy", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-gemv-i32-dot-staged-by-policy.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    }
+  ]
+}

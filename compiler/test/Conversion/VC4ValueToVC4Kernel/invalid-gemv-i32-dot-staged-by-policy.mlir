@@ -1,6 +1,6 @@
-// RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel | FileCheck %s
+// RUN: not vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel 2>&1 | FileCheck %s
 
-func.func @gemv_row_dot_i32_lowers(
+func.func @invalid_gemv_i32_dot_staged_by_policy(
     %a: memref<?xi32, #vc4value.global> {vc4value.arg_name = "a", vc4value.direction = "in", vc4value.shape_args = ["n"]},
     %x: memref<?xi32, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["n"]},
     %y: memref<?xi32, #vc4value.global> {vc4value.arg_name = "y", vc4value.direction = "out", vc4value.shape_args = ["rows"]},
@@ -20,13 +20,4 @@ func.func @gemv_row_dot_i32_lowers(
   return
 }
 
-// CHECK-LABEL: vc4kernel.kernel @gemv_row_dot_i32_lowers
-// CHECK: vc4kernel.fragment_alu.mul
-// CHECK-SAME: opcode = #vc4kernel.mul_alu_opcode<mul24>
-// CHECK: vc4kernel.fragment_reduce
-// CHECK: vc4kernel.vdw_store_fragment
-// CHECK-NOT: fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>
-// CHECK-NOT: func.func
-// CHECK-NOT: vc4value.
-// CHECK-NOT: vector.
-// CHECK-NOT: memref.
+// CHECK: i32 dot is staged by current i32 multiply policy
