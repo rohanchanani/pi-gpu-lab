@@ -180,3 +180,26 @@ multi-block K accumulation remain staged with deterministic diagnostics. The
 importer does not parse printed TTIR, infer semantics from names or paths,
 emit lower-half IR directly, regenerate TTIR, or alter the global Triton
 readiness gate.
+
+## Phase 13.8 TTIR Hardware Isolation Lock
+
+TTIR_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+TTIR_GEMV_F32_ROW_DOT_HARDWARE=PASS
+TTIR_GEMV_TAIL_DOT_HARDWARE=PASS
+TTIR_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
+TTIR_GEMV_I32_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+READY_FOR_PHASE13_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO
+
+Phase 13.8 proves the accepted controlled TTIR GEMV row-wise dot fixtures on
+real VC4 hardware. The hardware fixtures use exact copies of the controlled
+source-controlled TTIR snapshots and lower through the C++ TTIR importer,
+standard value layer, VC4Kernel, SSAVC4, and scheduled VC4. The row-dot,
+tail/inactive-zero, and partial K-block fixtures all run with
+`active_qpus=12`, strict CPU oracles, output and padding sentinels, nonzero
+output hashes, and zero launch failures.
+
+I32 TTIR GEMV hardware is not required in this lock because the current value
+i32 dot path remains staged by i32 multiply policy. `tl.dot`, `tt.dot`,
+`vector.contract`, and multi-block K accumulation remain static negative
+coverage, not hardware-accepted features.

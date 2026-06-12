@@ -1,0 +1,6 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/audit_phase13_gemv_isolation_claims.py" "%vc4_repo_root" | FileCheck %s
+
+# CHECK: TTIR_GEMV_CLAIM_AUDIT=PASS
+# CHECK: fixtures=3
+# CHECK: TTIR_GEMV_I32_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
+# CHECK: static_negative=4

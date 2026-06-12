@@ -1,22 +1,23 @@
 {
-  "name": "ttir_gemv_row_dot_f32_b16_vc4triton",
+  "name": "ttir_gemv_partial_kblock_f32_b16_vc4triton",
   "status": "PASS",
   "required": {
-    "cases": 9,
+    "cases": 7,
     "total_mismatches": 0,
     "sentinel_mismatches": 0,
     "launch_failures": 0,
     "active_qpus": 12,
     "lanes": 16,
     "block_x": 16,
-    "max_rows": 13,
-    "max_k": 16,
-    "max_lda": 23,
+    "max_rows": 7,
+    "max_k": 32,
+    "max_kblocks": 2,
+    "max_lda": 39,
     "output_hash_nonzero": 1,
     "saw_real_ttir_snapshot": 1,
     "saw_cpp_ttir_importer": 1,
     "saw_ttir_gemv_rowwise_dot": 1,
-    "saw_ttir_gemv_f32_row_dot": 1,
+    "saw_ttir_gemv_partial_kblock": 1,
     "saw_value_gemv_rowwise_dot": 1,
     "saw_ttir_product_reduction": 1,
     "saw_ttir_scalar_result_store": 1,
@@ -30,7 +31,7 @@
     "saw_no_tl_dot_tt_dot": 1,
     "saw_no_vector_contract": 1,
     "saw_no_multiblock_k_accumulation": 1,
-    "runtime_launches": 9
+    "runtime_launches": 7
   },
   "float_max": {
     "max_abs_diff": 0.001

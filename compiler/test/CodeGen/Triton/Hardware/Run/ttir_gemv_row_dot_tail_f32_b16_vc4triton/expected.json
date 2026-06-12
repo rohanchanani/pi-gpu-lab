@@ -1,5 +1,5 @@
 {
-  "name": "ttir_gemv_row_dot_f32_b16_vc4triton",
+  "name": "ttir_gemv_row_dot_tail_f32_b16_vc4triton",
   "status": "PASS",
   "required": {
     "cases": 9,
@@ -17,6 +17,7 @@
     "saw_cpp_ttir_importer": 1,
     "saw_ttir_gemv_rowwise_dot": 1,
     "saw_ttir_gemv_f32_row_dot": 1,
+    "saw_ttir_gemv_tail_dot": 1,
     "saw_value_gemv_rowwise_dot": 1,
     "saw_ttir_product_reduction": 1,
     "saw_ttir_scalar_result_store": 1,
@@ -27,6 +28,7 @@
     "saw_phase11_row_strided_memory": 1,
     "saw_phase12_reduction_path": 1,
     "saw_f32_finite_tree_policy": 1,
+    "saw_repeat_invocation": 1,
     "saw_no_tl_dot_tt_dot": 1,
     "saw_no_vector_contract": 1,
     "saw_no_multiblock_k_accumulation": 1,

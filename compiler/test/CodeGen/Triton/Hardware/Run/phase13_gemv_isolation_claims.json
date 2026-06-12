@@ -1,0 +1,95 @@
+{
+  "phase": "Phase13.8",
+  "fixtures": [
+    {
+      "name": "ttir_gemv_row_dot_f32_b16_vc4triton",
+      "source": "examples/triton/phase13_gemv_rowwise_dot/sources/ttir_gemv_row_dot_f32_b16.py",
+      "snapshot": "examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.mulf", "arith.addf", "tt.make_range", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_gemv_f32_row_dot"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "tl_sum_product_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_dot_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_dot_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase11_row_strided_memory", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_tl_dot_tt_dot", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_vector_contract", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_multiblock_k_accumulation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_gemv_row_dot_tail_f32_b16_vc4triton",
+      "source": "examples/triton/phase13_gemv_rowwise_dot/sources/ttir_gemv_row_dot_tail_f32_b16.py",
+      "snapshot": "examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_tail_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.mulf", "arith.addf", "tt.make_range", "arith.cmpi slt", "scf.if"],
+      "expected_result_fields": ["saw_ttir_gemv_f32_row_dot", "saw_ttir_gemv_tail_dot", "saw_repeat_invocation"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "tl_sum_product_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_dot_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_dot_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase11_row_strided_memory", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_tl_dot_tt_dot", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_vector_contract", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_multiblock_k_accumulation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_gemv_partial_kblock_f32_b16_vc4triton",
+      "source": "examples/triton/phase13_gemv_rowwise_dot/sources/ttir_gemv_partial_kblock_f32_b16.py",
+      "snapshot": "examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_partial_kblock_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.mulf", "arith.addf", "tt.get_program_id y", "arith.muli"],
+      "expected_result_fields": ["saw_ttir_gemv_partial_kblock"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "tl_sum_product_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_dot_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_dot_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "partial_kblock_dot", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase11_row_strided_memory", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_tl_dot_tt_dot", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_vector_contract", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_multiblock_k_accumulation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "name": "tl_dot",
+      "path": "compiler/test/Conversion/TritonToVC4Value/GEMV/invalid-ttir-tl-dot-staged.mlir",
+      "diagnostic": "tt.dot / contract"
+    },
+    {
+      "name": "tt_dot",
+      "path": "compiler/test/Conversion/TritonToVC4Value/GEMV/invalid-ttir-tt-dot-staged.mlir",
+      "diagnostic": "tt.dot / contract"
+    },
+    {
+      "name": "vector_contract",
+      "path": "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-vector-contract-staged.mlir",
+      "diagnostic": "vector.contract is staged for Phase 15/contract"
+    },
+    {
+      "name": "multiblock_k",
+      "path": "compiler/test/Conversion/TritonToVC4Value/GEMV/invalid-ttir-gemv-loop-kblocks-staged.mlir",
+      "diagnostic": "multi-block K accumulation is staged"
+    }
+  ]
+}
