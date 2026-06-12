@@ -897,3 +897,37 @@ The importer stages real `tl.dot` / `tt.dot` forms and loop-carried
 multi-block K accumulation. It does not add vector.contract, full GEMM,
 atomics, casts, f16/subword, SFU/math, lower-half emission, or a broad Triton
 readiness claim.
+
+## 30. Phase 13 final GEMV row-wise dot TTIR profile
+
+PHASE13_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_GEMV_ROWWISE_DOT
+VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
+VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_GEMV_ROWWISE_DOT_SOURCES=YES
+REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+TTIR_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+F32_DOT_FINITE_TREE_POLICY=YES
+EXACT_F32_DOT_NOT_CLAIMED=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FULL_GEMM_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_GEMV_WORKAROUNDS=YES
+READY_FOR_PHASE14_ML_STORAGE_NUMERIC_CONVERSION_POLICY=YES
+READY_FOR_TRITON=NO
+
+The locked TTIR profile accepts controlled real Triton `tl.sum(a * x, axis=0)`
+row-wise dot snapshots and independent partial K-block snapshots. The importer
+classifies the product and add-reduction structurally through SSA operands,
+regions, operation classes, and exact attributes, then lowers to the standard
+value layer. Source names and paths remain provenance only.

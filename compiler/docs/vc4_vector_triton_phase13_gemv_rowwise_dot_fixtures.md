@@ -203,3 +203,40 @@ I32 TTIR GEMV hardware is not required in this lock because the current value
 i32 dot path remains staged by i32 multiply policy. `tl.dot`, `tt.dot`,
 `vector.contract`, and multi-block K accumulation remain static negative
 coverage, not hardware-accepted features.
+
+## Phase 13 Final Lock
+
+PHASE13_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_GEMV_ROWWISE_DOT
+VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
+VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_GEMV_ROWWISE_DOT_SOURCES=YES
+REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+TTIR_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+F32_DOT_FINITE_TREE_POLICY=YES
+EXACT_F32_DOT_NOT_CLAIMED=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FULL_GEMM_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_GEMV_WORKAROUNDS=YES
+READY_FOR_PHASE14_ML_STORAGE_NUMERIC_CONVERSION_POLICY=YES
+READY_FOR_TRITON=NO
+
+The final TTIR mixed acceptance fixture
+`mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton`
+uses exact copies of the controlled Phase 13 row-dot and partial-K-block TTIR
+snapshots. It proves real TTIR import, Phase 7 elementwise product, Phase 8.5
+control flow, Phase 9 multi-axis launch identity, Phase 10 tail masks, Phase
+11 row-strided memory, Phase 12 finite f32 reductions/scalar stores, and Phase
+13 f32 row-wise dot plus partial K-block dot on hardware with
+`active_qpus=12`.

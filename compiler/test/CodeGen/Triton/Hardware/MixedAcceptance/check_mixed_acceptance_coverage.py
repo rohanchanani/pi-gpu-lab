@@ -40,6 +40,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
     "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
     "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton",
+    "mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -84,6 +85,13 @@ REQUIRED_FEATURES = {
     "ttir_scalar_reduction_store",
     "f32_finite_tree_policy",
     "no_dot_gemv",
+    "ttir_gemv_f32_row_dot",
+    "ttir_gemv_partial_kblock",
+    "ttir_gemv_rowwise_dot",
+    "value_gemv_rowwise_dot",
+    "no_tl_dot_tt_dot",
+    "no_vector_contract",
+    "no_multiblock_k_accumulation",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -251,7 +259,13 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_mask_tail but TTIR lacks canonical slt tail mask")
     if "ttir_compute_mask_select" in tags and ("arith.cmpf" not in ttir_text or "arith.select" not in ttir_text):
         fail(f"{name} claims ttir_compute_mask_select but TTIR lacks cmpf/select")
-    if "ttir_row_strided_memory" in tags and ("tt.get_program_id y" not in ttir_text or not re.search(r"arith\.muli %[A-Za-z0-9_]+, %ld[oxy]", ttir_text)):
+    if "ttir_row_strided_memory" in tags and (
+        "tt.get_program_id y" not in ttir_text
+        or not (
+            re.search(r"arith\.muli %[A-Za-z0-9_]+, %ld[oxy]", ttir_text)
+            or re.search(r"arith\.muli %[A-Za-z0-9_]+, %LDA", ttir_text)
+        )
+    ):
         fail(f"{name} claims ttir_row_strided_memory but TTIR lacks row*stride pointer arithmetic")
     if "value_mask_classifier" in tags and "saw_value_mask_classifier" not in (repo_root / fixture["path"] / "expected.json").read_text():
         fail(f"{name} claims value_mask_classifier but expected.json lacks saw_value_mask_classifier")
@@ -271,6 +285,22 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_scalar_reduction_store but TTIR lacks reduction scalar store")
     if "no_dot_gemv" in tags and ("tt.dot" in ttir_text or "gemv" in ttir_text.lower()):
         fail(f"{name} claims no_dot_gemv but TTIR contains dot/GEMV marker")
+    if "ttir_gemv_f32_row_dot" in tags and (
+        "arith.mulf" not in ttir_text or "tt.reduce" not in ttir_text or "arith.addf" not in ttir_text
+    ):
+        fail(f"{name} claims ttir_gemv_f32_row_dot but TTIR lacks f32 product reduction")
+    if "ttir_gemv_partial_kblock" in tags and "partials" not in ttir_text:
+        fail(f"{name} claims ttir_gemv_partial_kblock but TTIR lacks partial output snapshot")
+    if "ttir_gemv_rowwise_dot" in tags and ("arith.mulf" not in ttir_text or "tt.reduce" not in ttir_text):
+        fail(f"{name} claims ttir_gemv_rowwise_dot but TTIR lacks product-reduction dot")
+    if "value_gemv_rowwise_dot" in tags and "saw_value_gemv_rowwise_dot" not in (repo_root / fixture["path"] / "expected.json").read_text():
+        fail(f"{name} claims value_gemv_rowwise_dot but expected.json lacks saw_value_gemv_rowwise_dot")
+    if "no_tl_dot_tt_dot" in tags and "tt.dot" in ttir_text:
+        fail(f"{name} claims no_tl_dot_tt_dot but TTIR contains tt.dot")
+    if "no_vector_contract" in tags and "vector.contract" in ttir_text:
+        fail(f"{name} claims no_vector_contract but TTIR contains vector.contract")
+    if "no_multiblock_k_accumulation" in tags and "atomic" in ttir_text.lower():
+        fail(f"{name} claims no_multiblock_k_accumulation but TTIR contains atomic marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

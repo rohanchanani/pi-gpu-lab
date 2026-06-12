@@ -1256,3 +1256,42 @@ planner.
 No exact/default f32 reduction support is claimed. Non-add reductions, rank>1
 reductions, `vector.multi_reduction`, dot, GEMV, GEMM, scans, atomics, and
 generalized math remain staged for later phases.
+
+## 36. Phase 13 final GEMV row-wise dot lock
+
+PHASE13_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_GEMV_ROWWISE_DOT
+VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
+VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
+VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
+VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
+VALUE_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+VALUE_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_GEMV_ROWWISE_DOT_SOURCES=YES
+REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_ROWWISE_DOT_HARDWARE_ISOLATION=PASS
+TTIR_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+F32_DOT_FINITE_TREE_POLICY=YES
+EXACT_F32_DOT_NOT_CLAIMED=YES
+TL_DOT_TT_DOT_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FULL_GEMM_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_GEMV_WORKAROUNDS=YES
+READY_FOR_PHASE14_ML_STORAGE_NUMERIC_CONVERSION_POLICY=YES
+READY_FOR_TRITON=NO
+
+The value planner accepts the Phase 13 row-wise dot only as a composite path:
+elementwise f32 multiply over `vector<16xf32>` feeds the finite-tree add
+reduction path from Phase 12, and the scalar result stores through the Phase 12
+scalar store path. The partial K-block form stores one independent scalar
+partial per `(row, kblock)`. I32 row-wise dot remains staged by the current i32
+multiply policy.
+
+No new VC4Kernel dot op is introduced. `tl.dot`, `tt.dot`, `vector.contract`,
+full GEMM, atomics, cross-program accumulation, exact/default f32 dot, and
+multi-block K accumulation into final `y[row]` remain staged.
