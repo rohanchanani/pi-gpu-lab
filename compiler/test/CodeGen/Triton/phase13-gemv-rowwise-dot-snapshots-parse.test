@@ -1,0 +1,71 @@
+# REQUIRES: vc4-triton-cpp-frontend
+# RUN: mkdir -p %t
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_phase13_gemv_snapshots.py" "%vc4_repo_root" | FileCheck %s --check-prefix=MANIFEST
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_f32_b16.ttir.mlir" -o %t/row_f32.mlir
+# RUN: FileCheck %s --check-prefix=ROW-F32 --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/row_f32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_tail_f32_b16.ttir.mlir" -o %t/row_tail_f32.mlir
+# RUN: FileCheck %s --check-prefix=ROW-TAIL --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/row_tail_f32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_partial_kblock_f32_b16.ttir.mlir" -o %t/partial_f32.mlir
+# RUN: FileCheck %s --check-prefix=PARTIAL --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/partial_f32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16.ttir.mlir" -o %t/mixed.mlir
+# RUN: FileCheck %s --check-prefix=MIXED --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/mixed.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_i32_b16.ttir.mlir" -o %t/row_i32.mlir
+# RUN: FileCheck %s --check-prefix=ROW-I32 --implicit-check-not='arith.sitofp' --implicit-check-not='arith.fptosi' --implicit-check-not='tt.dot' --implicit-check-not='tt.atomic' --implicit-check-not='tt.make_tensor_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/row_i32.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_tl_dot_reject_b16.ttir.mlir" -o %t/tl_dot.mlir
+# RUN: FileCheck %s --check-prefix=TL-DOT --input-file=%t/tl_dot.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_loop_kblocks_reject_b16.ttir.mlir" -o %t/loop_kblocks.mlir
+# RUN: FileCheck %s --check-prefix=LOOP --input-file=%t/loop_kblocks.mlir
+
+# MANIFEST: PHASE13_GEMV_MANIFEST_AUDIT=PASS
+# MANIFEST: PHASE13_ACCEPTED_SNAPSHOTS=5
+# MANIFEST: PHASE13_STAGED_SNAPSHOTS=2
+# MANIFEST: READY_FOR_TRITON=NO
+
+# ROW-F32: tt.func public @ttir_gemv_row_dot_f32_b16_kernel
+# ROW-F32: tt.load
+# ROW-F32: tt.load
+# ROW-F32: arith.mulf
+# ROW-F32: tt.store
+# ROW-F32: tt.reduce
+# ROW-F32: arith.addf
+
+# ROW-TAIL: tt.func public @ttir_gemv_row_dot_tail_f32_b16_kernel
+# ROW-TAIL: tt.load
+# ROW-TAIL: tt.load
+# ROW-TAIL: arith.mulf
+# ROW-TAIL: scf.if
+# ROW-TAIL: tt.store
+# ROW-TAIL: tt.reduce
+
+# PARTIAL: tt.func public @ttir_gemv_partial_kblock_f32_b16_kernel
+# PARTIAL: tt.get_program_id x
+# PARTIAL: tt.get_program_id y
+# PARTIAL: tt.load
+# PARTIAL: arith.mulf
+# PARTIAL: tt.store
+# PARTIAL: tt.reduce
+
+# MIXED: tt.func public @mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_kernel
+# MIXED: tt.get_program_id x
+# MIXED: tt.get_program_id y
+# MIXED: tt.load
+# MIXED: arith.mulf
+# MIXED: scf.if
+# MIXED: tt.store
+# MIXED: tt.reduce
+
+# ROW-I32: tt.func public @ttir_gemv_row_dot_i32_b16_kernel
+# ROW-I32: tt.load
+# ROW-I32: tt.load
+# ROW-I32: arith.muli
+# ROW-I32: tt.store
+# ROW-I32: tt.reduce
+# ROW-I32: arith.addi
+
+# TL-DOT: tt.func public @ttir_tl_dot_reject_b16_kernel
+# TL-DOT: tt.dot
+
+# LOOP: tt.func public @ttir_gemv_loop_kblocks_reject_b16_kernel
+# LOOP: scf.for
+# LOOP: arith.addf
+# LOOP: tt.reduce

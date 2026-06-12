@@ -1,0 +1,82 @@
+PHASE13_CONTROLLED_TRITON_GEMV_ROWWISE_DOT_FIXTURES=YES
+REAL_TRITON_GEMV_ROWWISE_DOT_SOURCES=YES
+REAL_TTIR_GEMV_ROWWISE_DOT_SNAPSHOTS=YES
+ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
+F32_DOT_FINITE_TREE_POLICY=YES
+TL_DOT_TT_DOT_FIXTURE_STAGED=YES
+MULTIBLOCK_K_ACCUMULATION_FIXTURE_STAGED=YES
+VECTOR_CONTRACT_STAGED=YES
+READY_FOR_PHASE13_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_TRITON=NO
+
+# VC4 Vector/Triton Phase 13 GEMV Row-Wise Dot Fixtures
+
+Phase 13.2 adds controlled real Triton sources and source-controlled emitted
+TTIR snapshots for GEMV-v0 / row-wise dot. These fixtures define the TTIR
+acceptance contract for the next value-surface contract package. They do not
+modify compiler lowering and do not claim hardware proof.
+
+## Accepted Scope
+
+Accepted Phase 13.2 fixtures use:
+
+- `tl.sum(a * x, axis=0)`, not `tl.dot`;
+- `BLOCK_SIZE = 16`;
+- row-strided A memory from Phase 11;
+- rank-1 contiguous X memory;
+- scalar Y or partial-output stores;
+- Phase 10 canonical tail masks and zero `other`;
+- Phase 12 add reductions;
+- finite-input finite-tree f32 policy, not exact IEEE f32 reduction.
+
+Accepted snapshots are:
+
+- `ttir_gemv_row_dot_f32_b16.ttir.mlir`
+- `ttir_gemv_row_dot_tail_f32_b16.ttir.mlir`
+- `ttir_gemv_partial_kblock_f32_b16.ttir.mlir`
+- `mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16.ttir.mlir`
+- `ttir_gemv_row_dot_i32_b16.ttir.mlir`
+
+The mixed fixture combines Phase 8.5 scalar control flow, Phase 9 axes, Phase
+10 masks, Phase 11 row-strided memory, Phase 12 reductions, and the Phase 13
+row-dot composite.
+
+## Staged Scope
+
+`ttir_tl_dot_reject_b16.ttir.mlir` is staged because real Triton emits
+first-class `tt.dot` over rank-2 tensor operands. Phase 13 GEMV-v0 does not
+accept `tl.dot`, `tt.dot`, `vector.contract`, or rank-2 tile values.
+
+`ttir_gemv_loop_kblocks_reject_b16.ttir.mlir` is staged because it performs
+multi-block K accumulation through a loop-carried scalar f32 accumulator. Phase
+13 GEMV-v0 accepts one `vector<16>` K block or one independently stored partial
+K-block result, not cross-block accumulation.
+
+`vector.contract` remains staged. It is a value-layer operation, not a real
+Triton TTIR snapshot form in this package.
+
+## Files
+
+Sources and snapshots live under:
+
+```text
+examples/triton/phase13_gemv_rowwise_dot/
+```
+
+The manifest records generator commands, classifications, feature claims, and
+the f32 finite-tree policy caveat:
+
+```text
+examples/triton/phase13_gemv_rowwise_dot/manifest.json
+```
+
+The controlled inventory for this package is:
+
+```text
+.vc4_auto/vector_triton_phase13_2_controlled_fixtures/CONTROLLED_TTIR_GEMV_INVENTORY.md
+```
+
+## Handoff
+
+Phase 13.3 should lock the value-surface contract for the accepted row-wise dot
+forms before implementation. `READY_FOR_TRITON=NO` remains true.
