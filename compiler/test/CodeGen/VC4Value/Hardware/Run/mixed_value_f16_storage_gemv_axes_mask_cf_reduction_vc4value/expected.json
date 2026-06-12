@@ -1,0 +1,36 @@
+{
+  "name": "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "elements_checked": 467,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "saw_value_multi_axis": 1,
+    "saw_value_control_flow": 1,
+    "saw_value_mask_tail": 1,
+    "saw_value_compute_mask_select": 1,
+    "saw_value_row_strided_memory": 1,
+    "saw_value_reduction_f32_finite_add": 1,
+    "saw_value_scalar_reduction_store": 1,
+    "saw_value_gemv_f32_row_dot": 1,
+    "saw_value_gemv_partial_kblock": 1,
+    "saw_value_f16_storage_load": 1,
+    "saw_value_f16_storage_store": 1,
+    "saw_value_f32_compute_after_f16_load": 1,
+    "saw_f16_storage_finite_policy": 1,
+    "saw_no_native_f16_arithmetic": 1,
+    "saw_no_bf16_fp8": 1,
+    "saw_no_softmax_sfu": 1,
+    "saw_no_tl_dot_tt_dot": 1,
+    "saw_no_vector_contract": 1,
+    "saw_no_multiblock_k_accumulation": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.02
+  }
+}

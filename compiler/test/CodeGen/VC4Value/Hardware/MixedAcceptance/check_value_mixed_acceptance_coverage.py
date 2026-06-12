@@ -52,6 +52,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
     "mixed_value_reduction_axes_mask_cf_strided_vc4value",
     "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
+    "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -105,6 +106,13 @@ REQUIRED_FEATURES = {
     "value_no_vector_contract",
     "value_no_multiblock_k_accumulation",
     "value_no_dot_gemv",
+    "value_f16_storage_load",
+    "value_f16_storage_store",
+    "value_f32_compute_after_f16_load",
+    "value_f16_storage_finite_policy",
+    "value_no_native_f16_arithmetic",
+    "value_no_bf16_fp8",
+    "value_no_softmax_sfu",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -237,6 +245,10 @@ def validate_fixture(repo_root, fixture):
         "value_f32_finite_tree_policy": "vc4value.reduction_policy = \"finite_tree\"",
         "value_gemv_f32_row_dot": "arith.mulf",
         "value_gemv_partial_kblock": "%partial_index = arith.addi",
+        "value_f16_storage_load": "vector.transfer_read %rank_f16",
+        "value_f16_storage_store": "arith.truncf",
+        "value_f32_compute_after_f16_load": "arith.extf",
+        "value_f16_storage_finite_policy": "vc4value.f16_storage_policy = \"finite\"",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -285,6 +297,18 @@ def validate_fixture(repo_root, fixture):
         for marker in ("vector.contract", "linalg.", "dot", "gemv", "gemm"):
             if marker in mlir.lower():
                 fail(f"{name} claims no dot/GEMV/GEMM but input uses {marker}")
+    if "value_no_native_f16_arithmetic" in tags:
+        for line in mlir.splitlines():
+            if ("arith.addf" in line or "arith.mulf" in line) and "vector<16xf16>" in line:
+                fail(f"{name} claims no native f16 arithmetic but input uses {line.strip()}")
+    if "value_no_bf16_fp8" in tags:
+        for marker in ("bf16", "fp8", "f8E", "f8e"):
+            if marker in mlir:
+                fail(f"{name} claims no bf16/fp8 but input uses {marker}")
+    if "value_no_softmax_sfu" in tags:
+        for marker in ("math.", "softmax", "exp", "log", "rsqrt", "recip"):
+            if marker in mlir.lower():
+                fail(f"{name} claims no softmax/SFU but input uses {marker}")
 
 
 def validate_manifest(repo_root, manifest):
@@ -296,7 +320,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase13_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase14_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -368,7 +392,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

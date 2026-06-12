@@ -244,6 +244,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "MIXED_VALUE_MASK_MEMORY_AXIS_CF_CASE" not in harness
             and "MIXED_VALUE_STRIDED_RANKED_AXIS_MASK_CF_CASE" not in harness
             and "MIXED_VALUE_GEMV_ROW_DOT_AXIS_MASK_CF_CASE" not in harness
+            and "MIXED_VALUE_F16_STORAGE_GEMV_AXIS_MASK_CF_CASE" not in harness
         ):
             fail("saw_value_control_flow harness missing mixed case result marker")
 
@@ -260,8 +261,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, marker, "saw_value_mask_empty harness")
 
     if "saw_value_mask_tail" in claim_names:
-        for marker in ("%mask = vector.create_mask %remaining", "vector.transfer_write %store_f", "vector.transfer_write %store_i"):
-            require_marker(mlir, marker, "saw_value_mask_tail input")
+        require_marker(mlir, "%mask = vector.create_mask %remaining", "saw_value_mask_tail input")
+        require_marker(mlir, "vector.transfer_write %store_i", "saw_value_mask_tail input")
+        if "vector.transfer_write %store_f" not in mlir and "vector.transfer_write %store_h" not in mlir:
+            fail("saw_value_mask_tail input missing checked f32/f16 tail transfer_write")
         for marker in ("verify_tail_results", "verify_sentinels", "sentinel_mismatches"):
             require_marker(harness, marker, "saw_value_mask_tail harness")
 
@@ -345,13 +348,22 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(mlir, "vc4value.shape_args", "saw_no_hidden_memref_descriptor input")
 
     if "saw_value_row_strided_memory" in claim_names:
-        for marker in (
+        common_markers = (
             "memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>",
-            "memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>",
             "vector.transfer_read %rank_i[%pid1, %col]",
-            "vector.transfer_read %rank_f[%pid1, %col]",
-        ):
+        )
+        for marker in common_markers:
             require_marker(mlir, marker, "saw_value_row_strided_memory input")
+        has_f32_row = (
+            "memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>" in mlir
+            and "vector.transfer_read %rank_f[%pid1, %col]" in mlir
+        )
+        has_f16_row = (
+            "memref<?x?xf16, strided<[?, 1], offset: 0>, #vc4value.global>" in mlir
+            and "vector.transfer_read %rank_f16[%pid1, %col]" in mlir
+        )
+        if not has_f32_row and not has_f16_row:
+            fail("saw_value_row_strided_memory input lacks f32 or f16 row-strided value read")
         for marker in ("r * cfg->lda + c", "rank_i_value", "rank_f_value", "row padding"):
             require_marker(harness, marker, "saw_value_row_strided_memory harness")
 
@@ -393,13 +405,23 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_value_gemv_f32_row_dot" in claim_names:
         for marker in (
-            "vector.transfer_read %rank_f[%pid1, %col]",
-            "vector.transfer_read %x[%col]",
             "%prod = arith.mulf %rank_tail_f, %x_tail : vector<16xf32>",
             "%dot = vector.reduction <add>, %prod : vector<16xf32> into f32",
             "memref.store %dot, %partial_out_f[%partial_index]",
         ):
             require_marker(mlir, marker, "saw_value_gemv_f32_row_dot input")
+        has_f32_inputs = (
+            "vector.transfer_read %rank_f[%pid1, %col]" in mlir
+            and "vector.transfer_read %x[%col]" in mlir
+        )
+        has_f16_inputs = (
+            "vector.transfer_read %rank_f16[%pid1, %col]" in mlir
+            and "vector.transfer_read %x_f16[%col]" in mlir
+            and "arith.extf %rank_tail_h" in mlir
+            and "arith.extf %x_tail_h" in mlir
+        )
+        if not has_f32_inputs and not has_f16_inputs:
+            fail("saw_value_gemv_f32_row_dot input lacks accepted f32 or f16-to-f32 dot inputs")
         for marker in ("x_value", "partial_dot += prod", "verify_partials"):
             require_marker(harness, marker, "saw_value_gemv_f32_row_dot harness")
 
@@ -435,6 +457,53 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         for marker in ('vc4value.fp_domain = "finite"', 'vc4value.reduction_policy = "finite_tree"'):
             require_marker(mlir, marker, "saw_f32_finite_tree_policy input")
         require_marker(harness, "EPSILON", "saw_f32_finite_tree_policy harness")
+
+    if "saw_value_f16_storage_load" in claim_names:
+        for marker in (
+            "memref<?x?xf16, strided<[?, 1], offset: 0>, #vc4value.global>",
+            "vector.transfer_read %rank_f16[%pid1, %col]",
+            "vector.transfer_read %x_f16[%col]",
+            "arith.extf %rank_tail_h",
+            "arith.extf %x_tail_h",
+        ):
+            require_marker(mlir, marker, "saw_value_f16_storage_load input")
+        for marker in ("rank_f16_values", "x_f16_values", "f16_to_f32"):
+            require_marker(harness, marker, "saw_value_f16_storage_load harness")
+
+    if "saw_value_f16_storage_store" in claim_names:
+        for marker in (
+            "arith.truncf %store_f : vector<16xf32> to vector<16xf16>",
+            "vector.transfer_write %store_h, %tail_out_f16",
+        ):
+            require_marker(mlir, marker, "saw_value_f16_storage_store input")
+        for marker in ("tail_out_f16", "f16_to_f32(tail_out_f16[index])", "SENTINEL_H"):
+            require_marker(harness, marker, "saw_value_f16_storage_store harness")
+
+    if "saw_value_f32_compute_after_f16_load" in claim_names:
+        for marker in ("arith.extf", "arith.mulf", "arith.addf", "vector.reduction <add>"):
+            require_marker(mlir, marker, "saw_value_f32_compute_after_f16_load input")
+        for marker in ("rank_f_value", "x_value", "partial_dot += prod"):
+            require_marker(harness, marker, "saw_value_f32_compute_after_f16_load harness")
+
+    if "saw_f16_storage_finite_policy" in claim_names:
+        require_marker(mlir, 'vc4value.f16_storage_policy = "finite"', "saw_f16_storage_finite_policy input")
+        require_marker(harness, "EPSILON", "saw_f16_storage_finite_policy harness")
+
+    if "saw_no_native_f16_arithmetic" in claim_names:
+        for line in mlir.splitlines():
+            if ("arith.addf" in line or "arith.mulf" in line) and "vector<16xf16>" in line:
+                fail(f"saw_no_native_f16_arithmetic input uses native f16 arithmetic: {line.strip()}")
+
+    if "saw_no_bf16_fp8" in claim_names:
+        for marker in ("bf16", "fp8", "f8E", "f8e"):
+            if marker in mlir:
+                fail(f"saw_no_bf16_fp8 input uses forbidden marker {marker}")
+
+    if "saw_no_softmax_sfu" in claim_names:
+        for marker in ("math.", "softmax", "exp", "log", "rsqrt", "recip"):
+            if marker in mlir.lower():
+                fail(f"saw_no_softmax_sfu input uses forbidden marker {marker}")
+        require_marker(harness, "saw_no_softmax_sfu=1", "saw_no_softmax_sfu harness")
 
     if "saw_no_dot_gemv" in claim_names:
         lowered = mlir.lower()

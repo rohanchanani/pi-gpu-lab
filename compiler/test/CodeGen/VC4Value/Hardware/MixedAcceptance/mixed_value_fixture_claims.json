@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase13_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase14_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -734,6 +734,159 @@
           "claim_kind": "CHECKED_AUDIT",
           "evidence": {
             "checked_audit": "audit_value_mixed_fixture_claims.py rejects cross-kblock accumulation markers and requires the harness to check independent partial_dot outputs."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value/candidate/mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_multi_axis=1; the input uses grid_rank 2, program_id axes 0/1, num_programs axis 0, and the harness checks grid coordinates through rows and column blocks."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_control_flow=1; the input uses row guards and path branches, while the harness varies trip and use_i32_path."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_mask_tail=1 and sentinel_mismatches=0; vector.create_mask controls f16/f32 tail transfers checked by the harness."
+          }
+        },
+        {
+          "claim": "saw_value_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_compute_mask_select=1; i32 and f32 predicates select checked i32/f16 output values."
+          }
+        },
+        {
+          "claim": "saw_value_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_row_strided_memory=1; row-strided i32/f16 inputs and outputs use row padding sentinels checked after hardware."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_reduction_f32_finite_add=1; f16 values are extended to f32 and reduced with finite_tree policy into checked partial dot outputs."
+          }
+        },
+        {
+          "claim": "saw_value_scalar_reduction_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_scalar_reduction_store=1; scalar f32 partial dot stores are checked against the CPU oracle."
+          }
+        },
+        {
+          "claim": "saw_value_gemv_f32_row_dot",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_gemv_f32_row_dot=1; f16 A and X inputs are extended to f32, multiplied, reduced, and checked as row-wise partial dots."
+          }
+        },
+        {
+          "claim": "saw_value_gemv_partial_kblock",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_gemv_partial_kblock=1; partial indexes are row/kblock based and checked in partial_out_f."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_f16_storage_load=1; f16 row and x inputs drive both f16 tail output and f32 partial dot oracle values."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_f16_storage_store=1; tail_out_f16 is checked after hardware by converting stored f16 values to f32 under the finite storage policy tolerance."
+          }
+        },
+        {
+          "claim": "saw_value_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_f32_compute_after_f16_load=1; the input uses arith.extf followed by f32 multiply/add/reduction, and the harness oracle computes from f16_to_f32 inputs."
+          }
+        },
+        {
+          "claim": "saw_f16_storage_finite_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir declares vc4value.f16_storage_policy = \"finite\" and expected.json requires saw_f16_storage_finite_policy=1."
+          }
+        },
+        {
+          "claim": "saw_no_native_f16_arithmetic",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-native-f16-arithmetic.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_bf16_fp8",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-bf16-fp8-storage.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_softmax_sfu",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "The mixed input is audited to contain no math., sfu, softmax, or approximate-math operations while expected.json requires saw_no_softmax_sfu=1."
+          }
+        },
+        {
+          "claim": "saw_no_tl_dot_tt_dot",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-tt-dot-staged.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_vector_contract",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-vector-contract-staged.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_multiblock_k_accumulation",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-multiblock-k-accumulation-staged.mlir"
+            ]
           }
         }
       ]

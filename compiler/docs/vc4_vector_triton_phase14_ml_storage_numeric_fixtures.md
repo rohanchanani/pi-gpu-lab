@@ -13,6 +13,8 @@ VALUE_F16_LOAD_F32_COMPUTE_HARDWARE=PASS
 VALUE_F32_COMPUTE_F16_STORE_HARDWARE=PASS
 VALUE_F16_GEMV_INPUT_STORAGE_HARDWARE=PASS
 VALUE_I32_TO_F32_CAST_HARDWARE=NOT_REQUIRED_STAGED_BY_LOWER_HALF_GAP
+VALUE_F16_STORAGE_F32_COMPUTE_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 F16_STORAGE_FINITE_POLICY=YES
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
@@ -26,6 +28,7 @@ READY_FOR_PHASE14_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE14_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE14_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_PHASE14_7_TTIR_IMPORTER_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_TRITON=NO
 
 # Phase 14 ML Storage/Numeric Controlled Fixtures
@@ -103,5 +106,15 @@ Phase 14.5 value hardware isolation:
   sentinels while exercising the f16 load-to-f32 path.
 - i32-to-f32 hardware isolation is not required in this phase because the cast
   remains staged by the lower-half gap.
+
+Phase 14.6 value mixed acceptance:
+
+- `mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value` combines
+  f16 storage load/store, f32 compute, GEMV row-wise partial dots, multi-axis
+  launch, masks, control flow, row-strided memory, scalar reductions, and
+  repeated mixed-suite regression coverage.
+- The full VC4Value mixed acceptance suite passed with active_qpus=12 where
+  applicable, zero mismatches, zero sentinel mismatches, and zero launch
+  failures.
 
 `READY_FOR_TRITON=NO` remains locked.
