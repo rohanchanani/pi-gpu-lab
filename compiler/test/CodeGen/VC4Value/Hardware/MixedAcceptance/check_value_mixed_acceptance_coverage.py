@@ -51,6 +51,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_mask_memory_axis_cf_vc4value",
     "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
     "mixed_value_reduction_axes_mask_cf_strided_vc4value",
+    "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -98,6 +99,11 @@ REQUIRED_FEATURES = {
     "value_vector_reduction_add_f32_finite",
     "value_scalar_reduction_store",
     "value_f32_finite_tree_policy",
+    "value_gemv_f32_row_dot",
+    "value_gemv_partial_kblock",
+    "value_no_tl_dot_tt_dot",
+    "value_no_vector_contract",
+    "value_no_multiblock_k_accumulation",
     "value_no_dot_gemv",
 }
 
@@ -229,6 +235,8 @@ def validate_fixture(repo_root, fixture):
         "value_vector_reduction_add_f32_finite": "vector.reduction <add>",
         "value_scalar_reduction_store": "memref.store",
         "value_f32_finite_tree_policy": "vc4value.reduction_policy = \"finite_tree\"",
+        "value_gemv_f32_row_dot": "arith.mulf",
+        "value_gemv_partial_kblock": "%partial_index = arith.addi",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -249,7 +257,7 @@ def validate_fixture(repo_root, fixture):
             fail(f"{name} claims value_multi_axis_launch_identity without rank-2 or rank-3 flattening")
     if "value_f32_finite_cmp_select" in tags and 'vc4value.fp_domain = "finite"' not in mlir:
         fail(f"{name} uses f32 cmp/select without finite domain policy")
-    if "value_i32_transfer_read" in tags and "memref<?xi32" not in mlir:
+    if "value_i32_transfer_read" in tags and "memref<?xi32" not in mlir and "memref<?x?xi32" not in mlir:
         fail(f"{name} claims i32 transfer read but input has no i32 global memref")
     if "value_f32_transfer_read" in tags and "memref<?xf32" not in mlir and "memref<?x?xf32" not in mlir:
         fail(f"{name} claims f32 transfer read but input has no f32 global memref")
@@ -288,7 +296,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase12_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase13_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -360,7 +368,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

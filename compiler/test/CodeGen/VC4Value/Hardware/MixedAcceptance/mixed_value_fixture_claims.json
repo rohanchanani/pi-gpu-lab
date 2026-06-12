@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase12_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase13_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -634,6 +634,106 @@
           "claim_kind": "CHECKED_AUDIT",
           "evidence": {
             "checked_audit": "audit_value_mixed_fixture_claims.py rejects vector.contract, linalg, dot, GEMV, and GEMM markers; the harness oracle sums selected row elements without vector multiplication-plus-reduction."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value/candidate/mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses grid_rank=2 with axis0/axis1 program_id and axis0 num_programs to derive row/block coordinates; the harness launches 2D grids and checks row/kblock outputs."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir guards inactive rows and branches on use_i32_path; the harness varies trip and use_i32_path so both selected-output paths affect checked tail and dot outputs."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask for K tails; expected.json requires sentinel_mismatches=0 and the harness checks inactive row-tail and row-padding sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses i32 and finite f32 comparisons to select vector values; the harness CPU oracle checks both selected tail-output arms."
+          }
+        },
+        {
+          "claim": "saw_value_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads rank-2 strided row slices; the harness fills rows with lda padding, checks row padding sentinels, and verifies outputs by r * lda + c indexing."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reduces vector<16xf32> products under finite-tree policy; the harness uses finite inputs, a partial_dot CPU oracle, and a documented tolerance."
+          }
+        },
+        {
+          "claim": "saw_value_scalar_reduction_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores scalar f32 dot reductions to partial_out_f; the harness checks partial_out_f values and scalar-output sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_gemv_f32_row_dot",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir multiplies row-strided A values by contiguous X values and reduces the product; the harness checks K <= 16 cases as row-wise dot outputs."
+          }
+        },
+        {
+          "claim": "saw_value_gemv_partial_kblock",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores one scalar dot per row/kblock index; the harness runs two-K-block cases and checks each independent partial without summing across blocks."
+          }
+        },
+        {
+          "claim": "saw_no_tl_dot_tt_dot",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/TritonToVC4Value/Reductions/invalid-ttir-dot-still-staged.mlir",
+              "examples/triton/phase13_gemv_rowwise_dot/generated/ttir_tl_dot_reject_b16.ttir.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_vector_contract",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-vector-contract-staged.mlir",
+              "compiler/test/ValueSurface/invalid-value-surface-vector-contract-staged.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_multiblock_k_accumulation",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "audit_value_mixed_fixture_claims.py rejects cross-kblock accumulation markers and requires the harness to check independent partial_dot outputs."
           }
         }
       ]

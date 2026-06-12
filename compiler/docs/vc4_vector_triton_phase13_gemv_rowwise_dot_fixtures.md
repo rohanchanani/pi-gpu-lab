@@ -11,6 +11,8 @@ VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
 VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
 VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
+VALUE_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -24,6 +26,7 @@ READY_FOR_PHASE13_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_PHASE13_7_TTIR_IMPORTER_GEMV_STATIC=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 13 GEMV Row-Wise Dot Fixtures
@@ -70,6 +73,8 @@ VALUE_GEMV_F32_ROW_DOT_HARDWARE=PASS
 VALUE_GEMV_I32_ROW_DOT_HARDWARE=NOT_REQUIRED_STAGED_BY_I32_POLICY
 VALUE_GEMV_PARTIAL_KBLOCK_HARDWARE=PASS
 VALUE_GEMV_EMPTY_REPEAT_HARDWARE=PASS
+VALUE_GEMV_ROWWISE_DOT_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 F32_DOT_FINITE_TREE_POLICY=YES
@@ -79,6 +84,7 @@ MULTIBLOCK_K_ACCUMULATION_STAGED=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE13_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE13_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_PHASE13_7_TTIR_IMPORTER_GEMV_STATIC=YES
 READY_FOR_TRITON=NO
 
 Phase 13.3 locks the value form that corresponds to these controlled TTIR
@@ -101,6 +107,15 @@ and empty/repeat launch value fixtures on hardware with `active_qpus=12`,
 sentinels, and CPU oracles. I32 row-dot hardware is not required because the
 current executable i32 multiply policy is staged for dot composites after the
 strict isolation fixture exposed non-exact signed i32 products.
+
+Phase 13.6 extends the cumulative VC4Value mixed acceptance suite with a
+natural GEMV row-dot fixture. The fixture combines multi-axis launch, scalar
+control flow, tail masks, compute-mask select, row-strided memory, f32 finite
+add reduction, scalar reduction store, f32 row-wise dot, and independent
+partial K-block dot with `active_qpus=12`. The full mixed suite passed on
+hardware with zero result mismatches, zero sentinel mismatches, and zero launch
+failures. The mixed claim audit covers the Phase 13 claims and keeps `tl.dot`,
+`tt.dot`, `vector.contract`, and multi-block K accumulation staged.
 
 ## Staged Scope
 
@@ -139,5 +154,5 @@ The controlled inventory for this package is:
 
 ## Handoff
 
-Phase 13.6 should add value mixed acceptance fixtures for the accepted row-wise
-dot forms. `READY_FOR_TRITON=NO` remains true.
+Phase 13.7 may now add the static TTIR importer bridge for the controlled
+GEMV row-wise dot snapshots. `READY_FOR_TRITON=NO` remains true.

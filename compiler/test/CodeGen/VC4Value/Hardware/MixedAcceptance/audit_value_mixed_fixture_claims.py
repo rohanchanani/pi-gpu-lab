@@ -243,6 +243,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         if (
             "MIXED_VALUE_MASK_MEMORY_AXIS_CF_CASE" not in harness
             and "MIXED_VALUE_STRIDED_RANKED_AXIS_MASK_CF_CASE" not in harness
+            and "MIXED_VALUE_GEMV_ROW_DOT_AXIS_MASK_CF_CASE" not in harness
         ):
             fail("saw_value_control_flow harness missing mixed case result marker")
 
@@ -360,23 +361,75 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, marker, "saw_value_reduction_i32_add harness")
 
     if "saw_value_reduction_f32_finite_add" in claim_names:
-        for marker in (
-            'vc4value.fp_domain = "finite"',
-            'vc4value.reduction_policy = "finite_tree"',
-            "vector.reduction <add>, %reduce_f : vector<16xf32> into f32",
-        ):
+        for marker in ('vc4value.fp_domain = "finite"', 'vc4value.reduction_policy = "finite_tree"'):
             require_marker(mlir, marker, "saw_value_reduction_f32_finite_add input")
-        for marker in ("row_sum_f += expected_tail_f[index]", "EPSILON", "max_abs_diff"):
+        if (
+            "vector.reduction <add>, %reduce_f : vector<16xf32> into f32" not in mlir
+            and "vector.reduction <add>, %prod : vector<16xf32> into f32" not in mlir
+        ):
+            fail("saw_value_reduction_f32_finite_add input lacks accepted f32 add reduction")
+        if (
+            "row_sum_f += expected_tail_f[index]" not in harness
+            and "partial_dot += prod" not in harness
+        ):
+            fail("saw_value_reduction_f32_finite_add harness missing checked f32 sum oracle")
+        for marker in ("EPSILON", "max_abs_diff"):
             require_marker(harness, marker, "saw_value_reduction_f32_finite_add harness")
 
     if "saw_value_scalar_reduction_store" in claim_names:
+        has_row_store = (
+            "memref.store %row_sum_i, %row_out_i[%pid1]" in mlir
+            and "memref.store %row_sum_f, %row_out_f[%pid1]" in mlir
+        )
+        has_dot_store = "memref.store %dot, %partial_out_f[%partial_index]" in mlir
+        if not has_row_store and not has_dot_store:
+            fail("saw_value_scalar_reduction_store input lacks accepted scalar reduction store")
+        if has_row_store:
+            for marker in ("row_out_i", "row_out_f", "verify_row_reductions", "verify_sentinels"):
+                require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
+        else:
+            for marker in ("partial_out_f", "verify_partials", "verify_sentinels"):
+                require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
+
+    if "saw_value_gemv_f32_row_dot" in claim_names:
         for marker in (
-            "memref.store %row_sum_i, %row_out_i[%pid1]",
-            "memref.store %row_sum_f, %row_out_f[%pid1]",
+            "vector.transfer_read %rank_f[%pid1, %col]",
+            "vector.transfer_read %x[%col]",
+            "%prod = arith.mulf %rank_tail_f, %x_tail : vector<16xf32>",
+            "%dot = vector.reduction <add>, %prod : vector<16xf32> into f32",
+            "memref.store %dot, %partial_out_f[%partial_index]",
         ):
-            require_marker(mlir, marker, "saw_value_scalar_reduction_store input")
-        for marker in ("row_out_i", "row_out_f", "verify_row_reductions", "verify_sentinels"):
-            require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
+            require_marker(mlir, marker, "saw_value_gemv_f32_row_dot input")
+        for marker in ("x_value", "partial_dot += prod", "verify_partials"):
+            require_marker(harness, marker, "saw_value_gemv_f32_row_dot harness")
+
+    if "saw_value_gemv_partial_kblock" in claim_names:
+        for marker in (
+            "%partial_row_base = arith.muli %pid1, %num_kblocks : index",
+            "%partial_index = arith.addi %partial_row_base, %pid0 : index",
+            "memref.store %dot, %partial_out_f[%partial_index]",
+        ):
+            require_marker(mlir, marker, "saw_value_gemv_partial_kblock input")
+        for marker in ("col_blocks(cfg->cols)", "partial_out_f", "verify_partials"):
+            require_marker(harness, marker, "saw_value_gemv_partial_kblock harness")
+
+    if "saw_no_tl_dot_tt_dot" in claim_names:
+        for marker in ("tt.dot", "tl.dot", "\"tt.dot\""):
+            if marker in mlir:
+                fail(f"saw_no_tl_dot_tt_dot input uses forbidden marker {marker}")
+        require_marker(harness, "saw_no_tl_dot_tt_dot=1", "saw_no_tl_dot_tt_dot harness")
+
+    if "saw_no_vector_contract" in claim_names:
+        if "vector.contract" in mlir:
+            fail("saw_no_vector_contract input uses vector.contract")
+        require_marker(harness, "saw_no_vector_contract=1", "saw_no_vector_contract harness")
+
+    if "saw_no_multiblock_k_accumulation" in claim_names:
+        for marker in ("memref.load %partial_out_f", "atomic", "cross_program"):
+            if marker in mlir:
+                fail(f"saw_no_multiblock_k_accumulation input uses forbidden marker {marker}")
+        for marker in ("partial_dot += prod", "saw_no_multiblock_k_accumulation=1"):
+            require_marker(harness, marker, "saw_no_multiblock_k_accumulation harness")
 
     if "saw_f32_finite_tree_policy" in claim_names:
         for marker in ('vc4value.fp_domain = "finite"', 'vc4value.reduction_policy = "finite_tree"'):

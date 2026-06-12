@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase12_mixed_acceptance",
+  "suite_name": "vc4value_phase5_phase13_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -506,6 +506,88 @@
         "f32_finite_add_reduction",
         "scalar_reduction_store"
       ]
+    },
+    {
+      "name": "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "cumulative Phase 13 mixed fixture combining multi-axis launch identity, scalar control flow, tail masks, compute-mask select, row-strided memory, finite f32 row-wise dot, scalar dot stores, and independent partial K-block dot outputs",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_multi_axis_launch_identity",
+        "value_program_id_axis1",
+        "value_num_programs_axis0",
+        "value_i32_transfer_read",
+        "value_f32_transfer_read",
+        "value_i32_transfer_write",
+        "value_f32_transfer_write",
+        "value_i32_cmp",
+        "value_f32_alu",
+        "value_f32_finite_cmp_select",
+        "value_tail_masks",
+        "value_compute_mask_select",
+        "value_transfer_read_inactive_zero",
+        "value_vdw_inactive_preserve",
+        "value_transfer_write_inactive_preserve",
+        "value_no_sparse_memory_mask",
+        "value_cf_cond_br",
+        "value_vector_block_arg",
+        "value_rank2_row_slice_strided",
+        "value_stride_args_metadata",
+        "value_memref_dim_metadata",
+        "value_no_gather_lane_stride",
+        "value_no_hidden_memref_descriptor",
+        "value_row_strided_memory",
+        "value_vector_reduction_add_f32_finite",
+        "value_scalar_reduction_store",
+        "value_f32_finite_tree_policy",
+        "value_gemv_f32_row_dot",
+        "value_gemv_partial_kblock",
+        "value_no_tl_dot_tt_dot",
+        "value_no_vector_contract",
+        "value_no_multiblock_k_accumulation",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_value_multi_axis",
+        "saw_value_control_flow",
+        "saw_value_mask_tail",
+        "saw_value_compute_mask_select",
+        "saw_value_row_strided_memory",
+        "saw_value_reduction_f32_finite_add",
+        "saw_value_scalar_reduction_store",
+        "saw_value_gemv_f32_row_dot",
+        "saw_value_gemv_partial_kblock",
+        "saw_no_tl_dot_tt_dot",
+        "saw_no_vector_contract",
+        "saw_no_multiblock_k_accumulation"
+      ],
+      "expected_cases_summary": "8 repeated launches, including empty rows, empty columns, K <= 16 full row-dot cases, and two-K-block partial-dot cases across 2D grids; active_qpus=12; strict CPU oracle, tail sentinels, row padding, scalar dot outputs, and no cross-kblock accumulation",
+      "triage_feature_bands": [
+        "value_gemv_mixed",
+        "value_multi_axis_launch_identity",
+        "value_cf",
+        "i32_tmu",
+        "f32_tmu",
+        "f32_mul_dot",
+        "compute_mask_select",
+        "rank2_row_slice_strided",
+        "tail_store_preserve",
+        "f32_finite_add_reduction",
+        "scalar_dot_store",
+        "partial_kblock_dot"
+      ]
     }
   ],
   "required_features": [
@@ -955,6 +1037,46 @@
       "required": true
     },
     {
+      "id": "value_gemv_f32_row_dot",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_gemv_partial_kblock",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_tl_dot_tt_dot",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_vector_contract",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_multiblock_k_accumulation",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value"
+      ],
+      "required": true
+    },
+    {
       "id": "value_no_dot_gemv",
       "verification_kind": "runner_audit",
       "covered_by": [
@@ -966,5 +1088,5 @@
   "isolation_backstops": [
     "value_i32_add_select_tail_vc4value"
   ],
-  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, Phase 9 multi-axis launch identity, Phase 10 mask/memory legality, Phase 11 strided/ranked memory, and Phase 12 reductions."
+  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, Phase 9 multi-axis launch identity, Phase 10 mask/memory legality, Phase 11 strided/ranked memory, Phase 12 reductions, and Phase 13 GEMV row-wise dot."
 }
