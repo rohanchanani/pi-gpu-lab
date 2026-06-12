@@ -1,0 +1,68 @@
+# REQUIRES: vc4-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_f32_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/row_dot.value.mlir
+# RUN: FileCheck %s --check-prefix=VALUE --input-file=%t/row_dot.value.mlir
+# RUN: %vc4_opt %t/row_dot.value.mlir --vc4-verify-value-surface --convert-scf-to-cf --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/row_dot.vc4kernel.mlir
+# RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/row_dot.vc4kernel.mlir
+# RUN: %vc4_opt %t/row_dot.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/row_dot.ssavc4.mlir
+# RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/row_dot.ssavc4.mlir
+# RUN: %vc4_opt %t/row_dot.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/row_dot.vc4.mlir
+# RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/row_dot.vc4.mlir
+# RUN: %vc4_codegen %t/row_dot.vc4.mlir --emit-bundle %t/row_dot.bundle
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_ttir_static_pipeline.py" --value %t/row_dot.value.mlir --vc4kernel %t/row_dot.vc4kernel.mlir --ssavc4 %t/row_dot.ssavc4.mlir --vc4 %t/row_dot.vc4.mlir --bundle %t/row_dot.bundle | FileCheck %s --check-prefix=AUDIT
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_row_dot_tail_f32_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/tail.value.mlir
+# RUN: %vc4_opt %t/tail.value.mlir --vc4-verify-value-surface --convert-scf-to-cf --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/tail.vc4kernel.mlir
+# RUN: %vc4_opt %t/tail.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/tail.ssavc4.mlir
+# RUN: %vc4_opt %t/tail.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/tail.vc4.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_partial_kblock_f32_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/partial.value.mlir
+# RUN: %vc4_opt %t/partial.value.mlir --vc4-verify-value-surface --convert-scf-to-cf --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/partial.vc4kernel.mlir
+# RUN: %vc4_opt %t/partial.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/partial.ssavc4.mlir
+# RUN: %vc4_opt %t/partial.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/partial.vc4.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/mixed.value.mlir
+# RUN: %vc4_opt %t/mixed.value.mlir --vc4-verify-value-surface --convert-scf-to-cf --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/mixed.vc4kernel.mlir
+# RUN: %vc4_opt %t/mixed.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/mixed.ssavc4.mlir
+# RUN: %vc4_opt %t/mixed.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/mixed.vc4.mlir
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_tl_dot_reject_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/tl_dot.value.mlir 2>&1 | FileCheck %s --check-prefix=DOT
+# RUN: not %vc4_triton_opt "%vc4_repo_root/examples/triton/phase13_gemv_rowwise_dot/generated/ttir_gemv_loop_kblocks_reject_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/loop.value.mlir 2>&1 | FileCheck %s --check-prefix=LOOP
+
+# VALUE: func.func @ttir_gemv_row_dot_f32_b16_kernel
+# VALUE-SAME: vc4value.reduction_policy = "finite_tree"
+# VALUE: vector.transfer_read
+# VALUE: arith.mulf
+# VALUE: vector.reduction <add>
+# VALUE: memref.store
+# VALUE-NOT: tt.
+# VALUE-NOT: vc4kernel.
+
+# VC4KERNEL: vc4kernel.kernel @ttir_gemv_row_dot_f32_b16_kernel
+# VC4KERNEL: vc4kernel.fragment_alu.mul
+# VC4KERNEL: vc4kernel.fragment_reduce
+# VC4KERNEL: vc4kernel.vdw_store_fragment
+# VC4KERNEL-NOT: func.func
+# VC4KERNEL-NOT: vector.
+# VC4KERNEL-NOT: memref.
+# VC4KERNEL-NOT: tt.
+
+# SSAVC4: ssavc4.func @ttir_gemv_row_dot_f32_b16_kernel
+# SSAVC4-NOT: vc4kernel.
+# SSAVC4-NOT: func.func
+
+# VC4: vc4.module
+# VC4: vc4.qpu.
+# VC4-NOT: ssavc4.
+# VC4-NOT: vc4kernel.
+
+# AUDIT: TTIR_STATIC_PIPELINE_AUDIT=PASS
+
+# DOT: tt.dot / contract
+# DOT: staged
+# DOT: READY_FOR_TRITON remains NO
+
+# LOOP: multi-block K accumulation is staged
+# LOOP: READY_FOR_TRITON remains NO

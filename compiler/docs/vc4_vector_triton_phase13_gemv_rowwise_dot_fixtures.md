@@ -156,3 +156,27 @@ The controlled inventory for this package is:
 
 Phase 13.7 may now add the static TTIR importer bridge for the controlled
 GEMV row-wise dot snapshots. `READY_FOR_TRITON=NO` remains true.
+
+## Phase 13.7 TTIR Importer Static Lock
+
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_TL_SUM_PRODUCT_LOWERING=YES
+TTIR_GEMV_SCALAR_RESULT_STORE_LOWERING=YES
+TTIR_GEMV_F32_FINITE_TREE_POLICY=YES
+TTIR_TL_DOT_TT_DOT_REJECT=PASS
+TTIR_MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE13_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 13.7 statically proves the controlled real TTIR row-wise dot importer
+bridge. Accepted snapshots lower structurally through value-layer
+`vector.transfer_read`, elementwise `arith.mulf`, `vector.reduction <add>`,
+and scalar `memref.store`; they then pass the value-to-VC4Kernel, SSAVC4, and
+scheduled VC4 static pipeline. The f32 finite-tree policy remains explicit.
+
+`tl.dot`/`tt.dot`, vector-contract-like dot forms, and loop-carried
+multi-block K accumulation remain staged with deterministic diagnostics. The
+importer does not parse printed TTIR, infer semantics from names or paths,
+emit lower-half IR directly, regenerate TTIR, or alter the global Triton
+readiness gate.

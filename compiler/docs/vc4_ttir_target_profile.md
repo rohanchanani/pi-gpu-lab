@@ -873,3 +873,27 @@ does not emit lower-half IR from the importer.
 
 `tl.dot`, `tt.dot`, `vector.contract`, multi-block K accumulation, atomics,
 f16/casts, SFU/math, and full Phase 13 GEMV support remain staged.
+
+## 29. Phase 13.7 GEMV row-wise dot importer profile
+
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_TL_SUM_PRODUCT_LOWERING=YES
+TTIR_GEMV_SCALAR_RESULT_STORE_LOWERING=YES
+TTIR_GEMV_F32_FINITE_TREE_POLICY=YES
+TTIR_TL_DOT_TT_DOT_REJECT=PASS
+TTIR_MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE13_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The Phase 13.7 TTIR profile accepts controlled real Triton GEMV-v0 row-wise
+dot snapshots emitted as `tl.sum(a * x, axis=0)`. The importer lowers the
+product and add-reduction structurally to the standard value layer, preserves
+Phase 10 inactive-zero tail behavior, Phase 11 row-strided memory, and Phase 12
+scalar reduction stores, and attaches the finite f32 reduction policy required
+by the value surface.
+
+The importer stages real `tl.dot` / `tt.dot` forms and loop-carried
+multi-block K accumulation. It does not add vector.contract, full GEMM,
+atomics, casts, f16/subword, SFU/math, lower-half emission, or a broad Triton
+readiness claim.

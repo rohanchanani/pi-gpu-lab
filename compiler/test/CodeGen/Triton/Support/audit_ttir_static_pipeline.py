@@ -37,6 +37,12 @@ def require(text: str, needle: str, label: str) -> None:
         raise AssertionError(f"{label}: missing required text {needle!r}")
 
 
+def require_any(text: str, needles: tuple[str, ...], label: str) -> None:
+    if not any(needle in text for needle in needles):
+        choices = ", ".join(repr(needle) for needle in needles)
+        raise AssertionError(f"{label}: missing one of required texts {choices}")
+
+
 def forbid(text: str, needles: tuple[str, ...], label: str) -> None:
     for needle in needles:
         if needle in text:
@@ -52,8 +58,9 @@ def audit_value(path: Path) -> None:
     text = read_text(path)
     for needle in ("func.func", "vc4value.kernel", "vc4value.program_id",
                    "vector.create_mask",
-                   "vector.transfer_read", "vector.transfer_write", "memref<"):
+                   "vector.transfer_read", "memref<"):
         require(text, needle, str(path))
+    require_any(text, ("vector.transfer_write", "memref.store"), str(path))
     forbid(
         text,
         (

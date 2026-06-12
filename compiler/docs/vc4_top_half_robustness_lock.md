@@ -159,3 +159,27 @@ TTIR_DOT_GEMV_STAGED_FOR_PHASE13=YES
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE12_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
+
+## Phase 13.7 GEMV Row-Dot Importer Audit Extension
+
+The Phase 13.7 importer audit locks structural TTIR GEMV row-wise dot
+classification for controlled real Triton `tl.sum(a * x, axis=0)` snapshots.
+The accepted classifier uses SSA/use-def structure, typed operation names,
+`tt.reduce` helper resolution, reducer region bodies, and exact policy
+attributes to lower the product, add reduction, and scalar store through the
+standard value layer.
+
+TTIR_GEMV_ROWWISE_DOT_IMPORTER_STATIC=PASS
+TTIR_GEMV_TL_SUM_PRODUCT_LOWERING=YES
+TTIR_GEMV_SCALAR_RESULT_STORE_LOWERING=YES
+TTIR_GEMV_F32_FINITE_TREE_POLICY=YES
+TTIR_TL_DOT_TT_DOT_REJECT=PASS
+TTIR_MULTIBLOCK_K_ACCUMULATION_STAGED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE13_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The audit keeps name/path/fixture special casing, raw TTIR text parsing,
+regex/substring semantic classification, direct lower-half output,
+toolchain/generator work, `tl.dot`/`tt.dot`, vector.contract, and multi-block K
+accumulation outside the accepted importer path.

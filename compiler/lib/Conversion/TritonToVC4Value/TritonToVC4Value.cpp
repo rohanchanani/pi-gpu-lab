@@ -448,6 +448,38 @@ static TTIRReduceCallInfo classifyTTIRReduceCall(Operation *callOp) {
   return info;
 }
 
+static bool isTTIRAddF32ReduceCallValue(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kTTCallOpName))
+    return false;
+  TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(def);
+  return reduceInfo.classification == TTIRReduceClassification::AddF32;
+}
+
+static bool isTTIRRegionBlockArgumentOf(Value value, Operation *parentOp) {
+  auto arg = llvm::dyn_cast<BlockArgument>(value);
+  return arg && arg.getOwner() && arg.getOwner()->getParentOp() == parentOp;
+}
+
+static bool isTTIRLoopCarriedF32ReduceAccumulation(Operation *op) {
+  if (!hasName(op, "arith.addf") || op->getNumOperands() != 2 ||
+      op->getNumResults() != 1 || !op->getResult(0).getType().isF32())
+    return false;
+
+  Operation *parent = op->getParentOp();
+  while (parent && !hasName(parent, "scf.for"))
+    parent = parent->getParentOp();
+  if (!parent)
+    return false;
+
+  Value lhs = op->getOperand(0);
+  Value rhs = op->getOperand(1);
+  return (isTTIRRegionBlockArgumentOf(lhs, parent) &&
+          isTTIRAddF32ReduceCallValue(rhs)) ||
+         (isTTIRRegionBlockArgumentOf(rhs, parent) &&
+          isTTIRAddF32ReduceCallValue(lhs));
+}
+
 enum class TTIRScalarElementKind { I1, I32, F32, Unsupported };
 
 struct TTIRPointerTypeInfo {
@@ -1158,11 +1190,16 @@ private:
     // shape diagnostics.  This keeps future dot/reduction tests from being
     // masked by their rank-2 operands or helper constants.
     Operation *stagedBodyFeature = nullptr;
+    Operation *stagedMultiblockKAccumulation = nullptr;
     TTIRReduceClassification stagedReduceClassification =
         TTIRReduceClassification::NotReduceCall;
     funcOp->walk([&](Operation *op) {
-      if (stagedBodyFeature)
+      if (stagedBodyFeature || stagedMultiblockKAccumulation)
         return WalkResult::interrupt();
+      if (isTTIRLoopCarriedF32ReduceAccumulation(op)) {
+        stagedMultiblockKAccumulation = op;
+        return WalkResult::interrupt();
+      }
       if (hasName(op, kTTCallOpName)) {
         TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
         if (reduceInfo.classification ==
@@ -1185,6 +1222,10 @@ private:
       }
       return WalkResult::advance();
     });
+    if (stagedMultiblockKAccumulation)
+      return stagedMultiblockKAccumulation->emitOpError()
+             << "multi-block K accumulation is staged; "
+             << "READY_FOR_TRITON remains NO";
     if (stagedBodyFeature) {
       if (hasName(stagedBodyFeature, kTTCallOpName)) {
         if (stagedReduceClassification ==

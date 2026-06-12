@@ -514,6 +514,12 @@ static bool isDotCompositeReductionValue(Value value) {
   return isDotCompositeProduct(reduction.getVector().getDefiningOp());
 }
 
+static bool isNonEntryBlockArgument(Value value) {
+  auto arg = llvm::dyn_cast<BlockArgument>(value);
+  return arg && arg.getOwner() &&
+         !arg.getOwner()->isEntryBlock();
+}
+
 enum class MemoryMaskKind {
   Full,
   Empty,
@@ -728,6 +734,11 @@ private:
 
   FailureOr<Type> lowerBlockArgType(BlockArgument arg) {
     Type type = arg.getType();
+    if (type.isF32()) {
+      DenseSet<Value> visiting;
+      if (isReductionFragmentBlockArgument(arg, visiting))
+        return VectorType::get({16}, builder.getF32Type());
+    }
     if (type.isIndex() || type.isSignlessInteger(32))
       return builder.getI32Type();
     if (type.isInteger(1))
@@ -798,8 +809,14 @@ private:
       if (!targetBlock)
         return failure();
       for (auto [sourceArg, targetArg] : llvm::zip(sourceBlock.getArguments(),
-                                                   targetBlock->getArguments()))
-        mapLoweredValue(sourceArg, targetArg);
+                                                   targetBlock->getArguments())) {
+        DenseSet<Value> visiting;
+        if (sourceArg.getType().isF32() &&
+            isReductionFragmentBlockArgument(sourceArg, visiting))
+          state.reductionFragments[sourceArg] = targetArg;
+        else
+          mapLoweredValue(sourceArg, targetArg);
+      }
     }
     return success();
   }
@@ -845,7 +862,76 @@ private:
   Value lookupBranchOperand(Operation *op, Value value) {
     if (isVector16I1(value.getType()))
       return lookupPredicate(op, value);
+    if (Value fragment = lookupReductionFragment(value))
+      return fragment;
     return lookupValue(op, value);
+  }
+
+  bool isReductionFragmentValue(Value value, DenseSet<Value> &visiting) {
+    if (isDotCompositeReductionValue(value))
+      return true;
+    if (auto arg = llvm::dyn_cast<BlockArgument>(value))
+      return isReductionFragmentBlockArgument(arg, visiting);
+
+    Operation *def = value.getDefiningOp();
+    if (!def || def->getName().getStringRef() != "arith.addf" ||
+        def->getNumOperands() != 2 ||
+        def->getNumResults() != 1 || !def->getResult(0).getType().isF32())
+      return false;
+
+    Value lhs = def->getOperand(0);
+    Value rhs = def->getOperand(1);
+    if (isNonEntryBlockArgument(lhs) || isNonEntryBlockArgument(rhs))
+      return false;
+    return isReductionFragmentValue(lhs, visiting) ||
+           isReductionFragmentValue(rhs, visiting);
+  }
+
+  bool isReductionFragmentBlockArgument(BlockArgument arg,
+                                        DenseSet<Value> &visiting) {
+    if (!arg || !arg.getOwner() || arg.getOwner()->isEntryBlock())
+      return false;
+    Value asValue = arg;
+    if (!visiting.insert(asValue).second)
+      return false;
+
+    bool sawIncoming = false;
+    unsigned index = arg.getArgNumber();
+    Block *block = arg.getOwner();
+    for (Block *predecessor : block->getPredecessors()) {
+      Operation *terminator = predecessor->getTerminator();
+      if (auto branch = llvm::dyn_cast<cf::BranchOp>(terminator)) {
+        if (branch.getDest() != block)
+          continue;
+        OperandRange operands = branch.getDestOperands();
+        if (index >= operands.size() ||
+            !isReductionFragmentValue(operands[index], visiting))
+          return false;
+        sawIncoming = true;
+        continue;
+      }
+      if (auto condBranch = llvm::dyn_cast<cf::CondBranchOp>(terminator)) {
+        bool matched = false;
+        if (condBranch.getTrueDest() == block) {
+          OperandRange operands = condBranch.getTrueDestOperands();
+          if (index >= operands.size() ||
+              !isReductionFragmentValue(operands[index], visiting))
+            return false;
+          matched = true;
+        }
+        if (condBranch.getFalseDest() == block) {
+          OperandRange operands = condBranch.getFalseDestOperands();
+          if (index >= operands.size() ||
+              !isReductionFragmentValue(operands[index], visiting))
+            return false;
+          matched = true;
+        }
+        sawIncoming |= matched;
+        continue;
+      }
+      return false;
+    }
+    return sawIncoming;
   }
 
   LogicalResult lowerBlockBody(Block &sourceBlock, Block &targetBlock) {
@@ -1345,10 +1431,37 @@ private:
 
     if (name == "arith.addf" && resultType.isF32() &&
         ((isDotCompositeReductionValue(op->getOperand(0)) &&
-          !isZeroConstant(op->getOperand(1))) ||
+          isNonEntryBlockArgument(op->getOperand(1))) ||
          (isDotCompositeReductionValue(op->getOperand(1)) &&
-          !isZeroConstant(op->getOperand(0)))))
+          isNonEntryBlockArgument(op->getOperand(0)))))
       return op->emitOpError("multi-block K accumulation is staged");
+
+    if (name == "arith.addf" && resultType.isF32()) {
+      Value reductionOperand;
+      Value scalarOperand;
+      if (isDotCompositeReductionValue(op->getOperand(0))) {
+        reductionOperand = op->getOperand(0);
+        scalarOperand = op->getOperand(1);
+      } else if (isDotCompositeReductionValue(op->getOperand(1))) {
+        reductionOperand = op->getOperand(1);
+        scalarOperand = op->getOperand(0);
+      }
+      if (reductionOperand) {
+        Value reductionFragment = lookupReductionFragment(reductionOperand);
+        if (!reductionFragment)
+          return failure();
+        Value scalar = lookupValue(op, scalarOperand);
+        if (!scalar)
+          return failure();
+        Type fragmentType = VectorType::get({16}, resultType);
+        Value scalarFragment =
+            createSplat(builder, op->getLoc(), scalar, fragmentType);
+        state.reductionFragments[op->getResult(0)] = createAddPipe(
+            builder, op->getLoc(), {reductionFragment, scalarFragment},
+            mlir::vc4kernel::AddALUOpcode::fadd, fragmentType);
+        return success();
+      }
+    }
 
     Value lhs = lookupValue(op, op->getOperand(0));
     Value rhs = lookupValue(op, op->getOperand(1));
