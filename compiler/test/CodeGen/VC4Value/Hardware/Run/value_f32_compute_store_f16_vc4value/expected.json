@@ -1,0 +1,21 @@
+{
+  "name": "value_f32_compute_store_f16_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 13,
+    "elements_checked": 1723,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 13,
+    "saw_value_f16_storage_store": 1,
+    "saw_f16_storage_finite_policy": 1
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "value_f16_row_dot_f32_accum_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 15,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_k": 16,
+    "max_lda": 29,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 15,
+    "saw_value_f16_gemv_input_storage": 1,
+    "saw_value_gemv_f32_accum": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.002
+  }
+}

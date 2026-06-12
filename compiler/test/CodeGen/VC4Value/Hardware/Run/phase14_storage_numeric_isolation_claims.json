@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase14_storage_numeric_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_f16_load_f32_compute_store_f32_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_f16_load_f32_compute_store_f32_vc4value",
+      "claims": [
+        {"claim": "saw_value_f16_storage_load", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_f16_storage_load", "input_marker": "vector.transfer_read %in[%base], %zero_h, %mask", "oracle_marker": "f16_to_f32"},
+        {"claim": "saw_value_f32_compute_after_f16_load", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_f32_compute_after_f16_load", "input_marker": "arith.addf %wide, %one : vector<16xf32>", "oracle_marker": "+ 1.0f"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_f32_compute_store_f16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_f32_compute_store_f16_vc4value",
+      "claims": [
+        {"claim": "saw_value_f16_storage_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_f16_storage_store", "input_marker": "arith.truncf %sum : vector<16xf32> to vector<16xf16>", "oracle_marker": "expected_values"},
+        {"claim": "saw_f16_storage_finite_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_f16_storage_finite_policy", "input_marker": "vc4value.f16_storage_policy = \"finite\"", "oracle_marker": "saw_f16_storage_finite_policy=1"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_f16_row_dot_f32_accum_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_f16_row_dot_f32_accum_vc4value",
+      "claims": [
+        {"claim": "saw_value_f16_gemv_input_storage", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_f16_gemv_input_storage", "input_marker": "vector.transfer_read %a[%row, %c0], %zero_h, %mask", "oracle_marker": "expected_dot"},
+        {"claim": "saw_value_gemv_f32_accum", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_gemv_f32_accum", "input_marker": "vector.reduction <add>, %prod : vector<16xf32> into f32", "oracle_marker": "sum +="},
+        {"claim": "row_padding_sentinels", "kind": "CHECKED_OUTPUT", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "A padding changed"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_f16_empty_repeat_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_f16_empty_repeat_vc4value",
+      "claims": [
+        {"claim": "saw_repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "vector.transfer_write %wide, %out[%base], %mask", "oracle_marker": "cases[]"},
+        {"claim": "empty_launch_sentinel_preserve", "kind": "CHECKED_OUTPUT", "input_marker": "vector.create_mask %remaining", "oracle_marker": "{0u, 0u, 1u"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "phase14_static_staged_guards",
+      "claims": [
+        {"claim": "value_i32_to_f32_staged_by_lower_half_gap", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-i32-to-f32-cast-staged.mlir"]},
+        {"claim": "native_f16_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-native-f16-arithmetic.mlir"]},
+        {"claim": "bf16_fp8_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-bf16-fp8-storage.mlir"]},
+        {"claim": "int8_quant_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-int8-quant-storage.mlir"]},
+        {"claim": "fp_to_int_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-f32-to-i32-cast.mlir"]}
+      ]
+    }
+  ]
+}

@@ -8,6 +8,11 @@ VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
 VALUE_F16_STORAGE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_STORE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_GEMV_INPUT_STORAGE_STATIC=PASS
+VALUE_F16_STORAGE_F32_COMPUTE_HARDWARE_ISOLATION=PASS
+VALUE_F16_LOAD_F32_COMPUTE_HARDWARE=PASS
+VALUE_F32_COMPUTE_F16_STORE_HARDWARE=PASS
+VALUE_F16_GEMV_INPUT_STORAGE_HARDWARE=PASS
+VALUE_I32_TO_F32_CAST_HARDWARE=NOT_REQUIRED_STAGED_BY_LOWER_HALF_GAP
 F16_STORAGE_FINITE_POLICY=YES
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
@@ -20,6 +25,7 @@ INT8_INT16_QUANT_STORAGE_STAGED_OR_NOT_GENERATED=YES
 READY_FOR_PHASE14_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE14_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE14_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 # Phase 14 ML Storage/Numeric Controlled Fixtures
@@ -84,5 +90,18 @@ Validation:
   audits the manifest and source-controlled snapshots;
 - value import smoke is expected pending importer/value-surface repair in the
   following Phase 14 packages.
+
+Phase 14.5 value hardware isolation:
+
+- `value_f16_load_f32_compute_store_f32_vc4value` proves f16 storage loads
+  extended to f32 compute and f32 stores on hardware.
+- `value_f32_compute_store_f16_vc4value` proves f32 compute narrowed to f16
+  storage with the explicit finite storage policy.
+- `value_f16_row_dot_f32_accum_vc4value` proves f16 GEMV input storage with f32
+  accumulation/output using the Phase 13 row-wise dot shape.
+- `value_f16_empty_repeat_vc4value` proves empty and repeated launches preserve
+  sentinels while exercising the f16 load-to-f32 path.
+- i32-to-f32 hardware isolation is not required in this phase because the cast
+  remains staged by the lower-half gap.
 
 `READY_FOR_TRITON=NO` remains locked.
