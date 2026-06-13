@@ -23,6 +23,11 @@ TTIR_I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 TTIR_NATIVE_F16_ARITHMETIC_REJECT=PASS
 TTIR_FP_TO_INT_REJECT=PASS
 FRONTEND_ROBUSTNESS_AUDIT=PASS
+TTIR_F16_STORAGE_HARDWARE_ISOLATION=PASS
+TTIR_F16_LOAD_F32_COMPUTE_HARDWARE=PASS
+TTIR_F32_COMPUTE_F16_STORE_HARDWARE=PASS
+TTIR_F16_ROW_DOT_F32_ACCUM_HARDWARE=PASS
+TTIR_I32_TO_F32_CAST_HARDWARE=NOT_REQUIRED_STAGED_BY_LOWER_HALF_GAP
 F16_STORAGE_FINITE_POLICY=YES
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
@@ -38,6 +43,7 @@ READY_FOR_PHASE14_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE14_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE14_7_TTIR_IMPORTER_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE14_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE14_9_TTIR_MIXED_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
 
 # Phase 14 ML Storage/Numeric Controlled Fixtures
@@ -142,5 +148,22 @@ Phase 14.7 TTIR importer static acceptance:
 - The frontend robustness audit passes: classification is structural, no
   raw TTIR text parsing or fixture/path/name special casing is used, and the
   importer emits no lower-half IR.
+
+Phase 14.8 TTIR hardware isolation:
+
+- `ttir_f16_load_f32_compute_store_f32_b16_vc4triton` proves real TTIR f16
+  storage loads imported through the C++ TTIR importer, f32 compute after f16
+  load, and f32 output stores on hardware.
+- `ttir_f32_compute_store_f16_b16_vc4triton` proves real TTIR f32 compute
+  narrowed to f16 output storage under the finite f16 storage policy.
+- `ttir_f16_row_dot_f32_accum_b16_vc4triton` proves real TTIR f16 GEMV input
+  storage with f32 multiply/reduction accumulation and f32 scalar output.
+- `ttir_f16_empty_repeat_b16_vc4triton` proves repeated and empty invocations
+  of the TTIR f16 load-to-f32 path.
+- All four hardware fixtures ran with active_qpus=12, zero total mismatches,
+  zero sentinel mismatches, zero launch failures, nonzero output hashes, real
+  source-controlled TTIR snapshots, and the C++ TTIR importer path.
+- i32-to-f32 hardware is not required in Phase 14.8 because the TTIR and value
+  path still stage that cast by the lower-half gap.
 
 `READY_FOR_TRITON=NO` remains locked.

@@ -1,0 +1,106 @@
+{
+  "phase": "Phase14.8",
+  "fixtures": [
+    {
+      "name": "ttir_f16_load_f32_compute_store_f32_b16_vc4triton",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_load_f32_compute_store_f32_b16.py",
+      "snapshot": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_load_f32_compute_store_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.extf", "arith.addf"],
+      "expected_result_fields": ["saw_ttir_f16_storage_load", "saw_value_f16_storage_load", "saw_value_f32_compute_after_f16_load"],
+      "claims": [
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f16_storage_load", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_compute_from_f16_storage", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "sentinel_preserve", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_native_f16_arithmetic", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_softmax_sfu", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_f32_compute_store_f16_b16_vc4triton",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_compute_store_f16_b16.py",
+      "snapshot": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_compute_store_f16_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.truncf", "arith.addf"],
+      "expected_result_fields": ["saw_ttir_f16_storage_store", "saw_value_f16_storage_store", "saw_f16_storage_finite_policy"],
+      "claims": [
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f16_storage_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "finite_f16_storage_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "sentinel_preserve", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_native_f16_arithmetic", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_softmax_sfu", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_f16_row_dot_f32_accum_b16_vc4triton",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_row_dot_f32_accum_b16.py",
+      "snapshot": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_row_dot_f32_accum_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.extf", "arith.mulf", "arith.addf"],
+      "expected_result_fields": ["saw_ttir_f16_gemv_input_storage", "saw_ttir_gemv_f32_accum", "saw_value_f16_gemv_input_storage", "saw_value_gemv_f32_accum", "saw_f16_storage_finite_policy"],
+      "claims": [
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f16_gemv_input_storage", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_gemv_accumulation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "finite_f16_storage_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "sentinel_preserve", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_native_f16_arithmetic", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_softmax_sfu", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_f16_empty_repeat_b16_vc4triton",
+      "source": "examples/triton/phase14_ml_storage_numeric/sources/ttir_f16_load_f32_compute_store_f32_b16.py",
+      "snapshot": "examples/triton/phase14_ml_storage_numeric/generated/ttir_f16_load_f32_compute_store_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.extf", "arith.addf"],
+      "expected_result_fields": ["saw_ttir_f16_storage_load", "saw_value_f16_storage_load", "saw_value_f32_compute_after_f16_load", "saw_repeat_invocation"],
+      "claims": [
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f16_storage_load", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_compute_from_f16_storage", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "sentinel_preserve", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_native_f16_arithmetic", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_softmax_sfu", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "name": "native_f16_arithmetic",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-native-f16-arithmetic.mlir",
+      "diagnostic": "native f16 arithmetic is staged"
+    },
+    {
+      "name": "fp_to_int",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-f32-to-i32-cast.mlir",
+      "diagnostic": "fp-to-int numeric cast is staged"
+    },
+    {
+      "name": "bf16_fp8",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-bf16-fp8-staged.mlir",
+      "diagnostic": "bf16/fp8 storage is staged"
+    },
+    {
+      "name": "int8_quant",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-int8-quant-storage-staged.mlir",
+      "diagnostic": "int8/int16 quantized storage is staged"
+    },
+    {
+      "name": "i32_to_f32_staged",
+      "path": "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-i32-to-f32-cast-staged.mlir",
+      "diagnostic": "i32 to f32 numeric cast staged by lower-half gap"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "ttir_f16_load_f32_compute_store_f32_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 11,
+    "elements_checked": 1339,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_f16_storage": 1,
+    "saw_value_f16_storage": 1,
+    "saw_ttir_f16_storage_load": 1,
+    "saw_value_f16_storage_load": 1,
+    "saw_value_f32_compute_after_f16_load": 1,
+    "saw_no_native_f16_arithmetic": 1,
+    "saw_no_softmax_sfu": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.001
+  }
+}

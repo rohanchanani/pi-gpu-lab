@@ -1,0 +1,30 @@
+{
+  "name": "ttir_f16_row_dot_f32_accum_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 15,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_k": 16,
+    "max_lda": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_f16_storage": 1,
+    "saw_value_f16_storage": 1,
+    "saw_ttir_f16_gemv_input_storage": 1,
+    "saw_ttir_gemv_f32_accum": 1,
+    "saw_value_f16_gemv_input_storage": 1,
+    "saw_value_gemv_f32_accum": 1,
+    "saw_f16_storage_finite_policy": 1,
+    "saw_no_native_f16_arithmetic": 1,
+    "saw_no_softmax_sfu": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.002
+  }
+}

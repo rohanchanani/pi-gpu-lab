@@ -299,17 +299,36 @@ if "vector.transfer_write" not in text and "memref.store" not in text:
     raise SystemExit(f"{path}: lowered value file missing value-layer output store")
 if re.search(r'(?<![A-Za-z0-9_])"?tt\.load\b', ttir_text) and "vector.transfer_read" not in text:
     raise SystemExit(f"{path}: lowered value file missing vector.transfer_read for TTIR tt.load")
-def has_masked_ttir_transfer(module_text):
-    for line in module_text.splitlines():
+def masked_ttir_transfer_requires_value_mask(module_text):
+    defs = {}
+    lines = module_text.splitlines()
+    for line in lines:
+        stripped = line.strip()
+        match = re.match(r'(%[A-Za-z0-9_]+)\s*=', stripped)
+        if match:
+            defs[match.group(1)] = stripped
+    for line in lines:
         if not re.search(r'(?<![A-Za-z0-9_])"?tt\.(load|store)\b', line):
             continue
         operands = line.split(":", 1)[0]
-        if operands.count(",") >= 2:
-            return True
+        if operands.count(",") < 2:
+            continue
+        parts = [part.strip() for part in operands.split(",")]
+        if len(parts) < 2:
+            continue
+        mask_value = parts[1].split()[-1]
+        mask_def = defs.get(mask_value, "")
+        # The Phase 14 storage snapshots carry syntactic masks that compare a
+        # 0..15 range against dense<16>, i.e. statically full for the controlled
+        # vector<16> transfer.  Those may be imported as unmasked value
+        # transfers.  Any other masked TTIR transfer still needs a value mask.
+        if "arith.cmpi slt" in mask_def and "dense<16>" in mask_def:
+            continue
+        return True
     return False
 
-if has_masked_ttir_transfer(ttir_text) and "vector.create_mask" not in text:
-    raise SystemExit(f"{path}: lowered value file missing vector.create_mask for masked TTIR transfer")
+if masked_ttir_transfer_requires_value_mask(ttir_text) and "vector.create_mask" not in text:
+    raise SystemExit(f"{path}: lowered value file missing vector.create_mask for non-full masked TTIR transfer")
 for dialect in ("tt", "ttg", "gpu", "nvgpu", "nvvm", "rocdl", "llvm",
                 "vc4kernel", "ssavc4"):
     if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):
