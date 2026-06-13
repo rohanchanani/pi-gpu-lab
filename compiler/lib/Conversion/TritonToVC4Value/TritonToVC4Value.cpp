@@ -120,6 +120,8 @@ constexpr llvm::StringLiteral kVC4ValueShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kVC4ValueFPDomainAttr("vc4value.fp_domain");
 constexpr llvm::StringLiteral
     kVC4ValueReductionPolicyAttr("vc4value.reduction_policy");
+constexpr llvm::StringLiteral
+    kVC4ValueF16StoragePolicyAttr("vc4value.f16_storage_policy");
 
 constexpr llvm::StringLiteral kVC4ValueProgramIdOpName("vc4value.program_id");
 constexpr llvm::StringLiteral
@@ -213,6 +215,7 @@ static LogicalResult copyValueSafeAttrs(Operation *source,
 
 static bool isScalarI32(Type type) { return type.isSignlessInteger(32); }
 static bool isScalarI64(Type type) { return type.isSignlessInteger(64); }
+static bool isScalarF16(Type type) { return type.isF16(); }
 static bool isScalarF32(Type type) { return type.isF32(); }
 
 static bool isRankedTensor(Type type, unsigned rank, int64_t dim0) {
@@ -241,6 +244,32 @@ static bool isTensor16F32(Type type) {
   auto shaped = llvm::dyn_cast<RankedTensorType>(type);
   return shaped && shaped.getRank() == 1 && shaped.getDimSize(0) == 16 &&
          shaped.getElementType().isF32();
+}
+
+static bool isBF16OrFP8Type(Type type) {
+  if (type.isBF16())
+    return true;
+  auto floatType = llvm::dyn_cast<FloatType>(type);
+  return floatType && floatType.getWidth() == 8;
+}
+
+static Type getStorageScalarElement(Type type) {
+  if (auto shaped = llvm::dyn_cast<RankedTensorType>(type))
+    return shaped.getElementType();
+  return type;
+}
+
+static LogicalResult emitUnsupportedPointerElementDiagnostic(Operation *op,
+                                                            Type type) {
+  Type elementType = getStorageScalarElement(type);
+  if (isBF16OrFP8Type(elementType))
+    return op->emitOpError()
+           << "bf16/fp8 storage is staged; READY_FOR_TRITON remains NO";
+  if (elementType.isSignlessInteger(8) || elementType.isSignlessInteger(16))
+    return op->emitOpError()
+           << "int8/int16 quantized storage is staged; "
+           << "READY_FOR_TRITON remains NO";
+  return emitStagedDiagnostic(op, "unsupported pointer argument element type");
 }
 
 static bool isRankedTensorPointer(Type type) {
@@ -480,7 +509,7 @@ static bool isTTIRLoopCarriedF32ReduceAccumulation(Operation *op) {
           isTTIRAddF32ReduceCallValue(lhs));
 }
 
-enum class TTIRScalarElementKind { I1, I32, F32, Unsupported };
+enum class TTIRScalarElementKind { I1, I32, F16, F32, Unsupported };
 
 struct TTIRPointerTypeInfo {
   Type pointeeType;
@@ -518,6 +547,7 @@ public:
     info.isSupportedPhase75Element =
         !info.isTensorPointer &&
         (info.pointeeKind == TTIRScalarElementKind::I32 ||
+         info.pointeeKind == TTIRScalarElementKind::F16 ||
          info.pointeeKind == TTIRScalarElementKind::F32);
     return info;
   }
@@ -561,6 +591,8 @@ public:
       return builder.getI1Type();
     case TTIRScalarElementKind::I32:
       return builder.getI32Type();
+    case TTIRScalarElementKind::F16:
+      return builder.getF16Type();
     case TTIRScalarElementKind::F32:
       return builder.getF32Type();
     case TTIRScalarElementKind::Unsupported:
@@ -575,6 +607,8 @@ private:
       return TTIRScalarElementKind::I1;
     if (type.isSignlessInteger(32))
       return TTIRScalarElementKind::I32;
+    if (type.isF16())
+      return TTIRScalarElementKind::F16;
     if (type.isF32())
       return TTIRScalarElementKind::F32;
     return TTIRScalarElementKind::Unsupported;
@@ -619,6 +653,17 @@ static FailureOr<Attribute> retargetDenseAttr(DenseElementsAttr dense,
     values.reserve(dense.getNumElements());
     for (APFloat value : dense.getValues<APFloat>())
       values.push_back(value);
+    return DenseFPElementsAttr::get(newType, values);
+  }
+  if (newType.getElementType().isF16()) {
+    SmallVector<APFloat, 16> values;
+    values.reserve(dense.getNumElements());
+    for (APFloat value : dense.getValues<APFloat>()) {
+      bool losesInfo = false;
+      value.convert(APFloat::IEEEhalf(), APFloat::rmNearestTiesToEven,
+                    &losesInfo);
+      values.push_back(value);
+    }
     return DenseFPElementsAttr::get(newType, values);
   }
   return failure();
@@ -693,6 +738,8 @@ static bool isDeadProofWhitelistOp(Operation *op) {
     return false;
   if (hasName(op, "arith.extsi") || hasName(op, "arith.andi") ||
       hasName(op, "arith.trunci") || hasName(op, "arith.index_cast"))
+    return true;
+  if (hasName(op, "arith.extf") || hasName(op, "arith.truncf"))
     return true;
   if (hasName(op, "ub.poison"))
     return true;
@@ -774,6 +821,12 @@ private:
 };
 
 static bool isZeroLikeConstant(Operation *op) {
+  if (op && (hasName(op, "arith.extf") || hasName(op, "arith.truncf") ||
+             hasName(op, "arith.extsi") || hasName(op, "arith.trunci"))) {
+    if (op->getNumOperands() != 1)
+      return false;
+    return isZeroLikeConstant(op->getOperand(0).getDefiningOp());
+  }
   auto constant = llvm::dyn_cast_or_null<arith::ConstantOp>(op);
   if (!constant)
     return false;
@@ -930,6 +983,7 @@ struct CommonPlan {
   SmallVector<Operation *, 3> programIds;
   Operation *makeRange = nullptr;
   Value tailMaskValue;
+  Value staticFullMaskValue;
   BlockArgument sizeArg;
   DenseMap<Operation *, int64_t> launchIdentityAxes;
   int64_t gridRank = 1;
@@ -1035,6 +1089,7 @@ public:
       if (requiredDataValues.contains(result))
         return false;
       if (result == common.tailMaskValue ||
+          result == common.staticFullMaskValue ||
           canonicalInfrastructureValues.contains(result))
         return true;
     }
@@ -1138,17 +1193,18 @@ private:
           return emitStagedDiagnostic(
               funcOp, "block pointer or tensor pointer argument");
         if (!pointer->isSupportedPhase75Element)
-          return emitStagedDiagnostic(
-              funcOp, "unsupported pointer argument element type");
+          return emitUnsupportedPointerElementDiagnostic(funcOp,
+                                                        pointer->pointeeType);
         info.isPointer = true;
         info.pointerElement = pointer->pointeeKind;
       } else if (isScalarI32(arg.getType()) || isScalarF32(arg.getType())) {
         info.role = isScalarF32(arg.getType()) ? TTIRArgumentRole::ScalarF32
                                                : TTIRArgumentRole::ScalarI32;
       } else {
-        if (typeAdapter.classifyTensorPointerElement(arg.getType()))
-          return emitStagedDiagnostic(
-              funcOp, "unsupported pointer argument element type");
+        if (auto pointer =
+                typeAdapter.classifyTensorPointerElement(arg.getType()))
+          return emitUnsupportedPointerElementDiagnostic(funcOp,
+                                                        pointer->pointeeType);
         return emitStagedDiagnostic(funcOp,
                                     "unsupported TTIR function argument type");
       }
@@ -1171,6 +1227,9 @@ private:
 
     for (Value result : op->getResults()) {
       for (Operation *user : result.getUsers()) {
+        if (hasName(user, kTTLoadOpName) && user->getNumOperands() == 3 &&
+            user->getOperand(2) == result && isZeroLikeConstant(op))
+          continue;
         if (!canIgnoreAsDeadProofOp(user, visiting, memo)) {
           visiting.erase(op);
           memo[op] = false;
@@ -1367,6 +1426,7 @@ private:
     }
 
     Value mask;
+    bool maskIsTail = false;
     SmallVector<Operation *, 8> memoryOps;
     funcOp->walk([&](Operation *op) {
       if (hasName(op, kTTLoadOpName) || hasName(op, kTTStoreOpName))
@@ -1385,21 +1445,26 @@ private:
         if (!isZeroLikeConstant(memoryOp->getOperand(2).getDefiningOp()))
           return emitStagedDiagnostic(memoryOp, "tt.load nonzero other value");
         Value candidateMask = memoryOp->getOperand(1);
-        if (!matchesCanonicalTailMask(candidateMask))
+        bool candidateIsTail = matchesCanonicalTailMask(candidateMask);
+        bool candidateIsFull = matchesStaticFullMask(candidateMask);
+        if (!candidateIsTail && !candidateIsFull)
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.load memory mask");
         FailureOr<PointerExpr> ptr = classifyPointer(memoryOp->getOperand(0));
         if (failed(ptr))
           return failure();
-        if (!tailMaskCompatibleWithPointerOffset(candidateMask,
+        if (candidateIsTail &&
+            !tailMaskCompatibleWithPointerOffset(candidateMask,
                                                  ptr->offsetValue))
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.load memory mask");
-        if (!mask)
+        if (!mask) {
           mask = candidateMask;
-        else if (mask != candidateMask)
+          maskIsTail = candidateIsTail;
+        } else if (mask != candidateMask || maskIsTail != candidateIsTail) {
           return emitStagedDiagnostic(memoryOp,
                                       "multiple distinct transfer tail masks");
+        }
       } else if (isStore) {
         if (operands == 2)
           continue;
@@ -1419,27 +1484,37 @@ private:
           continue;
         }
         Value candidateMask = memoryOp->getOperand(2);
-        if (!matchesCanonicalTailMask(candidateMask))
+        bool candidateIsTail = matchesCanonicalTailMask(candidateMask);
+        bool candidateIsFull = matchesStaticFullMask(candidateMask);
+        if (!candidateIsTail && !candidateIsFull)
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.store memory mask");
         FailureOr<PointerExpr> ptr = classifyPointer(memoryOp->getOperand(0));
         if (failed(ptr))
           return failure();
-        if (!tailMaskCompatibleWithPointerOffset(candidateMask,
+        if (candidateIsTail &&
+            !tailMaskCompatibleWithPointerOffset(candidateMask,
                                                  ptr->offsetValue))
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.store memory mask");
-        if (!mask)
+        if (!mask) {
           mask = candidateMask;
-        else if (mask != candidateMask)
+          maskIsTail = candidateIsTail;
+        } else if (mask != candidateMask || maskIsTail != candidateIsTail) {
           return emitStagedDiagnostic(memoryOp,
                                       "multiple distinct transfer tail masks");
+        }
       }
     }
     if (mask) {
-      if (failed(recordCanonicalTailMask(mask)))
-        return failure();
-      common.tailMaskValue = mask;
+      if (maskIsTail) {
+        if (failed(recordCanonicalTailMask(mask)))
+          return failure();
+        common.tailMaskValue = mask;
+      } else {
+        common.staticFullMaskValue = mask;
+        canonicalInfrastructureValues.insert(mask);
+      }
     }
     return success();
   }
@@ -1610,6 +1685,26 @@ private:
 
   bool matchesCanonicalTailMask(Value mask) {
     return matchCanonicalTailMask(mask).has_value();
+  }
+
+  bool matchesStaticFullMask(Value mask) {
+    Operation *cmp = mask.getDefiningOp();
+    auto cmpi = llvm::dyn_cast_or_null<arith::CmpIOp>(cmp);
+    if (!cmpi || cmpi.getPredicate() != arith::CmpIPredicate::slt)
+      return false;
+    if (failed(verifyContiguousOffset(cmpi.getOperand(0))))
+      return false;
+    auto constant =
+        llvm::dyn_cast_or_null<arith::ConstantOp>(cmpi.getOperand(1).getDefiningOp());
+    if (!constant)
+      return false;
+    auto dense = llvm::dyn_cast<DenseElementsAttr>(constant.getValue());
+    if (!dense || !dense.getElementType().isSignlessInteger(32))
+      return false;
+    for (APInt value : dense.getValues<APInt>())
+      if (value.getSExtValue() != static_cast<int64_t>(kPhase7VectorWidth))
+        return false;
+    return true;
   }
 
   bool tailMaskCompatibleWithPointerOffset(Value mask, Value pointerOffset) {
@@ -1884,6 +1979,9 @@ private:
     if (functionNeedsFiniteReductionPolicy())
       valueFunc->setAttr(kVC4ValueReductionPolicyAttr,
                          builder.getStringAttr("finite_tree"));
+    if (functionNeedsFiniteF16StoragePolicy())
+      valueFunc->setAttr(kVC4ValueF16StoragePolicyAttr,
+                         builder.getStringAttr("finite"));
 
     Block *entry = valueFunc.addEntryBlock();
     for (auto [index, arg] : llvm::enumerate(planner.getArgs())) {
@@ -1942,6 +2040,14 @@ private:
       return WalkResult::advance();
     });
     return needs;
+  }
+
+  bool functionNeedsFiniteF16StoragePolicy() const {
+    for (const TTIRArgInfo &arg : planner.getArgs())
+      if (arg.isPointer && arg.stored &&
+          arg.pointerElement == TTIRScalarElementKind::F16)
+        return true;
+    return false;
   }
 
   LogicalResult emitCommonPrefix() {
@@ -2248,7 +2354,7 @@ private:
       return failure();
     Value mask;
     if (op->getNumOperands() == 3) {
-      FailureOr<Value> maybeMask = ensureTailMask(
+      FailureOr<Value> maybeMask = ensureMemoryMask(
           op->getOperand(1), op, "sparse or unknown tt.load memory mask");
       if (failed(maybeMask))
         return failure();
@@ -2303,7 +2409,7 @@ private:
     }
     Value mask;
     if (op->getNumOperands() == 3) {
-      FailureOr<Value> maybeMask = ensureTailMask(
+      FailureOr<Value> maybeMask = ensureMemoryMask(
           op->getOperand(2), op, "sparse or unknown tt.store memory mask");
       if (failed(maybeMask))
         return failure();
@@ -2364,7 +2470,13 @@ private:
     if (auto constant = llvm::dyn_cast<arith::ConstantOp>(op))
       return lowerArithConstant(constant);
     if (hasName(op, "arith.sitofp"))
-      return emitStagedBodyFeatureDiagnostic(op, "arith.sitofp");
+      return op->emitOpError()
+             << "i32 to f32 numeric cast staged by lower-half gap; "
+             << "READY_FOR_TRITON remains NO";
+    if (hasName(op, "arith.fptosi") || hasName(op, "arith.fptoui"))
+      return op->emitOpError()
+             << "fp-to-int numeric cast is staged; "
+             << "READY_FOR_TRITON remains NO";
     if (hasName(op, "arith.bitcast")) {
       if (op->getNumOperands() != 1 || op->getNumResults() != 1)
         return emitStagedDiagnostic(op, "non-unary arith.bitcast");
@@ -2393,10 +2505,25 @@ private:
     }
 
     static constexpr StringRef supportedArithOps[] = {
-        "arith.addf", "arith.subf", "arith.mulf", "arith.addi",  "arith.subi",
-        "arith.muli", "arith.cmpf", "arith.cmpi", "arith.select"};
+        "arith.addf",  "arith.subf", "arith.mulf",  "arith.extf",
+        "arith.truncf", "arith.addi", "arith.subi",  "arith.muli",
+        "arith.cmpf",  "arith.cmpi", "arith.select"};
     if (!hasAnyName(op, supportedArithOps))
       return emitStagedDiagnostic(op, op->getName().getStringRef());
+
+    if (hasAnyName(op, {"arith.addf", "arith.subf", "arith.mulf",
+                        "arith.cmpf"})) {
+      for (Type type : op->getOperandTypes())
+        if (isScalarF16(getStorageScalarElement(type)))
+          return op->emitOpError()
+                 << "native f16 arithmetic is staged; "
+                 << "READY_FOR_TRITON remains NO";
+      for (Type type : op->getResultTypes())
+        if (isScalarF16(getStorageScalarElement(type)))
+          return op->emitOpError()
+                 << "native f16 arithmetic is staged; "
+                 << "READY_FOR_TRITON remains NO";
+    }
 
     SmallVector<Value, 4> operands;
     operands.reserve(op->getNumOperands());
@@ -2456,7 +2583,7 @@ private:
 
   Type convertResultType(Type type) {
     if (type.isIndex() || type.isInteger(1) || type.isSignlessInteger(32) ||
-        type.isF32())
+        type.isF16() || type.isF32())
       return type;
     if (auto vector = typeAdapter.convertTensorToValueVector(type, builder))
       return vector;
@@ -2665,7 +2792,17 @@ private:
     return createVectorCreateMask(builder, user->getLoc(), remaining);
   }
 
+  FailureOr<Value> ensureMemoryMask(Value mask, Operation *user,
+                                    StringRef sparseDiagnostic) {
+    if (mask == planner.getCommonPlan().staticFullMaskValue)
+      return Value();
+    return ensureTailMask(mask, user, sparseDiagnostic);
+  }
+
   Value createZeroPadding(Location loc, Type elementType) {
+    if (elementType.isF16())
+      return builder.create<arith::ConstantOp>(
+          loc, elementType, builder.getFloatAttr(elementType, 0.0));
     if (elementType.isF32())
       return builder.create<arith::ConstantOp>(
           loc, elementType, builder.getFloatAttr(elementType, 0.0));

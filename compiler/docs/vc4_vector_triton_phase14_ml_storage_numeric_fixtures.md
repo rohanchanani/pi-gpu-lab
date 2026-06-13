@@ -15,6 +15,14 @@ VALUE_F16_GEMV_INPUT_STORAGE_HARDWARE=PASS
 VALUE_I32_TO_F32_CAST_HARDWARE=NOT_REQUIRED_STAGED_BY_LOWER_HALF_GAP
 VALUE_F16_STORAGE_F32_COMPUTE_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
+TTIR_F16_STORAGE_IMPORTER_STATIC=PASS
+TTIR_F16_LOAD_F32_COMPUTE_LOWERING=YES
+TTIR_F32_COMPUTE_F16_STORE_LOWERING=YES
+TTIR_F16_ROW_DOT_F32_ACCUM_LOWERING=YES
+TTIR_I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+TTIR_NATIVE_F16_ARITHMETIC_REJECT=PASS
+TTIR_FP_TO_INT_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
 F16_STORAGE_FINITE_POLICY=YES
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
@@ -29,6 +37,7 @@ READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE14_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE14_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE14_7_TTIR_IMPORTER_STORAGE_NUMERIC_STATIC=YES
+READY_FOR_PHASE14_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 # Phase 14 ML Storage/Numeric Controlled Fixtures
@@ -116,5 +125,22 @@ Phase 14.6 value mixed acceptance:
 - The full VC4Value mixed acceptance suite passed with active_qpus=12 where
   applicable, zero mismatches, zero sentinel mismatches, and zero launch
   failures.
+
+Phase 14.7 TTIR importer static acceptance:
+
+- The C++ TTIR importer lowers controlled f16 storage loads to value-layer
+  `vector.transfer_read vector<16xf16>` followed by `arith.extf` to f32
+  compute.
+- Controlled f32 compute stores to f16 storage lower through `arith.truncf`,
+  `vector.transfer_write vector<16xf16>`, and the explicit
+  `vc4value.f16_storage_policy = "finite"` metadata.
+- Controlled f16 row-dot and mixed GEMV snapshots lower through the standard
+  value layer, value verification, `scf-to-cf`, VC4Kernel, SSAVC4, and
+  scheduled VC4 statically.
+- Native f16 arithmetic, fp-to-int casts, bf16/fp8 storage, int8/int16
+  quantized storage, and i32-to-f32 remain staged with exact diagnostics.
+- The frontend robustness audit passes: classification is structural, no
+  raw TTIR text parsing or fixture/path/name special casing is used, and the
+  importer emits no lower-half IR.
 
 `READY_FOR_TRITON=NO` remains locked.

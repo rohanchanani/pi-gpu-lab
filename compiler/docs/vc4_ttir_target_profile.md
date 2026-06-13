@@ -931,3 +931,27 @@ row-wise dot snapshots and independent partial K-block snapshots. The importer
 classifies the product and add-reduction structurally through SSA operands,
 regions, operation classes, and exact attributes, then lowers to the standard
 value layer. Source names and paths remain provenance only.
+
+## 31. Phase 14.7 ML storage/numeric TTIR importer profile
+
+TTIR_F16_STORAGE_IMPORTER_STATIC=PASS
+TTIR_F16_LOAD_F32_COMPUTE_LOWERING=YES
+TTIR_F32_COMPUTE_F16_STORE_LOWERING=YES
+TTIR_F16_ROW_DOT_F32_ACCUM_LOWERING=YES
+TTIR_I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+TTIR_NATIVE_F16_ARITHMETIC_REJECT=PASS
+TTIR_FP_TO_INT_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE14_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The Phase 14.7 TTIR profile accepts only the controlled real Triton f16
+storage/f32 compute forms from `examples/triton/phase14_ml_storage_numeric`.
+The importer classifies f16 pointer element types structurally, lowers f16
+loads to value-layer f16 vector transfers plus `arith.extf`, lowers f32 compute
+stores to f16 through `arith.truncf` and the explicit finite f16 storage
+policy, and keeps row-dot accumulation in f32.
+
+Native f16 arithmetic, f16 accumulation, bf16/fp8, int8/int16 quantized
+storage, fp-to-int casts, i32-to-f32 casts, `tt.dot`, vector contracts, GEMM,
+SFU/math, and softmax remain outside this accepted importer path.

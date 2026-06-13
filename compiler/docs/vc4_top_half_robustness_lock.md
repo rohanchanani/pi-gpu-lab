@@ -183,3 +183,29 @@ The audit keeps name/path/fixture special casing, raw TTIR text parsing,
 regex/substring semantic classification, direct lower-half output,
 toolchain/generator work, `tl.dot`/`tt.dot`, vector.contract, and multi-block K
 accumulation outside the accepted importer path.
+
+## Phase 14.7 ML Storage/Numeric Importer Audit Extension
+
+The Phase 14.7 importer audit locks structural f16 storage and numeric policy
+classification for controlled real Triton snapshots. The accepted classifier is
+based on Triton pointer element types, ranked tensor element types, SSA use-def
+chains, exact operation names, and value-surface policy attributes. It lowers
+only to the standard value layer and never emits VC4Kernel, SSAVC4, or
+scheduled VC4 directly.
+
+TTIR_F16_STORAGE_IMPORTER_STATIC=PASS
+TTIR_F16_LOAD_F32_COMPUTE_LOWERING=YES
+TTIR_F32_COMPUTE_F16_STORE_LOWERING=YES
+TTIR_F16_ROW_DOT_F32_ACCUM_LOWERING=YES
+TTIR_I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+TTIR_NATIVE_F16_ARITHMETIC_REJECT=PASS
+TTIR_FP_TO_INT_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE14_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The audit keeps native f16 arithmetic, f16 accumulation, bf16/fp8, quantized
+int storage, fp-to-int, i32-to-f32, SFU/math, softmax, `tt.dot`,
+vector.contract, GEMM, raw TTIR text parsing, regex/substring semantic
+classification, fixture/path/name special casing, toolchain work, and direct
+lower-half output outside the accepted importer path.

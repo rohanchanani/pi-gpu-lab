@@ -9,8 +9,7 @@
 
 # RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Inputs/rank2-pointer-tensor-staged.ttir.mlir" --convert-triton-to-vc4-value -o %t/rank2_pointer.value.mlir 2>&1 | FileCheck %s --check-prefix=RANK2PTR
 
-# F16: unsupported pointer argument element type
-# F16: staged TTIR target-profile feature
+# F16: native f16 arithmetic is staged
 # F16: READY_FOR_TRITON remains NO
 
 # BLOCKPTR: block pointer or tensor pointer argument
@@ -20,4 +19,3 @@
 # RANK2PTR: rank-2 or higher TTIR tensor result
 # RANK2PTR: staged TTIR target-profile feature
 # RANK2PTR: READY_FOR_TRITON remains NO
-
