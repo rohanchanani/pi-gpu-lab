@@ -52,6 +52,12 @@ NATURAL_EXP_LOWERING=EXP2_X_LOG2E
 NATURAL_LOG_LOWERING=LOG2_X_LN2
 SQRT_LOWERING=RSQRT_TIMES_X_POSITIVE_FINITE_DOMAIN
 PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
+VALUE_NATURAL_EXP_STATIC=PASS
+VALUE_NATURAL_LOG_STATIC=PASS
+VALUE_SQRT_STATIC=PASS
+SQRT_LOWERING=RSQRT_TIMES_X
+SOFTMAX_USES_NATURAL_EXP=YES
+READY_FOR_PHASE15B_2_VALUE_HARDWARE_EXP_LOG_SQRT_REPROOF=YES
 VALUE_F16_STORAGE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_STORE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_GEMV_INPUT_STORAGE_STATIC=PASS
@@ -786,6 +792,7 @@ one-block softmax. Phase 15.4 must statically prove, without hardware:
   the containing function or operation carries `vc4value.math_policy =
   "approx_sfu"` and finite `vc4value.fp_domain` metadata. Phase 15B repairs the
   lowering to target exp2 with `x * log2(e)` scaling.
+  `VALUE_NATURAL_EXP_STATIC=PASS`.
 - `arith.divf` lowers only as approximate reciprocal/division under explicit
   approximate-SFU policy and a finite nonzero denominator domain. Exact
   division semantics are not claimed.
@@ -793,6 +800,7 @@ one-block softmax. Phase 15.4 must statically prove, without hardware:
   `math.rsqrt` may lower because VC4Kernel Surface v2 already locks rsqrt.
   Both require positive finite domains. Public `math.sqrt` is a sqrt operation
   and lowers through `x * rsqrt(x)` only under explicit positive finite policy.
+  `VALUE_NATURAL_LOG_STATIC=PASS` and `VALUE_SQRT_STATIC=PASS`.
 - finite f32 max reductions lower for the exact value spellings
   `vector.reduction <maxnumf>` and `vector.reduction <maximumf>` over
   `vector<16xf32>` to scalar `f32`, with explicit finite input,
@@ -802,7 +810,7 @@ one-block softmax. Phase 15.4 must statically prove, without hardware:
 - softmax v0 lowers only as the value composite:
   finite max reduction, scalar broadcast, subtract, approximate exp, masked
   zeroing, finite add reduction, approximate reciprocal/division, multiply,
-  and masked `vector.transfer_write`.
+  and masked `vector.transfer_write`. `SOFTMAX_USES_NATURAL_EXP=YES`.
 
 Phase 15.4 planned rejects:
 

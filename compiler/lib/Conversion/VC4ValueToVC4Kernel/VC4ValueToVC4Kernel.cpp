@@ -112,6 +112,9 @@ constexpr llvm::StringLiteral kVPMWriteFragmentOpName("vc4kernel.vpm_write_fragm
 constexpr llvm::StringLiteral kVDRLoadRectToVPMOpName("vc4kernel.vdr_load_rect_to_vpm");
 constexpr llvm::StringLiteral kVDWStoreRectFromVPMOpName("vc4kernel.vdw_store_rect_from_vpm");
 
+constexpr double kLog2E = 1.4426950408889634074;
+constexpr double kLn2 = 0.6931471805599453094;
+
 static bool hasStringAttr(Operation *op, StringRef name, StringRef expected) {
   auto attr = llvm::dyn_cast_or_null<StringAttr>(op->getAttr(name));
   return attr && attr.getValue() == expected;
@@ -440,6 +443,14 @@ static Value createFragmentConst(OpBuilder &builder, Location loc, Type type,
                                  Attribute value) {
   return createOpWithResult(builder, loc, kFragmentConstOpName, {},
                             {builder.getNamedAttr("value", value)}, type);
+}
+
+static Value createF32FragmentSplatConstant(OpBuilder &builder, Location loc,
+                                            double value) {
+  auto vectorType = llvm::cast<ShapedType>(getVector16F32(builder.getContext()));
+  return createFragmentConst(
+      builder, loc, vectorType,
+      DenseElementsAttr::get(vectorType, builder.getF32FloatAttr(value)));
 }
 
 static Value createPredFull(OpBuilder &builder, Location loc) {
@@ -1365,7 +1376,7 @@ private:
       return lowerExtF(op);
     if (name == "arith.truncf")
       return lowerTruncF(op);
-    if (llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp>(op))
+    if (llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp, math::SqrtOp>(op))
       return lowerApproxSFUMath(op);
     if (name == "arith.sitofp" || name == "arith.uitofp")
       return op->emitOpError()
@@ -1762,16 +1773,16 @@ private:
     if (op->getNumOperands() != 1 || op->getNumResults() != 1)
       return emitPhase5Diagnostic(op, "approximate SFU math arity");
 
-    mlir::vc4kernel::SFUKind kind;
     mlir::vc4kernel::FPDomain domain;
+    mlir::vc4kernel::SFUKind policyKind;
     if (llvm::isa<math::ExpOp>(op)) {
-      kind = mlir::vc4kernel::SFUKind::exp;
+      policyKind = mlir::vc4kernel::SFUKind::exp;
       domain = mlir::vc4kernel::FPDomain::finite;
     } else if (llvm::isa<math::LogOp>(op)) {
-      kind = mlir::vc4kernel::SFUKind::log;
+      policyKind = mlir::vc4kernel::SFUKind::log;
       domain = mlir::vc4kernel::FPDomain::finite_positive;
-    } else if (llvm::isa<math::RsqrtOp>(op)) {
-      kind = mlir::vc4kernel::SFUKind::rsqrt;
+    } else if (llvm::isa<math::RsqrtOp, math::SqrtOp>(op)) {
+      policyKind = mlir::vc4kernel::SFUKind::rsqrt;
       domain = mlir::vc4kernel::FPDomain::finite_positive;
     } else {
       return emitStagedDiagnostic(op, "math dialect operation");
@@ -1780,13 +1791,44 @@ private:
     Type resultType = op->getResult(0).getType();
     if (!resultType.isF32() && !isVector16F32(resultType))
       return emitStagedDiagnostic(op, "approximate SFU math result type");
-    if (failed(requireApproxSFUPolicy(op, kind)))
+    if (failed(requireApproxSFUPolicy(op, policyKind)))
       return failure();
 
     FailureOr<Value> input = getF32FragmentOperand(op, op->getOperand(0));
     if (failed(input))
       return failure();
-    Value result = createApproxSFU(builder, op->getLoc(), *input, kind, domain);
+
+    Value result;
+    if (llvm::isa<math::ExpOp>(op)) {
+      // Public math.exp is natural exp. VC4 target SFU kind "exp" is exp2,
+      // so lower exp(x) as exp2(x * log2(e)).
+      Value log2e = createF32FragmentSplatConstant(builder, op->getLoc(), kLog2E);
+      Value scaled = createMulPipe(builder, op->getLoc(), {*input, log2e},
+                                   mlir::vc4kernel::MulALUOpcode::fmul,
+                                   getVector16F32(ctx));
+      result = createApproxSFU(builder, op->getLoc(), scaled,
+                               mlir::vc4kernel::SFUKind::exp, domain);
+    } else if (llvm::isa<math::LogOp>(op)) {
+      // Public math.log is natural log. VC4 target SFU kind "log" is log2,
+      // so lower log(x) as log2(x) * ln(2).
+      Value log2x = createApproxSFU(builder, op->getLoc(), *input,
+                                    mlir::vc4kernel::SFUKind::log, domain);
+      Value ln2 = createF32FragmentSplatConstant(builder, op->getLoc(), kLn2);
+      result = createMulPipe(builder, op->getLoc(), {log2x, ln2},
+                             mlir::vc4kernel::MulALUOpcode::fmul,
+                             getVector16F32(ctx));
+    } else if (llvm::isa<math::SqrtOp>(op)) {
+      // Public math.sqrt is sqrt, not rsqrt. The accepted positive finite
+      // approximation lowers sqrt(x) as x * rsqrt(x).
+      Value rsqrt = createApproxSFU(builder, op->getLoc(), *input,
+                                    mlir::vc4kernel::SFUKind::rsqrt, domain);
+      result = createMulPipe(builder, op->getLoc(), {*input, rsqrt},
+                             mlir::vc4kernel::MulALUOpcode::fmul,
+                             getVector16F32(ctx));
+    } else {
+      result = createApproxSFU(builder, op->getLoc(), *input,
+                               mlir::vc4kernel::SFUKind::rsqrt, domain);
+    }
     mapF32FragmentResult(op->getResult(0), result);
     return success();
   }

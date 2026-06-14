@@ -24,6 +24,13 @@ TARGET_SFU_LOG_IS_LOG2=YES
 VALUE_MATH_EXP_IS_NATURAL_EXP=YES
 VALUE_MATH_LOG_IS_NATURAL_LOG=YES
 PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
+VALUE_NATURAL_EXP_STATIC=PASS
+VALUE_NATURAL_LOG_STATIC=PASS
+VALUE_SQRT_STATIC=PASS
+NATURAL_EXP_LOWERING=EXP2_X_LOG2E
+NATURAL_LOG_LOWERING=LOG2_X_LN2
+SQRT_LOWERING=RSQRT_TIMES_X
+SOFTMAX_USES_NATURAL_EXP=YES
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_PROVEN
@@ -34,6 +41,7 @@ READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE15_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE15_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_PHASE15B_2_VALUE_HARDWARE_EXP_LOG_SQRT_REPROOF=YES
 READY_FOR_TRITON=NO
 
 # Phase 15 Controlled Triton SFU/Softmax Fixtures
@@ -107,6 +115,14 @@ real VC4 hardware with targeted isolation fixtures:
   softmax requires Phase 15B repair and re-proof.
 - `value_sfu_softmax_empty_repeat_vc4value` proves repeat launch hygiene and
   empty exp/div launches while zero-active softmax remains staged.
+
+## Phase 15B.1 Natural Math Static Repair
+
+Phase 15B.1 repairs the static value lowering for public natural math:
+`math.exp(x)` lowers as target `exp2(x * log2(e))`, `math.log(x)` lowers as
+target `log2(x) * ln(2)`, and `math.sqrt(x)` lowers as `x * rsqrt(x)` under
+positive finite policy. The value softmax composite now uses natural exp
+semantics statically; hardware re-proof is Phase 15B.2.
 
 The Phase 15.5 tolerance policy is locked to the existing VC4Kernel
 approximate-SFU hardware policy family for the current target-mode proof: target

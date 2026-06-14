@@ -171,7 +171,8 @@ static bool isFpToIntCastOp(StringRef name) {
 }
 
 static bool isPhase15ApproxSFUMathOp(StringRef name) {
-  return name == "math.exp" || name == "math.log" || name == "math.rsqrt";
+  return name == "math.exp" || name == "math.log" || name == "math.rsqrt" ||
+         name == "math.sqrt";
 }
 
 static bool isApproxSFUDomain(StringRef value) {

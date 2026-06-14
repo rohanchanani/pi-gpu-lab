@@ -6,7 +6,7 @@ func.func @reduction()
                 vc4value.fp_domain = "finite",
                 vc4value.reduction_policy = "finite_tree"} {
   %x = arith.constant 1.000000e+00 : f32
-  %y = math.sqrt %x : f32
+  %y = math.sin %x : f32
   return
 }
 

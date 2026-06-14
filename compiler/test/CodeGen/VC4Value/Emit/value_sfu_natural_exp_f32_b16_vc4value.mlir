@@ -1,14 +1,14 @@
 // RUN: rm -rf %t && mkdir -p %t
-// RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/value_sfu_exp.vc4kernel.mlir
-// RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/value_sfu_exp.vc4kernel.mlir
-// RUN: vc4-opt %t/value_sfu_exp.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/value_sfu_exp.ssavc4.mlir
-// RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/value_sfu_exp.ssavc4.mlir
-// RUN: vc4-opt %t/value_sfu_exp.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/value_sfu_exp.vc4.mlir
-// RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/value_sfu_exp.vc4.mlir
-// RUN: vc4-codegen %t/value_sfu_exp.vc4.mlir --emit-bundle %t/value_sfu_exp.bundle
-// RUN: test -f %t/value_sfu_exp.bundle/manifest.json
+// RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/value_sfu_natural_exp.vc4kernel.mlir
+// RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/value_sfu_natural_exp.vc4kernel.mlir
+// RUN: vc4-opt %t/value_sfu_natural_exp.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/value_sfu_natural_exp.ssavc4.mlir
+// RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/value_sfu_natural_exp.ssavc4.mlir
+// RUN: vc4-opt %t/value_sfu_natural_exp.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/value_sfu_natural_exp.vc4.mlir
+// RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/value_sfu_natural_exp.vc4.mlir
+// RUN: vc4-codegen %t/value_sfu_natural_exp.vc4.mlir --emit-bundle %t/value_sfu_natural_exp.bundle
+// RUN: test -f %t/value_sfu_natural_exp.bundle/manifest.json
 
-func.func @value_sfu_exp_f32_b16_vc4value(
+func.func @value_sfu_natural_exp_f32_b16_vc4value(
     %x: memref<?xf32, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["n"]},
     %y: memref<?xf32, #vc4value.global> {vc4value.arg_name = "y", vc4value.direction = "out", vc4value.shape_args = ["n"]},
     %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"})
@@ -27,13 +27,13 @@ func.func @value_sfu_exp_f32_b16_vc4value(
   return
 }
 
-// VC4KERNEL-LABEL: vc4kernel.kernel @value_sfu_exp_f32_b16_vc4value
+// VC4KERNEL-LABEL: vc4kernel.kernel @value_sfu_natural_exp_f32_b16_vc4value
 // VC4KERNEL: vc4kernel.fragment_const {{.*}}1.442695
 // VC4KERNEL: vc4kernel.fragment_alu.mul
 // VC4KERNEL-SAME: opcode = #vc4kernel.mul_alu_opcode<fmul>
 // VC4KERNEL: vc4kernel.fragment_sfu
 // VC4KERNEL-SAME: kind = #vc4kernel.sfu_kind<exp>
-// SSAVC4-LABEL: ssavc4.func @value_sfu_exp_f32_b16_vc4value
+// SSAVC4-LABEL: ssavc4.func @value_sfu_natural_exp_f32_b16_vc4value
 // SSAVC4: ssavc4.alu.mul {{.*}}opcode = #vc4.mul_opcode<fmul>
 // SSAVC4: ssavc4.sfu
 // SSAVC4-SAME: kind = #ssavc4.sfu_kind<exp>

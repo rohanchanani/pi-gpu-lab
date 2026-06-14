@@ -60,6 +60,9 @@ func.func @mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value(
 // VC4KERNEL: vc4kernel.fragment_unpack
 // VC4KERNEL: vc4kernel.fragment_reduce
 // VC4KERNEL-SAME: kind = #vc4kernel.reduce<fmax>
+// VC4KERNEL: vc4kernel.fragment_const {{.*}}1.442695
+// VC4KERNEL: vc4kernel.fragment_alu.mul
+// VC4KERNEL-SAME: opcode = #vc4kernel.mul_alu_opcode<fmul>
 // VC4KERNEL: vc4kernel.fragment_sfu
 // VC4KERNEL-SAME: kind = #vc4kernel.sfu_kind<exp>
 // VC4KERNEL: vc4kernel.fragment_sfu

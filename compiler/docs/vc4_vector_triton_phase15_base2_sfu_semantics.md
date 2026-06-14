@@ -17,7 +17,13 @@ LN2_CONSTANT_REQUIRED=YES
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
+VALUE_NATURAL_EXP_STATIC=PASS
+VALUE_NATURAL_LOG_STATIC=PASS
+VALUE_SQRT_STATIC=PASS
+SQRT_LOWERING=RSQRT_TIMES_X
+SOFTMAX_USES_NATURAL_EXP=YES
 READY_FOR_PHASE15B_1_VALUE_NATURAL_MATH_STATIC_REPAIR=YES
+READY_FOR_PHASE15B_2_VALUE_HARDWARE_EXP_LOG_SQRT_REPROOF=YES
 READY_FOR_TRITON=NO
 
 # Phase 15B Base-2 SFU Semantic Contract
@@ -71,7 +77,21 @@ static lowering/oracles and then re-prove public natural math:
 PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
 ```
 
-Until that repair lands:
+## Phase 15B.1 Static Repair
+
+Phase 15B.1 statically repairs value lowering for public natural math:
+
+- `VALUE_NATURAL_EXP_STATIC=PASS`
+- `VALUE_NATURAL_LOG_STATIC=PASS`
+- `VALUE_SQRT_STATIC=PASS`
+- `SOFTMAX_USES_NATURAL_EXP=YES`
+
+The static proof checks that natural exp reaches target exp2 only after the
+`LOG2E` multiply, natural log reaches target log2 only before the `LN2`
+multiply, and sqrt reaches target rsqrt only as the positive-finite
+`x * rsqrt(x)` composite.
+
+After the static repair, these invariants remain locked:
 
 - any doc or test equating public `math.exp` with the target exp2 mode is
   wrong;

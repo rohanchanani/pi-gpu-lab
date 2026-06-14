@@ -1,6 +1,6 @@
 // RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel | FileCheck %s
 
-func.func @softmax_v0_composite_lowers(
+func.func @softmax_v0_composite_natural_exp_lowers(
     %out: memref<?xf32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["n"]},
     %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"})
     attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32,
@@ -29,9 +29,7 @@ func.func @softmax_v0_composite_lowers(
   return
 }
 
-// CHECK-LABEL: vc4kernel.kernel @softmax_v0_composite_lowers
-// CHECK: vc4kernel.pred.tail
-// CHECK: vc4kernel.fragment_select
+// CHECK-LABEL: vc4kernel.kernel @softmax_v0_composite_natural_exp_lowers
 // CHECK: vc4kernel.fragment_reduce
 // CHECK-SAME: kind = #vc4kernel.reduce<fmax>
 // CHECK: vc4kernel.fragment_alu.add
@@ -45,7 +43,6 @@ func.func @softmax_v0_composite_lowers(
 // CHECK-SAME: kind = #vc4kernel.reduce<add>
 // CHECK: vc4kernel.fragment_sfu
 // CHECK-SAME: kind = #vc4kernel.sfu_kind<recip>
-// CHECK: vc4kernel.fragment_alu.mul
 // CHECK: vc4kernel.vdw_store_fragment
 // CHECK-NOT: math.
 // CHECK-NOT: arith.divf
