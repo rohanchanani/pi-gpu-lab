@@ -42,6 +42,16 @@ VALUE_APPROX_SFU_RECIP_DIV_HARDWARE=PASS
 VALUE_FINITE_F32_MAX_REDUCTION_HARDWARE=PASS
 VALUE_SOFTMAX_V0_HARDWARE_ISOLATION=PASS
 VALUE_APPROX_SFU_TOLERANCE_POLICY=LOCKED
+PHASE15_BASE2_SFU_SEMANTICS_CONTRACT=LOCKED
+TARGET_SFU_EXP_IS_EXP2=YES
+TARGET_SFU_LOG_IS_LOG2=YES
+VALUE_MATH_EXP_IS_NATURAL_EXP=YES
+VALUE_MATH_LOG_IS_NATURAL_LOG=YES
+VALUE_MATH_SQRT_IS_SQRT=YES
+NATURAL_EXP_LOWERING=EXP2_X_LOG2E
+NATURAL_LOG_LOWERING=LOG2_X_LN2
+SQRT_LOWERING=RSQRT_TIMES_X_POSITIVE_FINITE_DOMAIN
+PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
 VALUE_F16_STORAGE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_STORE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_GEMV_INPUT_STORAGE_STATIC=PASS
@@ -743,8 +753,8 @@ implemented by this contract lock.
 
 ## 15. Math and SFU planning
 
-`math.exp`, `math.log`, reciprocal, and rsqrt-like value patterns may map to
-approximate SFU only under explicit approximate policy.
+Public `math.exp`, public `math.log`, reciprocal, and rsqrt-like value patterns
+may map to approximate SFU only under explicit approximate policy.
 
 Exact/default math must either lower through an exact sequence or reject with a
 diagnostic. It must not silently lower to approximate SFU.
@@ -753,9 +763,10 @@ There is no direct SFU sqrt. Approximate sqrt may be planned only as an explicit
 approximate composite, such as rsqrt plus arithmetic, when source policy allows
 it.
 
-Exp/log base semantics must be explicit. Base-2 target SFU forms and source
-default exp/log forms are not interchangeable without a specified conversion
-and policy.
+Exp/log base semantics must be explicit. Target SFU `exp` and `log` are base-2
+hardware modes. Public value `math.exp` is natural exp and public value
+`math.log` is natural log; they are not interchangeable with target exp2/log2
+without `LOG2E`/`LN2` scaling and explicit approximate-SFU policy.
 
 PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
@@ -771,14 +782,17 @@ READY_FOR_TRITON=NO
 Phase 15.3 locks the value-surface contract for approximate SFU math and
 one-block softmax. Phase 15.4 must statically prove, without hardware:
 
-- `math.exp` over scalar `f32` and `vector<16xf32>` lowers only when the
-  containing function or operation carries `vc4value.math_policy =
-  "approx_sfu"` and finite `vc4value.fp_domain` metadata.
+- natural `math.exp` over scalar `f32` and `vector<16xf32>` lowers only when
+  the containing function or operation carries `vc4value.math_policy =
+  "approx_sfu"` and finite `vc4value.fp_domain` metadata. Phase 15B repairs the
+  lowering to target exp2 with `x * log2(e)` scaling.
 - `arith.divf` lowers only as approximate reciprocal/division under explicit
   approximate-SFU policy and a finite nonzero denominator domain. Exact
   division semantics are not claimed.
-- `math.log` and `math.rsqrt` may lower because VC4Kernel Surface v2 already
-  locks log and rsqrt SFU modes; both require positive finite domains.
+- natural `math.log` lowers through target log2 with `ln(2)` scaling, and
+  `math.rsqrt` may lower because VC4Kernel Surface v2 already locks rsqrt.
+  Both require positive finite domains. Public `math.sqrt` is a sqrt operation
+  and lowers through `x * rsqrt(x)` only under explicit positive finite policy.
 - finite f32 max reductions lower for the exact value spellings
   `vector.reduction <maxnumf>` and `vector.reduction <maximumf>` over
   `vector<16xf32>` to scalar `f32`, with explicit finite input,

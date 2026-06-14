@@ -1,0 +1,4 @@
+# RUN: python3 %S/Support/audit_phase15b_base2_sfu_contract.py --repo-root %vc4_repo_root | FileCheck %s
+
+# CHECK: PASS Phase 15B base-2 SFU contract audit
+# CHECK: PHASE15_BASE2_SFU_SEMANTICS_CONTRACT_AUDIT=PASS

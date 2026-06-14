@@ -497,8 +497,11 @@ sqrt can be considered as an explicit composite under approximate policy.
 Exact/default sqrt remains a temporary reject until exact or emulated lowering
 is specified.
 
-Exp/log base semantics must be explicit. Target approximate base-2 SFU forms
-must not be confused with precise source default math.
+Exp/log base semantics must be explicit. Target approximate SFU exp/log modes
+are base-2 exp2/log2 forms. Public TTIR `tl.exp` is natural exp and public
+TTIR `tl.log` is natural log; they must lower through `LOG2E`/`LN2` scaling
+under explicit approximate policy, not directly to the target base-2 modes.
+Public TTIR `tl.sqrt` is sqrt and must not be confused with target rsqrt.
 
 ## 12. Subword, f16 storage, and unsupported native float formats
 

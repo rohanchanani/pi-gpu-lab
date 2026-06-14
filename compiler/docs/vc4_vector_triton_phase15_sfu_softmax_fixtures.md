@@ -18,6 +18,12 @@ VALUE_APPROX_SFU_RECIP_DIV_HARDWARE=PASS
 VALUE_FINITE_F32_MAX_REDUCTION_HARDWARE=PASS
 VALUE_SOFTMAX_V0_HARDWARE_ISOLATION=PASS
 VALUE_APPROX_SFU_TOLERANCE_POLICY=LOCKED
+PHASE15_BASE2_SFU_SEMANTICS_CONTRACT=LOCKED
+TARGET_SFU_EXP_IS_EXP2=YES
+TARGET_SFU_LOG_IS_LOG2=YES
+VALUE_MATH_EXP_IS_NATURAL_EXP=YES
+VALUE_MATH_LOG_IS_NATURAL_LOG=YES
+PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_PROVEN
@@ -37,14 +43,16 @@ snapshots for the approximate-SFU math and one-block softmax contract.
 
 The accepted snapshots are narrow:
 
-- f32 `tl.exp` as `math.exp`;
+- f32 `tl.exp` as public natural `math.exp` at the value surface; Phase 15B
+  requires the value lowering to scale natural exp through target exp2;
 - f32 reciprocal/division as `arith.divf` under an explicit approximate-SFU
   policy;
 - finite f32 `tl.max` as `tt.reduce` with an `arith.maxnumf` combiner;
 - one-block stable softmax for `1 <= ncols <= 16`;
 - mixed f16-storage input softmax with f32 compute/output;
-- optional `tl.log` and `tl.rsqrt`, both lower-half SFU modes already locked
-  by VC4Kernel Surface v2.
+- optional `tl.log` and `tl.rsqrt`; Phase 15B classifies public `tl.log` as
+  natural log lowered through target log2 scaling, while `rsqrt` maps to the
+  target reciprocal-square-root mode under positive finite policy.
 
 Accepted fixtures exclude `tl.dot`, `tt.dot`, `vector.contract`, atomics, block
 pointers, full attention, FlashAttention, multiblock softmax, fp-to-int casts,
@@ -67,8 +75,8 @@ and global Triton readiness remains `NO`.
 Phase 15.3 locks the value-surface contract for these controlled TTIR forms
 before executable lowering:
 
-- explicit approximate-SFU policy metadata is required for `math.exp`,
-  `math.log`, `math.rsqrt`, and reciprocal/division;
+- explicit approximate-SFU policy metadata is required for natural `math.exp`,
+  natural `math.log`, `math.rsqrt`, and reciprocal/division;
 - finite f32 max reduction is accepted for `vector.reduction <maxnumf>` and
   `vector.reduction <maximumf>` over `vector<16xf32>`;
 - one-block softmax v0 is a standard value composite, not a new
@@ -85,26 +93,28 @@ handoff. Hardware proof remains for later Phase 15 packages, and
 Phase 15.5 proves the value approximate-SFU and softmax executable subset on
 real VC4 hardware with targeted isolation fixtures:
 
-- `value_sfu_exp_f32_b16_vc4value` proves `math.exp` under explicit
-  approximate-SFU policy with bounded finite inputs, tail masks, sentinels, and
-  `active_qpus=12`.
+- `value_sfu_exp_f32_b16_vc4value` proves the current direct target exp2 SFU
+  path for source-authored `math.exp` under explicit approximate-SFU policy. It
+  is reclassified by Phase 15B as requiring repair before it can prove public
+  natural exp semantics.
 - `value_sfu_recip_div_f32_b16_vc4value` proves approximate reciprocal/division
   for finite positive denominators away from zero.
 - `value_reduce_max_f32_b16_vc4value` proves finite f32 max reduction for
   active lane counts 1, 2, 7, 15, and 16.
-- `value_softmax_stable_f32_b16_vc4value` proves one-block stable softmax v0
-  for rows 1, 2, and 7 with `ncols` 1, 2, 7, 15, and 16, row padding sentinels,
-  and per-row probability sum checks.
+- `value_softmax_stable_f32_b16_vc4value` proves the current target exp2-based
+  softmax path for rows 1, 2, and 7 with `ncols` 1, 2, 7, 15, and 16, row
+  padding sentinels, and per-row probability sum checks. Public natural-exp
+  softmax requires Phase 15B repair and re-proof.
 - `value_sfu_softmax_empty_repeat_vc4value` proves repeat launch hygiene and
   empty exp/div launches while zero-active softmax remains staged.
 
-The tolerance policy is locked to the existing VC4Kernel approximate-SFU
-hardware policy family: exp uses base-2 SFU semantics with `0.001` absolute and
-`0.002` relative tolerance; reciprocal/division uses `0.002` absolute and
-`0.003` relative tolerance for the value composite; softmax uses `0.004`
-absolute, `0.006` relative, and `0.006` row-sum tolerance. These tolerances are
-based on the existing lower-half SFU fixture behavior and are tight enough to
-catch wrong operations while allowing the accepted approximate SFU path.
+The Phase 15.5 tolerance policy is locked to the existing VC4Kernel
+approximate-SFU hardware policy family for the current target-mode proof: target
+exp2 uses `0.001` absolute and `0.002` relative tolerance; reciprocal/division
+uses `0.002` absolute and `0.003` relative tolerance for the value composite;
+the current exp2-based softmax uses `0.004` absolute, `0.006` relative, and
+`0.006` row-sum tolerance. Natural exp/log repair must keep explicit tolerance
+policy and re-prove public semantics.
 
 Every fixture requires `VC4_TEST_RESULT status=PASS`, zero total mismatches,
 zero sentinel mismatches, zero launch failures, nonzero output hashes, and

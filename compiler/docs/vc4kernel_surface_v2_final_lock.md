@@ -44,7 +44,7 @@ No hardware-backed VC4Kernel compute-kernel feature is outside these categories.
 | VDR to VPM w32/subword/dynamic coords/selectors | `ACCEPTED_HARDWARE_PROVEN` | P9/P12 isolated fixtures and mixed VPM pipeline fixtures. |
 | VDW from VPM w32/subword/dynamic coords/selectors | `ACCEPTED_HARDWARE_PROVEN` | P9/P12 isolated fixtures and mixed memory-output fixtures. |
 | Pack/unpack and f16 storage conversion | `ACCEPTED_HARDWARE_PROVEN` | P9 and P13 f16 storage fixtures; native f16 arithmetic is rejected. |
-| Approximate SFU policy | `ACCEPTED_HARDWARE_PROVEN` | Explicit approximate policy only; exact/default math is rejected. |
+| Approximate SFU policy | `ACCEPTED_HARDWARE_PROVEN` | Explicit approximate policy only; target exp/log are base-2 exp2/log2 SFU modes; exact/default math is rejected. |
 | Dynamic rotate and rotate-derived composites | `ACCEPTED_HARDWARE_PROVEN` | P11 dynamic rotate proof and mixed swizzle/scan fixtures. |
 | Barriers, semaphores, cooperative metadata | `ACCEPTED_HARDWARE_PROVEN` | Cooperative barrier fixtures and runtime resource checks. |
 | Runtime resource metadata and libpi descriptors | `ACCEPTED_HARDWARE_PROVEN` | Artifact audit, generated C, and mixed resource metadata. |
