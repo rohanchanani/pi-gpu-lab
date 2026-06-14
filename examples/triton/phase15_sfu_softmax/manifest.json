@@ -1,0 +1,204 @@
+{
+  "phase": "phase15_sfu_softmax",
+  "TRITON_TAG": "v3.7.0",
+  "triton_version": "3.7.0",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "python_semantic_importer_used": false,
+  "READY_FOR_TRITON": "NO",
+  "accepted_policy": {
+    "block_size": 16,
+    "approx_math_policy": "explicit_approx_sfu_policy_required",
+    "accepted_input_domain": "finite bounded f32; positive finite denominator for division; 1 <= ncols <= 16 for accepted softmax",
+    "exact_default_math_rejected": true,
+    "tl_dot_used_in_accepted_fixtures": false,
+    "tt_dot_used_in_accepted_fixtures": false,
+    "vector_contract_used_in_accepted_fixtures": false,
+    "full_attention_or_flashattention_used": false
+  },
+  "snapshots": [
+    {
+      "name": "ttir_sfu_exp_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_exp_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_exp_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_sfu_exp_f32_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_exp_f32_b16.py --kernel-name ttir_sfu_exp_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_exp_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_exp_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "tl.exp lowers only under explicit approximate SFU finite-domain policy; exact/default math is staged",
+      "input_domain_contract": "finite bounded f32 values",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_math_exp_tensor16xf32",
+        "saw_phase10_tail_mask",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_sfu_recip_div_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_recip_div_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_recip_div_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_sfu_recip_div_f32_b16",
+      "signature": "*fp32,*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_recip_div_f32_b16.py --kernel-name ttir_sfu_recip_div_f32_b16 --signature '*fp32,*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_recip_div_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_recip_div_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "arith.divf is accepted only as approximate reciprocal/division under explicit finite nonzero denominator policy",
+      "input_domain_contract": "finite f32 numerators and positive finite denominators",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_arith_divf_tensor16xf32",
+        "saw_phase10_tail_mask",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_reduce_max_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_reduce_max_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_reduce_max_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_max_f32_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_reduce_max_f32_b16.py --kernel-name ttir_reduce_max_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_reduce_max_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_reduce_max_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "finite f32 max reduction for softmax; NaN/Inf semantics are staged",
+      "input_domain_contract": "finite f32 values; inactive lanes use finite low sentinel -80.0",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tt_reduce_axis0",
+        "saw_arith_maxnumf_combiner",
+        "saw_phase10_tail_mask"
+      ]
+    },
+    {
+      "name": "ttir_softmax_stable_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_softmax_stable_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_softmax_stable_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_softmax_stable_f32_b16",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_softmax_stable_f32_b16.py --kernel-name ttir_softmax_stable_f32_b16 --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_softmax_stable_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_softmax_stable_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "one-block stable softmax v0 only; exp/division use explicit approximate SFU policy",
+      "input_domain_contract": "finite bounded f32 inputs, finite stride, and 1 <= ncols <= 16",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tt_reduce_max_arith_maxnumf",
+        "saw_math_exp",
+        "saw_tt_reduce_sum_arith_addf",
+        "saw_arith_divf",
+        "saw_masked_store"
+      ]
+    },
+    {
+      "name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir",
+      "kernel_name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16",
+      "signature": "*fp16,*fp32,*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py --kernel-name mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16 --signature '*fp16,*fp32,*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "combines Phase 14 f16 storage input with Phase 15 one-block softmax and explicit approximate SFU policy",
+      "input_domain_contract": "finite f16 storage inputs promoted to f32, finite f32 scales, and 1 <= ncols <= 16",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_phase9_axes",
+        "saw_phase10_masks",
+        "saw_phase11_row_strided_memory",
+        "saw_phase12_reductions",
+        "saw_phase14_f16_storage_load",
+        "saw_phase15_softmax",
+        "saw_scf_if",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_sfu_log_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_log_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_log_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_sfu_log_f32_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_log_f32_b16.py --kernel-name ttir_sfu_log_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_log_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_log_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "optional log mode is lower-half locked but remains approximate-policy-only",
+      "input_domain_contract": "finite positive f32 values",
+      "expected_feature_claims": [
+        "saw_math_log_tensor16xf32",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_sfu_rsqrt_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_rsqrt_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_rsqrt_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_sfu_rsqrt_f32_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_rsqrt_f32_b16.py --kernel-name ttir_sfu_rsqrt_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_rsqrt_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_rsqrt_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "optional rsqrt mode is lower-half locked but remains approximate-policy-only",
+      "input_domain_contract": "finite positive f32 values",
+      "expected_feature_claims": [
+        "saw_math_rsqrt_tensor16xf32",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ]
+    },
+    {
+      "name": "ttir_exact_math_no_policy_reject_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_exact_math_no_policy_reject_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_exact_math_no_policy_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_exact_math_no_policy_reject_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_exact_math_no_policy_reject_b16.py --kernel-name ttir_exact_math_no_policy_reject_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_exact_math_no_policy_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_exact_math_no_policy_reject_b16.json",
+      "expected_classification": "STAGED_EXACT_DEFAULT_MATH",
+      "approx_sfu_policy_caveat": "same TTIR math.exp shape is rejected unless an explicit approximate SFU policy is attached by the importer contract",
+      "input_domain_contract": "finite f32 values; policy intentionally absent for staged fixture",
+      "expected_feature_claims": [
+        "saw_math_exp_without_accepted_policy"
+      ]
+    },
+    {
+      "name": "ttir_softmax_zero_active_reject_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_softmax_zero_active_reject_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_softmax_zero_active_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_softmax_zero_active_reject_b16",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_softmax_zero_active_reject_b16.py --kernel-name ttir_softmax_zero_active_reject_b16 --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_softmax_zero_active_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_softmax_zero_active_reject_b16.json",
+      "expected_classification": "STAGED_ZERO_ACTIVE_SOFTMAX",
+      "approx_sfu_policy_caveat": "zero-active softmax has no finite no-op guard and can divide by zero",
+      "input_domain_contract": "inventory only; accepted softmax requires 1 <= ncols <= 16",
+      "expected_feature_claims": [
+        "saw_no_zero_active_guard"
+      ]
+    },
+    {
+      "name": "ttir_multiblock_softmax_reject_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_multiblock_softmax_reject_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_multiblock_softmax_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_multiblock_softmax_reject_b16",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_multiblock_softmax_reject_b16.py --kernel-name ttir_multiblock_softmax_reject_b16 --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_multiblock_softmax_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_multiblock_softmax_reject_b16.json",
+      "expected_classification": "STAGED_MULTIBLOCK_SOFTMAX",
+      "approx_sfu_policy_caveat": "multi-program softmax is staged; Phase 15 accepts one block per row only",
+      "input_domain_contract": "inventory only",
+      "expected_feature_claims": [
+        "saw_second_program_axis_for_softmax_block"
+      ]
+    },
+    {
+      "name": "ttir_tl_dot_still_reject_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_tl_dot_still_reject_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_tl_dot_still_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_tl_dot_still_reject_b16",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,1,1,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_tl_dot_still_reject_b16.py --kernel-name ttir_tl_dot_still_reject_b16 --signature '*fp32,*fp32,*fp32,i32,i32,1,1,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_tl_dot_still_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_tl_dot_still_reject_b16.json",
+      "expected_classification": "STAGED_TL_DOT",
+      "approx_sfu_policy_caveat": "tl.dot remains outside Phase 15 and is covered by Phase 13 staging",
+      "input_domain_contract": "inventory only",
+      "expected_feature_claims": [
+        "saw_tt_dot"
+      ]
+    }
+  ]
+}
