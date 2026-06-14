@@ -310,13 +310,15 @@ def masked_ttir_transfer_requires_value_mask(module_text):
     for line in lines:
         if not re.search(r'(?<![A-Za-z0-9_])"?tt\.(load|store)\b', line):
             continue
+        if "tensor<" not in line.split(":", 1)[1]:
+            continue
         operands = line.split(":", 1)[0]
-        if operands.count(",") < 2:
-            continue
         parts = [part.strip() for part in operands.split(",")]
-        if len(parts) < 2:
+        is_store = re.search(r'(?<![A-Za-z0-9_])"?tt\.store\b', line)
+        mask_operand_index = 2 if is_store else 1
+        if len(parts) <= mask_operand_index:
             continue
-        mask_value = parts[1].split()[-1]
+        mask_value = parts[mask_operand_index].split()[-1]
         mask_def = defs.get(mask_value, "")
         # The Phase 14 storage snapshots carry syntactic masks that compare a
         # 0..15 range against dense<16>, i.e. statically full for the controlled
@@ -324,6 +326,11 @@ def masked_ttir_transfer_requires_value_mask(module_text):
         # transfers.  Any other masked TTIR transfer still needs a value mask.
         if "arith.cmpi slt" in mask_def and "dense<16>" in mask_def:
             continue
+        cmp_operands = mask_def.split(":", 1)[0].split(",", 1)
+        if len(cmp_operands) == 2:
+            rhs_value = cmp_operands[1].strip().split()[-1]
+            if "arith.cmpi slt" in mask_def and "dense<16>" in defs.get(rhs_value, ""):
+                continue
         return True
     return False
 

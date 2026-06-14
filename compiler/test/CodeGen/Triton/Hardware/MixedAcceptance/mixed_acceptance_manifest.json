@@ -691,6 +691,93 @@
         "f32_tmu",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 14 TTIR mixed fixture combining f16 input storage, f32 row-wise dot/reduction, scalar control flow, 2D launch identity, masks, row-strided storage, and a companion f32-compute to f16-storage snapshot under the finite storage policy",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "ttir_elementwise",
+        "ttir_control_flow",
+        "ttir_multi_axis",
+        "ttir_mask_tail",
+        "ttir_row_strided_memory",
+        "ttir_reduction_f32_finite_add",
+        "f32_finite_tree_policy",
+        "ttir_gemv_f32_row_dot",
+        "ttir_f16_storage_load",
+        "ttir_f16_storage_store",
+        "ttir_f32_compute_after_f16_load",
+        "f16_storage_finite_policy",
+        "no_native_f16_arithmetic",
+        "no_bf16_fp8",
+        "no_softmax_sfu",
+        "active_qpus_12",
+        "sentinel_preserve",
+        "row_padding_sentinels",
+        "output_padding_sentinels",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_ttir_elementwise",
+        "saw_ttir_control_flow",
+        "saw_ttir_multi_axis",
+        "saw_ttir_mask_tail",
+        "saw_ttir_row_strided_memory",
+        "saw_ttir_reduction_f32_finite_add",
+        "saw_ttir_gemv_f32_row_dot",
+        "saw_ttir_f16_storage_load",
+        "saw_ttir_f16_storage_store",
+        "saw_ttir_f32_compute_after_f16_load",
+        "saw_value_f16_storage",
+        "saw_f16_storage_finite_policy",
+        "saw_no_native_f16_arithmetic",
+        "saw_no_bf16_fp8",
+        "saw_no_softmax_sfu",
+        "saw_row_padding_sentinels",
+        "saw_output_padding_sentinels"
+      ],
+      "expected_cases_summary": "Two source-controlled Phase 14 TTIR snapshots in one fixture: mixed f16-storage GEMV row-dot with a 2D kblock/row grid plus f32-compute to f16-storage store; active_qpus=12; strict CPU oracle, f16 finite storage policy, row/output padding sentinels, and no native f16/bf16/fp8/SFU claims checked.",
+      "triage_feature_bands": [
+        "ttir_import",
+        "phase10_mask_memory",
+        "phase11_strided_memory",
+        "phase12_reductions",
+        "phase13_gemv_rowwise_dot",
+        "phase14_f16_storage_numeric",
+        "f16_storage_store",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -1224,6 +1311,70 @@
         "mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton"
       ],
       "required": true
+    },
+    {
+      "id": "ttir_f16_storage_load",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_f16_storage_store",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_f32_compute_after_f16_load",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "f16_storage_finite_policy",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_native_f16_arithmetic",
+      "verification_kind": "phase_guard",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_bf16_fp8",
+      "verification_kind": "phase_guard",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_softmax_sfu",
+      "verification_kind": "phase_guard",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "output_padding_sentinels",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
     }
   ],
   "isolation_backstops": [
@@ -1231,5 +1382,5 @@
     "triton_saxpy_select_tail_vc4triton",
     "triton_i32_add_select_tail_vc4triton"
   ],
-  "final_acceptance_policy": "Run this manifest with run_mixed_acceptance.sh after static TTIR checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine TTIR mixed hardware gate, including Phase 8.5 control flow."
+  "final_acceptance_policy": "Run this manifest with run_mixed_acceptance.sh after static TTIR checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine TTIR mixed hardware gate, including Phase 14 f16 storage/numeric mixed acceptance."
 }

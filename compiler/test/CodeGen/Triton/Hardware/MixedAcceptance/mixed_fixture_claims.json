@@ -1645,6 +1645,190 @@
           }
         }
       ]
+    },
+    {
+      "name": "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+      "source_paths": [
+        "examples/triton/phase14_ml_storage_numeric/sources/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.py",
+        "examples/triton/phase14_ml_storage_numeric/sources/ttir_f32_compute_store_f16_b16.py",
+        "examples/triton/phase14_ml_storage_numeric/generated/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.ttir.mlir",
+        "examples/triton/phase14_ml_storage_numeric/generated/ttir_f32_compute_store_f16_b16.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton/inputs/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton/inputs/ttir_f32_compute_store_f16_b16.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton/candidate/mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_real_ttir_snapshot",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "snapshot provenance audit requires fixture TTIR inputs to match the source-controlled Phase 14 generated snapshots byte-for-byte."
+          }
+        },
+        {
+          "claim": "saw_cpp_ttir_importer",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_CPP_TTIR_IMPORTER only after each TTIR input imports through vc4-triton-opt --convert-triton-to-vc4-value; expected.json requires the printed result field to be 1."
+          }
+        },
+        {
+          "claim": "saw_value_surface_verification",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner imports each input to value IR, concatenates at the value layer, and executes vc4-opt --vc4-verify-value-surface."
+          }
+        },
+        {
+          "claim": "saw_value_to_vc4kernel",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner executes --convert-vc4-value-to-vc4kernel --verify-vc4kernel and validates no producer dialect ops remain in verified vc4kernel."
+          }
+        },
+        {
+          "claim": "saw_value_scf_cf",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner executes --convert-scf-to-cf before value-to-VC4Kernel conversion."
+          }
+        },
+        {
+          "claim": "saw_ttir_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR inputs contain f32 multiply/add arithmetic; the harness checks row-dot, partial, and f16-store outputs against CPU oracles."
+          }
+        },
+        {
+          "claim": "saw_ttir_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "mixed TTIR snapshot contains scf.if on kblock; harness launches kblock 0 and 1 so both store and empty control-flow paths are exercised by checked outputs."
+          }
+        },
+        {
+          "claim": "saw_ttir_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "mixed TTIR input uses x/y program ids and the harness launches a 2D kblock/row grid."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR inputs contain canonical slt masks; the harness checks active outputs and inactive sentinels."
+          }
+        },
+        {
+          "claim": "saw_ttir_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "mixed TTIR computes row * 16 plus contiguous K offsets for f16 A storage and the harness verifies row padding sentinels."
+          }
+        },
+        {
+          "claim": "saw_ttir_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "real f32 tl.sum/tt.reduce snapshot is launched with finite f16 inputs widened to f32 and checked against a CPU f32 dot oracle within finite tolerance."
+          }
+        },
+        {
+          "claim": "saw_ttir_gemv_f32_row_dot",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "TTIR input contains f16 loads, f32 multiply, f32 reduction, and scalar stores; harness verifies row-dot outputs."
+          }
+        },
+        {
+          "claim": "saw_ttir_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "mixed TTIR input loads f16 A/X storage; harness CPU oracle converts f16 storage to f32 before checking row-dot outputs."
+          }
+        },
+        {
+          "claim": "saw_ttir_f16_storage_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "companion Phase 14 TTIR input stores f32 compute values to f16 output storage; harness checks exact selected finite f16 outputs."
+          }
+        },
+        {
+          "claim": "saw_ttir_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "mixed TTIR input contains arith.extf f16 to f32 followed by f32 multiply/reduction; harness checks f32 dot results."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: accepted TTIR f16 pointers lower through value memrefs with f16 transfer/extf/truncf forms before VC4Kernel conversion."
+          }
+        },
+        {
+          "claim": "saw_f16_storage_finite_policy",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "f16 store snapshot uses finite representable values and expected.json requires the finite-policy result field while the harness checks f16 storage bits."
+          }
+        },
+        {
+          "claim": "saw_no_native_f16_arithmetic",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-native-f16-arithmetic.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-bf16-fp8-staged.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-f32-to-i32-cast.mlir"
+            ],
+            "phase_guard": "Phase 14 static negative tests and fixture audits reject native f16 arithmetic; accepted snapshots use f16 storage conversion with f32 compute only."
+          }
+        },
+        {
+          "claim": "saw_no_bf16_fp8",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-native-f16-arithmetic.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-bf16-fp8-staged.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-f32-to-i32-cast.mlir"
+            ],
+            "phase_guard": "Phase 14 staged-feature audits and static negative tests reject bf16/fp8 support claims."
+          }
+        },
+        {
+          "claim": "saw_no_softmax_sfu",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-native-f16-arithmetic.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-bf16-fp8-staged.mlir",
+              "compiler/test/Conversion/TritonToVC4Value/StorageNumeric/invalid-ttir-f32-to-i32-cast.mlir"
+            ],
+            "phase_guard": "Phase 14 scope excludes approximate math/SFU/softmax and accepted mixed TTIR contains no SFU/math/softmax markers."
+          }
+        },
+        {
+          "claim": "saw_row_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness verifies rows beyond the active 16-row tile remain f16 padding sentinels."
+          }
+        },
+        {
+          "claim": "saw_output_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "harness verifies inactive f32/f16 output guard and padding regions remain sentinels."
+          }
+        }
+      ]
     }
   ]
 }

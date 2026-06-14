@@ -1,0 +1,43 @@
+{
+  "name": "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "elements_checked": 288,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "mixed_rows": 16,
+    "mixed_k": 16,
+    "mixed_kblocks": 2,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_value_surface_verification": 1,
+    "saw_value_to_vc4kernel": 1,
+    "saw_value_scf_cf": 1,
+    "saw_ttir_elementwise": 1,
+    "saw_ttir_control_flow": 1,
+    "saw_ttir_multi_axis": 1,
+    "saw_ttir_mask_tail": 1,
+    "saw_ttir_row_strided_memory": 1,
+    "saw_ttir_reduction_f32_finite_add": 1,
+    "saw_ttir_gemv_f32_row_dot": 1,
+    "saw_ttir_f16_storage_load": 1,
+    "saw_ttir_f16_storage_store": 1,
+    "saw_ttir_f32_compute_after_f16_load": 1,
+    "saw_value_f16_storage": 1,
+    "saw_f16_storage_finite_policy": 1,
+    "saw_no_native_f16_arithmetic": 1,
+    "saw_no_bf16_fp8": 1,
+    "saw_no_softmax_sfu": 1,
+    "saw_row_padding_sentinels": 1,
+    "saw_output_padding_sentinels": 1,
+    "runtime_launches": 2
+  },
+  "float_max": {
+    "max_abs_diff": 0.002
+  }
+}

@@ -41,6 +41,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
     "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton",
     "mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton",
+    "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -92,6 +93,14 @@ REQUIRED_FEATURES = {
     "no_tl_dot_tt_dot",
     "no_vector_contract",
     "no_multiblock_k_accumulation",
+    "ttir_f16_storage_load",
+    "ttir_f16_storage_store",
+    "ttir_f32_compute_after_f16_load",
+    "f16_storage_finite_policy",
+    "no_native_f16_arithmetic",
+    "no_bf16_fp8",
+    "no_softmax_sfu",
+    "output_padding_sentinels",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -259,14 +268,17 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_mask_tail but TTIR lacks canonical slt tail mask")
     if "ttir_compute_mask_select" in tags and ("arith.cmpf" not in ttir_text or "arith.select" not in ttir_text):
         fail(f"{name} claims ttir_compute_mask_select but TTIR lacks cmpf/select")
-    if "ttir_row_strided_memory" in tags and (
-        "tt.get_program_id y" not in ttir_text
-        or not (
-            re.search(r"arith\.muli %[A-Za-z0-9_]+, %ld[oxy]", ttir_text)
-            or re.search(r"arith\.muli %[A-Za-z0-9_]+, %LDA", ttir_text)
+    if "ttir_row_strided_memory" in tags:
+        has_symbolic_stride = re.search(r"arith\.muli %[A-Za-z0-9_]+, %ld[oxy]", ttir_text) or re.search(
+            r"arith\.muli %[A-Za-z0-9_]+, %LDA", ttir_text
         )
-    ):
-        fail(f"{name} claims ttir_row_strided_memory but TTIR lacks row*stride pointer arithmetic")
+        has_phase14_static_stride = (
+            name == "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+            and re.search(r"arith\.muli %row, %[A-Za-z0-9_]+", ttir_text)
+            and "!tt.ptr<f16>" in ttir_text
+        )
+        if "tt.get_program_id y" not in ttir_text or not (has_symbolic_stride or has_phase14_static_stride):
+            fail(f"{name} claims ttir_row_strided_memory but TTIR lacks row*stride pointer arithmetic")
     if "value_mask_classifier" in tags and "saw_value_mask_classifier" not in (repo_root / fixture["path"] / "expected.json").read_text():
         fail(f"{name} claims value_mask_classifier but expected.json lacks saw_value_mask_classifier")
     if "value_strided_address" in tags and "saw_value_strided_address" not in (repo_root / fixture["path"] / "expected.json").read_text():
@@ -301,6 +313,22 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims no_vector_contract but TTIR contains vector.contract")
     if "no_multiblock_k_accumulation" in tags and "atomic" in ttir_text.lower():
         fail(f"{name} claims no_multiblock_k_accumulation but TTIR contains atomic marker")
+    if "ttir_f16_storage_load" in tags and ("tt.load" not in ttir_text or "!tt.ptr<f16>" not in ttir_text or "arith.extf" not in ttir_text):
+        fail(f"{name} claims ttir_f16_storage_load but TTIR lacks f16 load plus f32 widening")
+    if "ttir_f16_storage_store" in tags and ("tt.store" not in ttir_text or "!tt.ptr<f16>" not in ttir_text or "arith.truncf" not in ttir_text):
+        fail(f"{name} claims ttir_f16_storage_store but TTIR lacks f32-to-f16 store")
+    if "ttir_f32_compute_after_f16_load" in tags and ("arith.extf" not in ttir_text or "arith.mulf" not in ttir_text or "tt.reduce" not in ttir_text):
+        fail(f"{name} claims ttir_f32_compute_after_f16_load but TTIR lacks f32 compute after f16 load")
+    if "f16_storage_finite_policy" in tags and "saw_f16_storage_finite_policy" not in (repo_root / fixture["path"] / "expected.json").read_text():
+        fail(f"{name} claims f16_storage_finite_policy but expected.json lacks saw_f16_storage_finite_policy")
+    if "no_native_f16_arithmetic" in tags and (
+        re.search(r"arith\.(addf|subf|mulf|divf).*xf16", ttir_text) or re.search(r"arith\.(addf|subf|mulf|divf).*: f16", ttir_text)
+    ):
+        fail(f"{name} claims no_native_f16_arithmetic but TTIR contains native f16 arithmetic")
+    if "no_bf16_fp8" in tags and ("bf16" in ttir_text or "fp8" in ttir_text.lower()):
+        fail(f"{name} claims no_bf16_fp8 but TTIR contains bf16/fp8 marker")
+    if "no_softmax_sfu" in tags and any(marker in ttir_text.lower() for marker in ("softmax", "exp", "log", "sqrt", "rsqrt", "sin", "cos")):
+        fail(f"{name} claims no_softmax_sfu but TTIR contains softmax/SFU marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

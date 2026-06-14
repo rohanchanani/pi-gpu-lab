@@ -1,3 +1,13 @@
+PHASE14_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_ML_STORAGE_NUMERIC_CONVERSION_POLICY
+VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
+TTIR_F16_STORAGE_MIXED_ACCEPTANCE=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_STORAGE_NUMERIC_WORKAROUNDS=YES
+SOFTMAX_SFU_STAGED_FOR_PHASE15=YES
+READY_FOR_PHASE15_APPROX_MATH_SFU_SOFTMAX=YES
+READY_FOR_TRITON=NO
 PHASE14_CONTROLLED_TRITON_STORAGE_NUMERIC_FIXTURES=YES
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 REAL_TRITON_ML_STORAGE_NUMERIC_SOURCES=YES
@@ -165,5 +175,24 @@ Phase 14.8 TTIR hardware isolation:
   source-controlled TTIR snapshots, and the C++ TTIR importer path.
 - i32-to-f32 hardware is not required in Phase 14.8 because the TTIR and value
   path still stage that cast by the lower-half gap.
+
+Phase 14.9 final mixed acceptance and lock:
+
+- `mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton` uses
+  source-controlled real TTIR snapshots, the C++ TTIR importer, value-surface
+  verification, value-to-VC4Kernel lowering, SSAVC4, scheduled VC4, and real
+  hardware.
+- The mixed TTIR fixture combines elementwise f32 compute, control flow,
+  multi-axis launch, tail masks, row-strided f16 storage loads, f32 finite
+  reduction/GEMV row-dot accumulation, and f16 output storage under the finite
+  storage policy. The f16 output-store component is the source-controlled
+  Phase 14 `ttir_f32_compute_store_f16_b16` snapshot included in the same
+  hardware fixture; no TTIR was regenerated.
+- The full VC4Value and TTIR mixed regressions passed with active_qpus=12 where
+  applicable, zero mismatches, zero sentinel mismatches, zero launch failures,
+  and nonzero output hashes for executable fixtures.
+- Native f16 arithmetic, bf16/fp8, int8/int16 quantized storage, fp-to-int
+  casts, exact/unpolicy numeric casts, softmax/SFU, `tt.dot`,
+  `vector.contract`, and GEMM remain staged.
 
 `READY_FOR_TRITON=NO` remains locked.

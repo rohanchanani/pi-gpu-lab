@@ -955,3 +955,37 @@ policy, and keeps row-dot accumulation in f32.
 Native f16 arithmetic, f16 accumulation, bf16/fp8, int8/int16 quantized
 storage, fp-to-int casts, i32-to-f32 casts, `tt.dot`, vector contracts, GEMM,
 SFU/math, and softmax remain outside this accepted importer path.
+
+## 32. Phase 14 final ML storage/numeric TTIR profile
+
+PHASE14_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_ML_STORAGE_NUMERIC_CONVERSION_POLICY
+REAL_TRITON_ML_STORAGE_NUMERIC_SOURCES=YES
+REAL_TTIR_ML_STORAGE_NUMERIC_SNAPSHOTS=YES
+TTIR_F16_STORAGE_IMPORTER_STATIC=PASS
+TTIR_F16_STORAGE_HARDWARE_ISOLATION=PASS
+TTIR_F16_STORAGE_MIXED_ACCEPTANCE=PASS
+TTIR_F16_LOAD_F32_COMPUTE_LOWERING=YES
+TTIR_F32_COMPUTE_F16_STORE_LOWERING=YES
+TTIR_F16_ROW_DOT_F32_ACCUM_LOWERING=YES
+TTIR_I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
+TTIR_NATIVE_F16_ARITHMETIC_REJECT=PASS
+TTIR_FP_TO_INT_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+F16_STORAGE_FINITE_POLICY=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_STORAGE_NUMERIC_WORKAROUNDS=YES
+READY_FOR_PHASE15_APPROX_MATH_SFU_SOFTMAX=YES
+READY_FOR_TRITON=NO
+
+Phase 14 final-locks controlled real TTIR f16 storage loads, f32 compute,
+f32-to-f16 finite storage stores, and f16 input storage for Phase 13 row-wise
+dot. The TTIR mixed acceptance fixture uses source-controlled snapshots and the
+C++ importer path; no TTIR regeneration or Python semantic lowering is part of
+the lock.
+
+Native f16 arithmetic, bf16/fp8, int8/int16 quantized storage, fp-to-int casts,
+exact/unpolicy numeric casts, softmax/SFU, `tt.dot`, `vector.contract`, and GEMM
+remain staged.
