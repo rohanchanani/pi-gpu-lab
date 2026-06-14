@@ -5,16 +5,24 @@ PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
+PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
+VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
 VALUE_SCALAR_MEMREF_STORE_FOR_REDUCTION_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
 VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
+VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 F32_DOT_FINITE_TREE_POLICY=YES
 F16_STORAGE_FINITE_POLICY=YES
+APPROX_MATH_POLICY=EXPLICIT
+EXACT_DEFAULT_MATH_REJECTED=YES
+ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
 BF16_FP8_STAGED=YES
@@ -30,6 +38,7 @@ READY_FOR_PHASE10_4_VALUE_MASK_MEMORY_CLASSIFIER_STATIC=YES
 READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
+READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -474,7 +483,72 @@ The verifier enforces this as a surface and policy boundary only. It does not
 emit f16 pack/unpack, does not lower value IR to VC4Kernel, does not import
 TTIR, and does not run hardware.
 
-## 14.2 Subword and f16 storage boundary
+## 14.2 Phase 15 approximate-SFU and softmax contract
+
+PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
+VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
+VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
+VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
+APPROX_MATH_POLICY=EXPLICIT
+EXACT_DEFAULT_MATH_REJECTED=YES
+ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
+READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 15 admits the narrow value-surface forms needed by controlled Triton
+SFU/softmax fixtures:
+
+- `APPROX_SFU_POLICY`: approximate math must carry explicit
+  `vc4value.math_policy = "approx_sfu"` plus a finite `vc4value.fp_domain`
+  spelling such as `"finite"`, `"finite_positive"`, or `"finite_nonzero"`.
+  Exact/default math without policy is rejected.
+- `VECTOR_F32_EXP_APPROX`: `math.exp` over scalar `f32` or `vector<16xf32>`
+  is accepted only as approximate SFU math over finite bounded inputs.
+- `VECTOR_F32_RECIP_DIV_APPROX`: `arith.divf` over scalar `f32` or
+  `vector<16xf32>` is accepted only as approximate reciprocal/division under
+  explicit policy. Denominators must be finite and away from zero in later
+  hardware fixtures; exact division is not claimed.
+- `OPTIONAL_LOG_RSQRT_APPROX`: `math.log` and `math.rsqrt` are accepted
+  because the locked lower-half surface has log and rsqrt SFU modes. Their
+  value surface requires positive finite domains.
+- `FINITE_F32_MAX_REDUCTION`: the exact accepted spellings are
+  `vector.reduction <maxnumf>` and `vector.reduction <maximumf>` over
+  `vector<16xf32>` to scalar `f32`, with `vc4value.fp_domain = "finite"`,
+  `vc4value.reduction_policy = "finite_tree"`, and
+  `vc4value.max_policy = "finite"`.
+- `SCALAR_TO_VECTOR_F32_BROADCAST`: `vector.broadcast` from scalar `f32` to
+  `vector<16xf32>` is admitted for softmax scalar-to-lane splats.
+- `SOFTMAX_V0_COMPOSITE`: no `vc4value.softmax` op is introduced. The value
+  surface accepts the explicit composite:
+
+```text
+max = vector.reduction maxnumf/maximumf(active_x)
+shifted = x - vector.broadcast(max)
+expv = math.exp(shifted)
+expv_masked = arith.select(mask, expv, zero)
+denom = vector.reduction add(expv_masked)
+inv = approximate reciprocal/division of denom
+out = expv_masked * vector.broadcast(inv)
+vector.transfer_write out with the tail mask
+```
+
+The accepted softmax domain is one block with active lane count 1..16 and
+finite bounded inputs. Approximate output tolerance is a later hardware policy,
+not a value-surface proof.
+
+Still staged:
+
+- exact/default math;
+- NaN/Inf semantics;
+- active-count-zero softmax without an explicit finite no-op guard;
+- multiblock softmax;
+- block-pointer softmax;
+- full attention and FlashAttention;
+- generic division without approximate policy;
+- quantized softmax.
+
+## 14.3 Subword and f16 storage boundary
 
 Subword lowering remains staged for later phases. f16 storage conversion is a
 Phase 14 value feature through storage conversion plus f32 compute; native f16

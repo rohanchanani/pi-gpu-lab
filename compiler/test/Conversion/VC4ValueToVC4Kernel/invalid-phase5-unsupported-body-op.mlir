@@ -2,6 +2,7 @@
 
 func.func @reduction()
     attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32,
+                vc4value.math_policy = "approx_sfu",
                 vc4value.fp_domain = "finite",
                 vc4value.reduction_policy = "finite_tree"} {
   %x = arith.constant 1.000000e+00 : f32

@@ -170,6 +170,15 @@ static bool isFpToIntCastOp(StringRef name) {
   return name == "arith.fptosi" || name == "arith.fptoui";
 }
 
+static bool isPhase15ApproxSFUMathOp(StringRef name) {
+  return name == "math.exp" || name == "math.log" || name == "math.rsqrt";
+}
+
+static bool isApproxSFUDomain(StringRef value) {
+  return value == "finite" || value == "finite_positive" ||
+         value == "finite_nonzero";
+}
+
 static Operation *getEnclosingFunc(Operation *op) {
   for (Operation *parent = op->getParentOp(); parent;
        parent = parent->getParentOp()) {
@@ -182,6 +191,33 @@ static Operation *getEnclosingFunc(Operation *op) {
 static bool hasStringAttr(Operation *op, StringRef name, StringRef value) {
   auto attr = dyn_cast_or_null<StringAttr>(op->getAttr(name));
   return attr && attr.getValue() == value;
+}
+
+static std::optional<StringRef> getStringAttrValue(Operation *op,
+                                                   StringRef name) {
+  auto attr = dyn_cast_or_null<StringAttr>(op->getAttr(name));
+  if (!attr)
+    return std::nullopt;
+  return attr.getValue();
+}
+
+static bool hasApproxSFUPolicy(Operation *op) {
+  Operation *func = getEnclosingFunc(op);
+  return hasStringAttr(op, "vc4value.math_policy", "approx_sfu") ||
+         (func && hasStringAttr(func, "vc4value.math_policy", "approx_sfu"));
+}
+
+static bool hasApproxSFUDomain(Operation *op) {
+  Operation *func = getEnclosingFunc(op);
+  if (std::optional<StringRef> domain =
+          getStringAttrValue(op, "vc4value.fp_domain"))
+    return isApproxSFUDomain(*domain);
+  if (func) {
+    if (std::optional<StringRef> domain =
+            getStringAttrValue(func, "vc4value.fp_domain"))
+      return isApproxSFUDomain(*domain);
+  }
+  return false;
 }
 
 static std::optional<int64_t> getI64Attr(Operation *op, StringRef attrName) {
@@ -868,19 +904,12 @@ static void checkVectorReductionOp(vector::ReductionOp reductionOp,
                                    bool &sawError) {
   VectorType sourceType = reductionOp.getSourceVectorType();
   Type resultType = reductionOp.getDest().getType();
-
-  if (reductionOp.getKind() != vector::CombiningKind::ADD) {
-    reductionOp.emitError()
-        << "Phase 12 value reductions only accept vector.reduction <add>; "
-        << "non-add reductions are staged";
-    sawError = true;
-    return;
-  }
+  vector::CombiningKind kind = reductionOp.getKind();
 
   if (sourceType.getRank() != 1 || sourceType.getDimSize(0) != 16) {
     reductionOp.emitError()
-        << "Phase 12 value reductions require vector<16xT>; rank>1 and "
-        << "non-16 reductions are staged";
+        << "value reductions require vector<16xT>; rank>1 and non-16 "
+        << "reductions are staged";
     sawError = true;
     return;
   }
@@ -894,6 +923,13 @@ static void checkVectorReductionOp(vector::ReductionOp reductionOp,
 
   Type elementType = sourceType.getElementType();
   if (auto integerType = dyn_cast<IntegerType>(elementType)) {
+    if (kind != vector::CombiningKind::ADD) {
+      reductionOp.emitError()
+          << "Phase 12 value reductions only accept vector.reduction <add>; "
+          << "non-add reductions are staged";
+      sawError = true;
+      return;
+    }
     if (!integerType.isSignlessInteger(32) || resultType != elementType) {
       reductionOp.emitError()
           << "Phase 12 i32 add reduction requires vector<16xi32> to i32";
@@ -905,7 +941,7 @@ static void checkVectorReductionOp(vector::ReductionOp reductionOp,
   if (elementType.isF32()) {
     if (!resultType.isF32()) {
       reductionOp.emitError()
-          << "Phase 12 f32 add reduction requires vector<16xf32> to f32";
+          << "f32 value reduction requires vector<16xf32> to f32";
       sawError = true;
       return;
     }
@@ -925,13 +961,101 @@ static void checkVectorReductionOp(vector::ReductionOp reductionOp,
           << "vc4value.fp_domain = \"finite\" and "
           << "vc4value.reduction_policy = \"finite_tree\" in Phase 12";
       sawError = true;
+      return;
     }
+
+    if (kind == vector::CombiningKind::ADD)
+      return;
+
+    if (kind == vector::CombiningKind::MAXNUMF ||
+        kind == vector::CombiningKind::MAXIMUMF) {
+      if (!hasStringAttr(reductionOp, "vc4value.max_policy", "finite") &&
+          !(func && hasStringAttr(func, "vc4value.max_policy", "finite"))) {
+        reductionOp.emitError()
+            << "f32 vector.reduction <maxnumf>/<maximumf> requires explicit "
+            << "vc4value.fp_domain = \"finite\", "
+            << "vc4value.reduction_policy = \"finite_tree\", and "
+            << "vc4value.max_policy = \"finite\" in Phase 15";
+        sawError = true;
+      }
+      return;
+    }
+
+    reductionOp.emitError()
+        << "Phase 15 f32 value reductions only accept add and finite "
+        << "maxnumf/maximumf; other reductions are staged";
+    sawError = true;
     return;
   }
 
   reductionOp.emitError()
       << "Phase 12 value reductions only accept i32 and f32 element types";
   sawError = true;
+}
+
+static void checkPhase15ApproxMathOp(Operation *op, bool &sawError) {
+  StringRef opName = op->getName().getStringRef();
+  if (!isPhase15ApproxSFUMathOp(opName) && opName != "arith.divf")
+    return;
+
+  if (!llvm::all_of(op->getOperandTypes(), [](Type type) {
+        if (type.isF32())
+          return true;
+        if (auto vectorType = dyn_cast<VectorType>(type))
+          return vectorType.getRank() == 1 && vectorType.getDimSize(0) == 16 &&
+                 vectorType.getElementType().isF32();
+        return false;
+      }) ||
+      !llvm::all_of(op->getResultTypes(), [](Type type) {
+        if (type.isF32())
+          return true;
+        if (auto vectorType = dyn_cast<VectorType>(type))
+          return vectorType.getRank() == 1 && vectorType.getDimSize(0) == 16 &&
+                 vectorType.getElementType().isF32();
+        return false;
+      })) {
+    op->emitError() << "Phase 15 approximate SFU math only accepts scalar f32 "
+                    << "or vector<16xf32> forms";
+    sawError = true;
+    return;
+  }
+
+  if (!hasApproxSFUPolicy(op) || !hasApproxSFUDomain(op)) {
+    op->emitError()
+        << "Phase 15 approximate SFU math requires explicit "
+        << "vc4value.math_policy = \"approx_sfu\" and finite "
+        << "vc4value.fp_domain; exact/default math is staged";
+    sawError = true;
+  }
+}
+
+static void checkPhase15SoftmaxPolicy(Operation *op, bool &sawError) {
+  std::optional<StringRef> softmax =
+      getStringAttrValue(op, "vc4value.softmax_v0");
+  if (!softmax)
+    return;
+
+  if (*softmax == "zero_active" || *softmax == "active_count_zero") {
+    op->emitError()
+        << "active-count-zero softmax is staged without an explicit finite "
+        << "no-op guard in Phase 15";
+    sawError = true;
+    return;
+  }
+
+  if (*softmax == "multiblock") {
+    op->emitError() << "multiblock softmax is staged in Phase 15";
+    sawError = true;
+    return;
+  }
+
+  if (*softmax != "one_block_active_1_to_16") {
+    op->emitError()
+        << "Phase 15 softmax_v0 metadata must be "
+        << "\"one_block_active_1_to_16\", \"zero_active\", or "
+        << "\"multiblock\"";
+    sawError = true;
+  }
 }
 
 static bool isAllowedPhase12ScalarStore(memref::StoreOp storeOp) {
@@ -1089,6 +1213,9 @@ struct VerifyValueSurfacePass
 
       if (auto reductionOp = dyn_cast<vector::ReductionOp>(op))
         checkVectorReductionOp(reductionOp, sawError);
+
+      checkPhase15ApproxMathOp(op, sawError);
+      checkPhase15SoftmaxPolicy(op, sawError);
 
       if (auto writeOp = dyn_cast<vector::TransferWriteOp>(op))
         checkPhase14F16StorageWrite(writeOp, sawError);

@@ -8,7 +8,9 @@ builtin.module {
   // CHECK-LABEL: func.func @kernel
   func.func @kernel(
       %mem: memref<16xf32, #vc4value.global> {vc4value.arg_name = "mem", vc4value.direction = "in"})
-      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32,
+                  vc4value.math_policy = "approx_sfu",
+                  vc4value.fp_domain = "finite"} {
     %pid = vc4value.program_id {axis = 0 : i32} : index
     %c0 = arith.constant 0 : index
     %c16 = arith.constant 16 : index

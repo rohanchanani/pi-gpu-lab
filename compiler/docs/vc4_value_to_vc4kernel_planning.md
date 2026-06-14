@@ -5,6 +5,7 @@ PHASE10_VALUE_MEMORY_LEGALITY_CONTRACT=LOCKED
 PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
+PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 PHASE14_RESULT=LOCKED
 FEATURE=VALUE_AND_TTIR_ML_STORAGE_NUMERIC_CONVERSION_POLICY
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
@@ -26,6 +27,10 @@ VALUE_GEMV_ROWWISE_DOT_F32_SURFACE=ACCEPTED
 VALUE_GEMV_ROWWISE_DOT_I32_SURFACE=ACCEPTED
 VALUE_F16_STORAGE_TO_F32_COMPUTE_SURFACE=ACCEPTED
 VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
+VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
+VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
 VALUE_F16_STORAGE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_STORE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_GEMV_INPUT_STORAGE_STATIC=PASS
@@ -45,6 +50,9 @@ VALUE_SCALAR_STORE_FOR_REDUCTION_STATIC=PASS
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 F32_DOT_FINITE_TREE_POLICY=YES
 F16_STORAGE_FINITE_POLICY=YES
+APPROX_MATH_POLICY=EXPLICIT
+EXACT_DEFAULT_MATH_REJECTED=YES
+ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
 BF16_FP8_STAGED=YES
@@ -70,6 +78,7 @@ READY_FOR_PHASE14_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE14_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE14_7_TTIR_IMPORTER_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE15_APPROX_MATH_SFU_SOFTMAX=YES
+READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -734,6 +743,54 @@ it.
 Exp/log base semantics must be explicit. Base-2 target SFU forms and source
 default exp/log forms are not interchangeable without a specified conversion
 and policy.
+
+PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
+VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
+VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
+VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
+VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
+APPROX_MATH_POLICY=EXPLICIT
+EXACT_DEFAULT_MATH_REJECTED=YES
+ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
+READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 15.3 locks the value-surface contract for approximate SFU math and
+one-block softmax. Phase 15.4 must statically prove, without hardware:
+
+- `math.exp` over scalar `f32` and `vector<16xf32>` lowers only when the
+  containing function or operation carries `vc4value.math_policy =
+  "approx_sfu"` and finite `vc4value.fp_domain` metadata.
+- `arith.divf` lowers only as approximate reciprocal/division under explicit
+  approximate-SFU policy and a finite nonzero denominator domain. Exact
+  division semantics are not claimed.
+- `math.log` and `math.rsqrt` may lower because VC4Kernel Surface v2 already
+  locks log and rsqrt SFU modes; both require positive finite domains.
+- finite f32 max reductions lower for the exact value spellings
+  `vector.reduction <maxnumf>` and `vector.reduction <maximumf>` over
+  `vector<16xf32>` to scalar `f32`, with explicit finite input,
+  finite-tree reduction, and finite max policy metadata.
+- scalar-to-vector f32 broadcasts lower through `vc4kernel.splat` or the
+  accepted target composite.
+- softmax v0 lowers only as the value composite:
+  finite max reduction, scalar broadcast, subtract, approximate exp, masked
+  zeroing, finite add reduction, approximate reciprocal/division, multiply,
+  and masked `vector.transfer_write`.
+
+Phase 15.4 planned rejects:
+
+- exact/default math without approximate-SFU policy;
+- NaN/Inf math policy;
+- generic division without approximate policy;
+- active-count-zero softmax without an explicit finite no-op guard;
+- multiblock softmax;
+- block-pointer softmax;
+- full attention and FlashAttention;
+- quantized softmax;
+- `tt.dot`, `vector.contract`, and GEMM.
+
+This planning entry does not implement executable lowering and does not claim
+hardware proof.
 
 ## 16. Shuffle, rotate, and lane-broadcast planning
 
