@@ -39,6 +39,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Attributes.h"
@@ -83,6 +84,7 @@ constexpr llvm::StringLiteral kI32MulPolicyAttr("vc4value.i32_mul_policy");
 constexpr llvm::StringLiteral kF16StoragePolicyAttr("vc4value.f16_storage_policy");
 constexpr llvm::StringLiteral kShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kStrideArgsAttr("vc4value.stride_args");
+constexpr llvm::StringLiteral kMathPolicyAttr("vc4value.math_policy");
 
 constexpr llvm::StringLiteral kVC4KernelOpName("vc4kernel.kernel");
 constexpr llvm::StringLiteral kReturnOpName("vc4kernel.return");
@@ -99,6 +101,7 @@ constexpr llvm::StringLiteral kFragmentALUMulOpName("vc4kernel.fragment_alu.mul"
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentSelectOpName("vc4kernel.fragment_select");
 constexpr llvm::StringLiteral kFragmentReduceOpName("vc4kernel.fragment_reduce");
+constexpr llvm::StringLiteral kFragmentSFUOpName("vc4kernel.fragment_sfu");
 constexpr llvm::StringLiteral kFragmentUnpackOpName("vc4kernel.fragment_unpack");
 constexpr llvm::StringLiteral kFragmentPackOpName("vc4kernel.fragment_pack");
 constexpr llvm::StringLiteral kTMULoadFragmentOpName("vc4kernel.tmu_load_fragment");
@@ -480,6 +483,22 @@ static Value createMulPipe(OpBuilder &builder, Location loc, ValueRange inputs,
           "opcode", mlir::vc4kernel::MulALUOpcodeAttr::get(
                         builder.getContext(), opcode))},
       resultType);
+}
+
+static Value createApproxSFU(OpBuilder &builder, Location loc, Value input,
+                             mlir::vc4kernel::SFUKind kind,
+                             mlir::vc4kernel::FPDomain domain) {
+  MLIRContext *ctx = builder.getContext();
+  return createOpWithResult(
+      builder, loc, kFragmentSFUOpName, input,
+      {builder.getNamedAttr("kind",
+                            mlir::vc4kernel::SFUKindAttr::get(ctx, kind)),
+       builder.getNamedAttr(
+           "fp_policy", mlir::vc4kernel::FPMathPolicyAttr::get(
+                            ctx, mlir::vc4kernel::FPMathPolicy::approx_sfu)),
+       builder.getNamedAttr("domain",
+                            mlir::vc4kernel::FPDomainAttr::get(ctx, domain))},
+      getVector16F32(ctx));
 }
 
 static Value createFragmentSelect(OpBuilder &builder, Location loc, Value pred,
@@ -1009,6 +1028,32 @@ private:
     return {};
   }
 
+  FailureOr<Value> getF32FragmentOperand(Operation *op, Value value) {
+    if (isVector16F32(value.getType())) {
+      Value fragment = lookupValue(op, value);
+      if (!fragment)
+        return failure();
+      return fragment;
+    }
+    if (value.getType().isF32()) {
+      if (Value fragment = lookupReductionFragment(value))
+        return fragment;
+      Value scalar = lookupValue(op, value);
+      if (!scalar)
+        return failure();
+      return createSplat(builder, op->getLoc(), scalar, getVector16F32(ctx));
+    }
+    return op->emitOpError("approximate SFU math requires scalar f32 or "
+                           "vector<16xf32> operands");
+  }
+
+  void mapF32FragmentResult(Value source, Value fragment) {
+    if (isVector16F32(source.getType()))
+      state.values[source] = fragment;
+    else
+      state.reductionFragments[source] = fragment;
+  }
+
   Value lookupPredicate(Operation *op, Value value) {
     auto it = state.predicates.find(value);
     if (it != state.predicates.end())
@@ -1320,6 +1365,8 @@ private:
       return lowerExtF(op);
     if (name == "arith.truncf")
       return lowerTruncF(op);
+    if (llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp>(op))
+      return lowerApproxSFUMath(op);
     if (name == "arith.sitofp" || name == "arith.uitofp")
       return op->emitOpError()
              << "i32 to f32 numeric cast staged by lower-half gap. "
@@ -1327,6 +1374,8 @@ private:
     if (name == "arith.fptosi" || name == "arith.fptoui")
       return op->emitOpError()
              << "fp-to-int numeric cast is staged. READY_FOR_TRITON remains NO";
+    if (llvm::isa<arith::DivFOp>(op))
+      return lowerApproxDivF(op);
     if (llvm::isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::ShLIOp,
                   arith::AddFOp, arith::SubFOp, arith::MulFOp>(op))
       return lowerBinaryArith(op);
@@ -1420,6 +1469,12 @@ private:
     if (!isVector16I32(resultType) && !isVector16Index(resultType) &&
         !isVector16F32(resultType))
       return emitStagedDiagnostic(op, "non-vector<16> splat/broadcast");
+    if (isVector16F32(resultType)) {
+      if (Value fragment = lookupReductionFragment(op->getOperand(0))) {
+        state.values[op->getResult(0)] = fragment;
+        return success();
+      }
+    }
     Value scalar = lookupValue(op, op->getOperand(0));
     if (!scalar)
       return failure();
@@ -1633,6 +1688,133 @@ private:
              << "READY_FOR_TRITON remains NO";
     state.values[op->getResult(0)] =
         createF16StoragePack(builder, op->getLoc(), f32);
+    return success();
+  }
+
+  bool hasApproxMathPolicy(Operation *op) {
+    return hasStringAttr(op, kMathPolicyAttr, "approx_sfu") ||
+           hasStringAttr(func.getOperation(), kMathPolicyAttr, "approx_sfu");
+  }
+
+  bool hasFiniteMathDomain(Operation *op) {
+    return hasStringAttr(op, kFPDomainAttr, "finite") ||
+           hasStringAttr(func.getOperation(), kFPDomainAttr, "finite");
+  }
+
+  bool hasFiniteNonzeroMathDomain(Operation *op) {
+    return hasStringAttr(op, kFPDomainAttr, "finite_nonzero") ||
+           hasStringAttr(func.getOperation(), kFPDomainAttr, "finite_nonzero");
+  }
+
+  bool hasFinitePositiveMathDomain(Operation *op) {
+    return hasStringAttr(op, kFPDomainAttr, "finite_positive") ||
+           hasStringAttr(func.getOperation(), kFPDomainAttr, "finite_positive");
+  }
+
+  bool hasNaNInfMathDomain(Operation *op) {
+    return hasStringAttr(op, kFPDomainAttr, "nan_inf") ||
+           hasStringAttr(func.getOperation(), kFPDomainAttr, "nan_inf");
+  }
+
+  LogicalResult requireApproxSFUPolicy(Operation *op,
+                                       mlir::vc4kernel::SFUKind kind) {
+    if (hasNaNInfMathDomain(op))
+      return op->emitOpError()
+             << "NaN/Inf exact math semantics are staged. "
+             << "READY_FOR_TRITON remains NO";
+    if (!hasApproxMathPolicy(op))
+      return op->emitOpError()
+             << "exact/default math requires explicit approximate-SFU policy. "
+             << "READY_FOR_TRITON remains NO";
+
+    switch (kind) {
+    case mlir::vc4kernel::SFUKind::exp:
+      if (hasFiniteMathDomain(op) || hasFiniteNonzeroMathDomain(op) ||
+          hasFinitePositiveMathDomain(op))
+        return success();
+      break;
+    case mlir::vc4kernel::SFUKind::recip:
+      if (hasFiniteNonzeroMathDomain(op) || hasFiniteMathDomain(op))
+        return success();
+      return op->emitOpError()
+             << "generic division without approximate reciprocal policy is "
+                "staged. READY_FOR_TRITON remains NO";
+    case mlir::vc4kernel::SFUKind::rsqrt:
+      if (hasFinitePositiveMathDomain(op))
+        return success();
+      return op->emitOpError()
+             << "math.rsqrt SFU mode is staged by lower-half gap or missing "
+                "finite_positive domain. READY_FOR_TRITON remains NO";
+    case mlir::vc4kernel::SFUKind::log:
+      if (hasFinitePositiveMathDomain(op))
+        return success();
+      return op->emitOpError()
+             << "math.log SFU mode is staged by lower-half gap or missing "
+                "finite_positive domain. READY_FOR_TRITON remains NO";
+    }
+
+    return op->emitOpError()
+           << "exact/default math requires explicit approximate-SFU policy. "
+           << "READY_FOR_TRITON remains NO";
+  }
+
+  LogicalResult lowerApproxSFUMath(Operation *op) {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return emitPhase5Diagnostic(op, "approximate SFU math arity");
+
+    mlir::vc4kernel::SFUKind kind;
+    mlir::vc4kernel::FPDomain domain;
+    if (llvm::isa<math::ExpOp>(op)) {
+      kind = mlir::vc4kernel::SFUKind::exp;
+      domain = mlir::vc4kernel::FPDomain::finite;
+    } else if (llvm::isa<math::LogOp>(op)) {
+      kind = mlir::vc4kernel::SFUKind::log;
+      domain = mlir::vc4kernel::FPDomain::finite_positive;
+    } else if (llvm::isa<math::RsqrtOp>(op)) {
+      kind = mlir::vc4kernel::SFUKind::rsqrt;
+      domain = mlir::vc4kernel::FPDomain::finite_positive;
+    } else {
+      return emitStagedDiagnostic(op, "math dialect operation");
+    }
+
+    Type resultType = op->getResult(0).getType();
+    if (!resultType.isF32() && !isVector16F32(resultType))
+      return emitStagedDiagnostic(op, "approximate SFU math result type");
+    if (failed(requireApproxSFUPolicy(op, kind)))
+      return failure();
+
+    FailureOr<Value> input = getF32FragmentOperand(op, op->getOperand(0));
+    if (failed(input))
+      return failure();
+    Value result = createApproxSFU(builder, op->getLoc(), *input, kind, domain);
+    mapF32FragmentResult(op->getResult(0), result);
+    return success();
+  }
+
+  LogicalResult lowerApproxDivF(Operation *op) {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+      return emitPhase5Diagnostic(op, "arith.divf shape");
+    Type resultType = op->getResult(0).getType();
+    if (!resultType.isF32() && !isVector16F32(resultType))
+      return emitStagedDiagnostic(op, "arith.divf result type");
+    if (!hasApproxMathPolicy(op))
+      return op->emitOpError()
+             << "generic division without approximate reciprocal policy is "
+                "staged. READY_FOR_TRITON remains NO";
+    if (failed(requireApproxSFUPolicy(op, mlir::vc4kernel::SFUKind::recip)))
+      return failure();
+
+    FailureOr<Value> lhs = getF32FragmentOperand(op, op->getOperand(0));
+    FailureOr<Value> rhs = getF32FragmentOperand(op, op->getOperand(1));
+    if (failed(lhs) || failed(rhs))
+      return failure();
+    Value recip = createApproxSFU(builder, op->getLoc(), *rhs,
+                                  mlir::vc4kernel::SFUKind::recip,
+                                  mlir::vc4kernel::FPDomain::finite_nonzero);
+    Value result = createMulPipe(builder, op->getLoc(), {*lhs, recip},
+                                 mlir::vc4kernel::MulALUOpcode::fmul,
+                                 getVector16F32(ctx));
+    mapF32FragmentResult(op->getResult(0), result);
     return success();
   }
 
@@ -1902,13 +2084,30 @@ private:
                           "finite_tree"));
   }
 
+  static std::optional<mlir::vc4kernel::ReduceKind>
+  mapVectorReductionKind(vector::CombiningKind kind, Type elementType) {
+    switch (kind) {
+    case vector::CombiningKind::ADD:
+      return mlir::vc4kernel::ReduceKind::add;
+    case vector::CombiningKind::MAXNUMF:
+    case vector::CombiningKind::MAXIMUMF:
+      if (elementType.isF32())
+        return mlir::vc4kernel::ReduceKind::fmax;
+      return std::nullopt;
+    default:
+      return std::nullopt;
+    }
+  }
+
   LogicalResult lowerVectorReduction(vector::ReductionOp reduction) {
     VectorType sourceType = reduction.getSourceVectorType();
     Type elementType = sourceType.getElementType();
     Type resultType = reduction.getDest().getType();
 
-    if (reduction.getKind() != vector::CombiningKind::ADD)
-      return reduction.emitOpError("non-add vector.reduction is staged");
+    std::optional<mlir::vc4kernel::ReduceKind> reduceKind =
+        mapVectorReductionKind(reduction.getKind(), elementType);
+    if (!reduceKind)
+      return reduction.emitOpError("unsupported reduction variant is staged");
     if (sourceType.getRank() != 1 || sourceType.getDimSize(0) != 16)
       return reduction.emitOpError("rank>1 reduction is staged");
     if (reduction.getAcc())
@@ -1940,7 +2139,7 @@ private:
     SmallVector<NamedAttribute, 2> attrs;
     attrs.push_back(builder.getNamedAttr(
         "kind", mlir::vc4kernel::ReduceKindAttr::get(
-                    ctx, mlir::vc4kernel::ReduceKind::add)));
+                    ctx, *reduceKind)));
     if (elementType.isF32()) {
       attrs.push_back(builder.getNamedAttr(
           "fp_policy", mlir::vc4kernel::FPReducePolicyAttr::get(
@@ -2671,6 +2870,7 @@ struct ConvertVC4ValueToVC4KernelPass
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<arith::ArithDialect, cf::ControlFlowDialect,
                     func::FuncDialect, memref::MemRefDialect,
+                    math::MathDialect,
                     vector::VectorDialect, mlir::vc4value::VC4ValueDialect,
                     mlir::vc4kernel::VC4KernelDialect>();
   }

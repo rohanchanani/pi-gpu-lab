@@ -36,7 +36,7 @@ def main():
             "finite-tree f32 reduction policy not emitted")
     require("hasFiniteReductionPolicy" in text and "kReductionPolicyAttr" in text,
             "f32 finite-tree policy helper missing")
-    require("non-add vector.reduction is staged" in text,
+    require("unsupported reduction variant is staged" in text,
             "non-add reduction staged diagnostic missing")
     require("rank>1 reduction is staged" in text,
             "rank>1 reduction staged diagnostic missing")

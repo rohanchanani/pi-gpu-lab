@@ -7,4 +7,4 @@ func.func @invalid_reduction_nonadd()
   return
 }
 
-// CHECK: non-add vector.reduction is staged
+// CHECK: unsupported reduction variant is staged

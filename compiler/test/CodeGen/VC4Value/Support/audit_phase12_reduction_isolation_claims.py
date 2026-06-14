@@ -55,7 +55,7 @@ def validate_static_reject(repo_root: Path, static_test: str) -> None:
         fail(f"missing static reject test {static_test}")
     text = path.read_text()
     if static_test == "invalid-reduction-nonadd.mlir":
-        require_marker(text, "non-add vector.reduction is staged", static_test)
+        require_marker(text, "unsupported reduction variant is staged", static_test)
     elif static_test == "invalid-reduction-f32-missing-finite-policy.mlir":
         require_marker(text, "f32 vector.reduction requires explicit finite-tree policy", static_test)
     elif static_test == "invalid-vector-multi-reduction.mlir":
