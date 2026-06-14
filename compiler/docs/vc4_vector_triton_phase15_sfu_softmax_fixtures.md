@@ -12,12 +12,19 @@ VALUE_APPROX_SFU_EXP_STATIC=PASS
 VALUE_APPROX_SFU_RECIP_DIV_STATIC=PASS
 VALUE_FINITE_F32_MAX_REDUCTION_STATIC=PASS
 VALUE_SOFTMAX_V0_STATIC=PASS
+VALUE_APPROX_SFU_HARDWARE_ISOLATION=PASS
+VALUE_APPROX_SFU_EXP_HARDWARE=PASS
+VALUE_APPROX_SFU_RECIP_DIV_HARDWARE=PASS
+VALUE_FINITE_F32_MAX_REDUCTION_HARDWARE=PASS
+VALUE_SOFTMAX_V0_HARDWARE_ISOLATION=PASS
+VALUE_APPROX_SFU_TOLERANCE_POLICY=LOCKED
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_PROVEN
 EXACT_DEFAULT_MATH_FIXTURE_STAGED=YES
 ZERO_ACTIVE_SOFTMAX_STAGED_OR_GUARD_REQUIRED=YES
 MULTIBLOCK_SOFTMAX_STAGED=YES
+READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE15_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE15_3_VALUE_SURFACE_CONTRACT=YES
@@ -72,3 +79,39 @@ before executable lowering:
 No executable SFU or softmax lowering is implemented by the value contract
 handoff. Hardware proof remains for later Phase 15 packages, and
 `READY_FOR_TRITON=NO` remains locked.
+
+## Phase 15.5 Value Hardware Isolation
+
+Phase 15.5 proves the value approximate-SFU and softmax executable subset on
+real VC4 hardware with targeted isolation fixtures:
+
+- `value_sfu_exp_f32_b16_vc4value` proves `math.exp` under explicit
+  approximate-SFU policy with bounded finite inputs, tail masks, sentinels, and
+  `active_qpus=12`.
+- `value_sfu_recip_div_f32_b16_vc4value` proves approximate reciprocal/division
+  for finite positive denominators away from zero.
+- `value_reduce_max_f32_b16_vc4value` proves finite f32 max reduction for
+  active lane counts 1, 2, 7, 15, and 16.
+- `value_softmax_stable_f32_b16_vc4value` proves one-block stable softmax v0
+  for rows 1, 2, and 7 with `ncols` 1, 2, 7, 15, and 16, row padding sentinels,
+  and per-row probability sum checks.
+- `value_sfu_softmax_empty_repeat_vc4value` proves repeat launch hygiene and
+  empty exp/div launches while zero-active softmax remains staged.
+
+The tolerance policy is locked to the existing VC4Kernel approximate-SFU
+hardware policy family: exp uses base-2 SFU semantics with `0.001` absolute and
+`0.002` relative tolerance; reciprocal/division uses `0.002` absolute and
+`0.003` relative tolerance for the value composite; softmax uses `0.004`
+absolute, `0.006` relative, and `0.006` row-sum tolerance. These tolerances are
+based on the existing lower-half SFU fixture behavior and are tight enough to
+catch wrong operations while allowing the accepted approximate SFU path.
+
+Every fixture requires `VC4_TEST_RESULT status=PASS`, zero total mismatches,
+zero sentinel mismatches, zero launch failures, nonzero output hashes, and
+`active_qpus=12`. The Phase 15.5 claim audit requires output/audit/phase-guard
+evidence for approximate exp, approximate reciprocal/division, finite f32 max
+reduction, scalar-to-vector f32 broadcast, softmax v0, explicit approximate
+policy, static exact/default math rejection, zero-active softmax staging,
+multiblock softmax staging, and absence of full-attention or dot claims.
+
+No TTIR is regenerated in this phase, and `READY_FOR_TRITON=NO` remains locked.

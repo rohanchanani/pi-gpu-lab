@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase15_sfu_softmax_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_sfu_exp_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_exp_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_approx_sfu_exp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_exp", "input_marker": "math.exp %v : vector<16xf32>", "oracle_marker": "exp2_integer_ref"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"},
+        {"claim": "sfu_tolerance_policy", "kind": "CHECKED_OUTPUT", "input_marker": "vc4value.fp_domain = \"finite\"", "oracle_marker": "EXP_ABS_TOL"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_sfu_recip_div_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_recip_div_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_approx_sfu_recip_div", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_recip_div", "input_marker": "arith.divf %nv, %dv : vector<16xf32>", "oracle_marker": "den_value"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"},
+        {"claim": "sfu_tolerance_policy", "kind": "CHECKED_OUTPUT", "input_marker": "vc4value.fp_domain = \"finite_nonzero\"", "oracle_marker": "DIV_ABS_TOL"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_reduce_max_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_reduce_max_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_finite_f32_max_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_finite_f32_max_reduction", "input_marker": "vector.reduction <maxnumf>", "oracle_marker": "expected_max"},
+        {"claim": "saw_f32_finite_max_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_f32_finite_max_policy", "input_marker": "vc4value.max_policy = \"finite\"", "oracle_marker": "saw_f32_finite_max_policy=1"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_softmax_stable_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_softmax_stable_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_softmax_v0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_softmax_v0", "input_marker": "vc4value.softmax_v0 = \"one_block_active_1_to_16\"", "oracle_marker": "expected_softmax"},
+        {"claim": "saw_value_finite_f32_max_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_finite_f32_max_reduction", "input_marker": "vector.reduction <maxnumf>", "oracle_marker": "maxv"},
+        {"claim": "saw_value_approx_sfu_exp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_exp", "input_marker": "math.exp %shifted", "oracle_marker": "exp2_integer_ref"},
+        {"claim": "saw_value_approx_sfu_recip_div", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_recip_div", "input_marker": "arith.divf %one, %denom : f32", "oracle_marker": "denom"},
+        {"claim": "saw_scalar_to_vector_f32_broadcast", "kind": "CHECKED_OUTPUT", "expected_field": "saw_scalar_to_vector_f32_broadcast", "input_marker": "vector.broadcast %max", "oracle_marker": "row_sum"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"},
+        {"claim": "row_padding_sentinels", "kind": "CHECKED_OUTPUT", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "value_softmax sentinel"},
+        {"claim": "zero_active_softmax_static_reject", "kind": "PHASE_GUARD", "expected_field": "saw_zero_active_softmax_staged", "static_reject_tests": ["invalid-softmax-zero-active-without-guard.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_sfu_softmax_empty_repeat_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_softmax_empty_repeat_vc4value",
+      "claims": [
+        {"claim": "saw_repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "vector.transfer_write %q, %out[%base], %mask", "oracle_marker": "cases[]"},
+        {"claim": "empty_launch_sentinel_preserve", "kind": "CHECKED_OUTPUT", "input_marker": "vector.create_mask %remaining", "oracle_marker": "{0u, 3u}"},
+        {"claim": "saw_value_approx_sfu_exp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_exp", "input_marker": "math.exp %xv : vector<16xf32>", "oracle_marker": "exp2_integer_ref"},
+        {"claim": "saw_value_approx_sfu_recip_div", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_approx_sfu_recip_div", "input_marker": "arith.divf %e, %dv : vector<16xf32>", "oracle_marker": "den_value"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"},
+        {"claim": "zero_active_softmax_static_reject", "kind": "PHASE_GUARD", "expected_field": "saw_zero_active_softmax_staged", "static_reject_tests": ["invalid-softmax-zero-active-without-guard.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "phase15_static_staged_guards",
+      "claims": [
+        {"claim": "exact_default_math_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-exact-math-no-approx-policy.mlir"]},
+        {"claim": "generic_division_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-generic-divf-no-approx-policy.mlir"]},
+        {"claim": "zero_active_softmax_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-softmax-zero-active-without-guard.mlir"]},
+        {"claim": "multiblock_softmax_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-multiblock-softmax-staged.mlir"]},
+        {"claim": "no_tt_dot_vector_contract_full_attention_claim", "kind": "PHASE_GUARD"}
+      ]
+    }
+  ]
+}

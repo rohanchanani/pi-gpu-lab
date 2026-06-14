@@ -1,0 +1,5 @@
+# RUN: python3 %S/Support/audit_phase15_sfu_softmax_isolation_claims.py --repo-root %vc4_repo_root --claims compiler/test/CodeGen/VC4Value/Hardware/Run/phase15_sfu_softmax_isolation_claims.json | FileCheck %s
+
+# CHECK: PASS Phase 15 SFU/softmax isolation claim audit:
+# CHECK-SAME: fixtures=6
+# CHECK: VALUE_SFU_SOFTMAX_CLAIM_AUDIT=PASS
