@@ -14,7 +14,10 @@
     "tl_dot_used_in_accepted_fixtures": false,
     "tt_dot_used_in_accepted_fixtures": false,
     "vector_contract_used_in_accepted_fixtures": false,
-    "full_attention_or_flashattention_used": false
+    "full_attention_or_flashattention_used": false,
+    "public_exp_semantics": "tl.exp is natural exp; value lowering scales by log2(e) before target exp2 SFU",
+    "public_log_semantics": "tl.log is natural log; value lowering multiplies target log2 by ln(2)",
+    "public_sqrt_semantics": "tl.sqrt is sqrt; value lowering uses target rsqrt times x over positive finite inputs"
   },
   "snapshots": [
     {
@@ -25,7 +28,7 @@
       "signature": "*fp32,*fp32,i32,16",
       "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_exp_f32_b16.py --kernel-name ttir_sfu_exp_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_exp_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_exp_f32_b16.json",
       "expected_classification": "ACCEPTED_LOWERABLE",
-      "approx_sfu_policy_caveat": "tl.exp lowers only under explicit approximate SFU finite-domain policy; exact/default math is staged",
+      "approx_sfu_policy_caveat": "tl.exp is public natural exp; importer emits value math.exp under explicit approximate SFU finite-domain policy, and value lowering scales by log2(e) before target exp2 SFU",
       "input_domain_contract": "finite bounded f32 values",
       "expected_feature_claims": [
         "saw_real_triton_source",
@@ -33,7 +36,9 @@
         "saw_math_exp_tensor16xf32",
         "saw_phase10_tail_mask",
         "saw_no_tl_dot_tt_dot_vector_contract"
-      ]
+      ],
+      "public_math_semantics": "natural_exp",
+      "natural_lowering": "EXP2_X_LOG2E"
     },
     {
       "name": "ttir_sfu_recip_div_f32_b16",
@@ -79,7 +84,7 @@
       "signature": "*fp32,*fp32,i32,i32,16",
       "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_softmax_stable_f32_b16.py --kernel-name ttir_softmax_stable_f32_b16 --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_softmax_stable_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_softmax_stable_f32_b16.json",
       "expected_classification": "ACCEPTED_LOWERABLE",
-      "approx_sfu_policy_caveat": "one-block stable softmax v0 only; exp/division use explicit approximate SFU policy",
+      "approx_sfu_policy_caveat": "one-block stable softmax v0; tl.exp is public natural exp and lowers through value math.exp with log2(e) scaling before target exp2 SFU",
       "input_domain_contract": "finite bounded f32 inputs, finite stride, and 1 <= ncols <= 16",
       "expected_feature_claims": [
         "saw_real_triton_source",
@@ -89,7 +94,9 @@
         "saw_tt_reduce_sum_arith_addf",
         "saw_arith_divf",
         "saw_masked_store"
-      ]
+      ],
+      "public_math_semantics": "softmax_uses_natural_exp",
+      "natural_lowering": "EXP2_X_LOG2E"
     },
     {
       "name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16",
@@ -122,12 +129,15 @@
       "signature": "*fp32,*fp32,i32,16",
       "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_log_f32_b16.py --kernel-name ttir_sfu_log_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_log_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_log_f32_b16.json",
       "expected_classification": "ACCEPTED_LOWERABLE",
-      "approx_sfu_policy_caveat": "optional log mode is lower-half locked but remains approximate-policy-only",
+      "approx_sfu_policy_caveat": "tl.log is public natural log; importer emits value math.log under explicit approximate SFU positive finite policy, and value lowering multiplies target log2 by ln(2)",
       "input_domain_contract": "finite positive f32 values",
       "expected_feature_claims": [
         "saw_math_log_tensor16xf32",
+        "saw_natural_log_policy",
         "saw_no_tl_dot_tt_dot_vector_contract"
-      ]
+      ],
+      "public_math_semantics": "natural_log",
+      "natural_lowering": "LOG2_X_LN2"
     },
     {
       "name": "ttir_sfu_rsqrt_f32_b16",
@@ -137,10 +147,29 @@
       "signature": "*fp32,*fp32,i32,16",
       "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_rsqrt_f32_b16.py --kernel-name ttir_sfu_rsqrt_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_rsqrt_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_sfu_rsqrt_f32_b16.json",
       "expected_classification": "ACCEPTED_LOWERABLE",
-      "approx_sfu_policy_caveat": "optional rsqrt mode is lower-half locked but remains approximate-policy-only",
+      "approx_sfu_policy_caveat": "tl.rsqrt remains reciprocal square root and lowers directly to target rsqrt under explicit approximate SFU positive finite policy",
       "input_domain_contract": "finite positive f32 values",
       "expected_feature_claims": [
         "saw_math_rsqrt_tensor16xf32",
+        "saw_no_tl_dot_tt_dot_vector_contract"
+      ],
+      "public_math_semantics": "reciprocal_sqrt"
+    },
+    {
+      "name": "ttir_sfu_sqrt_f32_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_sqrt_f32_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_sqrt_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_sfu_sqrt_f32_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_sfu_sqrt_f32_b16.py --kernel-name ttir_sfu_sqrt_f32_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_sfu_sqrt_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15b_3_ttir_natural_math_static/metadata/ttir_sfu_sqrt_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "approx_sfu_policy_caveat": "tl.sqrt is public sqrt; importer emits value math.sqrt under explicit approximate SFU positive finite policy, and value lowering uses target rsqrt times x",
+      "public_math_semantics": "sqrt",
+      "natural_lowering": "RSQRT_TIMES_X",
+      "input_domain_contract": "finite positive f32 values; inactive lanes use 1.0",
+      "expected_feature_claims": [
+        "saw_math_sqrt_tensor16xf32",
+        "saw_positive_finite_domain",
         "saw_no_tl_dot_tt_dot_vector_contract"
       ]
     },
@@ -200,5 +229,12 @@
         "saw_tt_dot"
       ]
     }
-  ]
+  ],
+  "TL_EXP_IS_NATURAL_EXP": "YES",
+  "TL_LOG_IS_NATURAL_LOG": "YES",
+  "TL_SQRT_IS_SQRT": "YES",
+  "NATURAL_EXP_LOWERING": "EXP2_X_LOG2E",
+  "NATURAL_LOG_LOWERING": "LOG2_X_LN2",
+  "SQRT_LOWERING": "RSQRT_TIMES_X",
+  "APPROX_MATH_POLICY": "EXPLICIT"
 }

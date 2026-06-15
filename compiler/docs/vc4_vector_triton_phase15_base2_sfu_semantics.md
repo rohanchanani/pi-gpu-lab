@@ -119,3 +119,27 @@ The hardware fixtures keep `active_qpus=12`, strict sentinels, nonzero output
 hashes, expected JSON checking, and explicit approximate-SFU tolerances. The
 old Phase 15.5 exp2/log2 target-mode claims remain target-only and are not
 public natural math proofs.
+
+## Phase 15B.3 TTIR Natural Math Static Bridge
+
+Phase 15B.3 statically proves that controlled TTIR math enters the value layer
+with public natural semantics and then reaches the repaired base-2 target
+composites:
+
+- `tl.exp` imports as value `math.exp` with explicit approximate-SFU policy,
+  then lowers through `exp2(x * log2(e))`.
+- `tl.log` imports as value `math.log` with positive finite approximate-SFU
+  policy, then lowers through `log2(x) * ln(2)`.
+- `tl.sqrt` imports as value `math.sqrt` with positive finite approximate-SFU
+  policy, then lowers through `x * rsqrt(x)`.
+- stable one-block TTIR softmax uses natural `tl.exp` at the TTIR/value
+  boundary and reaches target exp2 only after the `LOG2E` multiply.
+
+TTIR_TL_EXP_NATURAL_STATIC=PASS
+TTIR_TL_EXP_NATURAL_LOWERING=EXP2_X_LOG2E
+TTIR_SOFTMAX_USES_NATURAL_EXP=YES
+TTIR_TL_LOG_NATURAL_STATIC=PASS
+TTIR_TL_SQRT_STATIC=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15B_4_STALE_DOCS_PLAN_CLEANUP=YES
+READY_FOR_TRITON=NO

@@ -120,8 +120,10 @@ constexpr llvm::StringLiteral kVC4ValueShapeArgsAttr("vc4value.shape_args");
 constexpr llvm::StringLiteral kVC4ValueFPDomainAttr("vc4value.fp_domain");
 constexpr llvm::StringLiteral
     kVC4ValueReductionPolicyAttr("vc4value.reduction_policy");
+constexpr llvm::StringLiteral kVC4ValueMaxPolicyAttr("vc4value.max_policy");
 constexpr llvm::StringLiteral
     kVC4ValueF16StoragePolicyAttr("vc4value.f16_storage_policy");
+constexpr llvm::StringLiteral kVC4ValueMathPolicyAttr("vc4value.math_policy");
 
 constexpr llvm::StringLiteral kVC4ValueProgramIdOpName("vc4value.program_id");
 constexpr llvm::StringLiteral
@@ -306,6 +308,7 @@ enum class TTIRReduceClassification {
   NotReduceCall,
   AddI32,
   AddF32,
+  MaxF32,
   NonAdd,
   RankGreaterThanOne,
   MultiResult,
@@ -362,6 +365,18 @@ static bool operationAddsTwoBlockArgs(Operation *op, Type elementType,
          op->getOperand(0) != op->getOperand(1);
 }
 
+static bool operationMaxesTwoBlockArgs(Operation *op, Type elementType,
+                                       Block &block) {
+  if (!op || !elementType.isF32() || op->getNumOperands() != 2 ||
+      op->getNumResults() != 1)
+    return false;
+  if (!hasName(op, "arith.maxnumf") && !hasName(op, "arith.maximumf"))
+    return false;
+  return valueIsOneOfBlockArgs(op->getOperand(0), block) &&
+         valueIsOneOfBlockArgs(op->getOperand(1), block) &&
+         op->getOperand(0) != op->getOperand(1);
+}
+
 static bool functionReturnsAddOfArgs(Operation *funcOp, Type elementType) {
   Operation *ret = getFirstReachableReturn(funcOp);
   if (!ret || ret->getNumOperands() != 1 || funcOp->getRegion(0).empty())
@@ -373,6 +388,18 @@ static bool functionReturnsAddOfArgs(Operation *funcOp, Type elementType) {
   return operationAddsTwoBlockArgs(def, elementType, entry);
 }
 
+static bool functionReturnsMaxOfArgs(Operation *funcOp, Type elementType) {
+  Operation *ret = getFirstReachableReturn(funcOp);
+  if (!ret || !elementType.isF32() || ret->getNumOperands() != 1 ||
+      funcOp->getRegion(0).empty())
+    return false;
+  Block &entry = funcOp->getRegion(0).front();
+  if (entry.getNumArguments() != 2)
+    return false;
+  Operation *def = ret->getOperand(0).getDefiningOp();
+  return operationMaxesTwoBlockArgs(def, elementType, entry);
+}
+
 static TTIRReduceClassification classifyReduceReturnValue(Value returned,
                                                           Block &reduceBlock,
                                                           Type elementType) {
@@ -380,6 +407,8 @@ static TTIRReduceClassification classifyReduceReturnValue(Value returned,
   if (operationAddsTwoBlockArgs(def, elementType, reduceBlock))
     return elementType.isF32() ? TTIRReduceClassification::AddF32
                                : TTIRReduceClassification::AddI32;
+  if (operationMaxesTwoBlockArgs(def, elementType, reduceBlock))
+    return TTIRReduceClassification::MaxF32;
   if (hasName(def, kTTCallOpName)) {
     if (def->getNumOperands() != 2 || def->getNumResults() != 1)
       return TTIRReduceClassification::Unsupported;
@@ -391,6 +420,8 @@ static TTIRReduceClassification classifyReduceReturnValue(Value returned,
     if (functionReturnsAddOfArgs(callee, elementType))
       return elementType.isF32() ? TTIRReduceClassification::AddF32
                                  : TTIRReduceClassification::AddI32;
+    if (functionReturnsMaxOfArgs(callee, elementType))
+      return TTIRReduceClassification::MaxF32;
     return TTIRReduceClassification::NonAdd;
   }
   return TTIRReduceClassification::NonAdd;
@@ -955,6 +986,14 @@ static Value createVectorAddReduction(OpBuilder &builder, Location loc,
                                       Value vectorValue) {
   return builder
       .create<vector::ReductionOp>(loc, vector::CombiningKind::ADD, vectorValue)
+      .getResult();
+}
+
+static Value createVectorMaxReduction(OpBuilder &builder, Location loc,
+                                      Value vectorValue) {
+  return builder
+      .create<vector::ReductionOp>(loc, vector::CombiningKind::MAXNUMF,
+                                   vectorValue)
       .getResult();
 }
 
@@ -1973,12 +2012,23 @@ private:
     valueFunc->setAttr(kVC4ValueKernelAttr, builder.getUnitAttr());
     valueFunc->setAttr(kVC4ValueGridRankAttr,
                        builder.getI32IntegerAttr(planner.getGridRank()));
-    if (functionNeedsFiniteFPDomain() || functionNeedsFiniteReductionPolicy())
+    if (functionNeedsApproxSFUMathPolicy())
+      valueFunc->setAttr(kVC4ValueMathPolicyAttr,
+                         builder.getStringAttr("approx_sfu"));
+    if (functionNeedsPositiveFPDomain() && !functionNeedsFiniteFPDomain() &&
+        !functionNeedsFiniteReductionPolicy())
+      valueFunc->setAttr(kVC4ValueFPDomainAttr,
+                         builder.getStringAttr("finite_positive"));
+    else if (functionNeedsFiniteFPDomain() ||
+             functionNeedsFiniteReductionPolicy())
       valueFunc->setAttr(kVC4ValueFPDomainAttr,
                          builder.getStringAttr("finite"));
     if (functionNeedsFiniteReductionPolicy())
       valueFunc->setAttr(kVC4ValueReductionPolicyAttr,
                          builder.getStringAttr("finite_tree"));
+    if (functionNeedsFiniteMaxPolicy())
+      valueFunc->setAttr(kVC4ValueMaxPolicyAttr,
+                         builder.getStringAttr("finite"));
     if (functionNeedsFiniteF16StoragePolicy())
       valueFunc->setAttr(kVC4ValueF16StoragePolicyAttr,
                          builder.getStringAttr("finite"));
@@ -2024,6 +2074,40 @@ private:
       (void)cmp;
       needs = true;
     });
+    planner.getEntryBlock().walk([&](Operation *op) {
+      if (needs)
+        return WalkResult::interrupt();
+      if (llvm::isa<math::ExpOp>(op) || hasName(op, "arith.divf")) {
+        needs = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    return needs;
+  }
+
+  bool functionNeedsPositiveFPDomain() const {
+    bool needs = false;
+    planner.getEntryBlock().walk([&](Operation *op) {
+      if (llvm::isa<math::LogOp, math::RsqrtOp, math::SqrtOp>(op)) {
+        needs = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    return needs;
+  }
+
+  bool functionNeedsApproxSFUMathPolicy() const {
+    bool needs = false;
+    planner.getEntryBlock().walk([&](Operation *op) {
+      if (llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp, math::SqrtOp>(op) ||
+          hasName(op, "arith.divf")) {
+        needs = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
     return needs;
   }
 
@@ -2033,7 +2117,23 @@ private:
       if (needs || !hasName(op, kTTCallOpName))
         return WalkResult::advance();
       TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
-      if (reduceInfo.classification == TTIRReduceClassification::AddF32) {
+      if (reduceInfo.classification == TTIRReduceClassification::AddF32 ||
+          reduceInfo.classification == TTIRReduceClassification::MaxF32) {
+        needs = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    });
+    return needs;
+  }
+
+  bool functionNeedsFiniteMaxPolicy() const {
+    bool needs = false;
+    planner.getEntryBlock().walk([&](Operation *op) {
+      if (needs || !hasName(op, kTTCallOpName))
+        return WalkResult::advance();
+      TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
+      if (reduceInfo.classification == TTIRReduceClassification::MaxF32) {
         needs = true;
         return WalkResult::interrupt();
       }
@@ -2213,6 +2313,8 @@ private:
       return lowerTTGetNumPrograms(op);
 
     StringRef dialect = op->getName().getDialectNamespace();
+    if (dialect == "math")
+      return lowerMath(op);
     if (dialect == "arith")
       return lowerArith(op);
     if (dialect == "scf")
@@ -2425,6 +2527,7 @@ private:
     switch (reduceInfo.classification) {
     case TTIRReduceClassification::AddI32:
     case TTIRReduceClassification::AddF32:
+    case TTIRReduceClassification::MaxF32:
       break;
     case TTIRReduceClassification::RankGreaterThanOne:
       return op->emitOpError()
@@ -2455,14 +2558,20 @@ private:
     if (!elementType.isF32() && !elementType.isSignlessInteger(32))
       return op->emitOpError()
              << "unsupported tt.reduce combiner; READY_FOR_TRITON remains NO";
-    if (reduceInfo.classification == TTIRReduceClassification::AddF32) {
+    if (reduceInfo.classification == TTIRReduceClassification::AddF32 ||
+        reduceInfo.classification == TTIRReduceClassification::MaxF32) {
       valueFunc->setAttr(kVC4ValueFPDomainAttr,
                          builder.getStringAttr("finite"));
       valueFunc->setAttr(kVC4ValueReductionPolicyAttr,
                          builder.getStringAttr("finite_tree"));
+      if (reduceInfo.classification == TTIRReduceClassification::MaxF32)
+        valueFunc->setAttr(kVC4ValueMaxPolicyAttr,
+                           builder.getStringAttr("finite"));
     }
     bindValue(op->getResult(0),
-              createVectorAddReduction(builder, op->getLoc(), input));
+              reduceInfo.classification == TTIRReduceClassification::MaxF32
+                  ? createVectorMaxReduction(builder, op->getLoc(), input)
+                  : createVectorAddReduction(builder, op->getLoc(), input));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
@@ -2499,13 +2608,14 @@ private:
         op->getResult(0) == planner.getCommonPlan().tailMaskValue) {
       FailureOr<Value> mask = ensureTailMask(
           op->getResult(0), op, "sparse or unknown TTIR memory mask");
-      return failed(mask)
-                 ? failure()
-                 : finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
+      if (failed(mask))
+        return failure();
+      bindValue(op->getResult(0), *mask);
+      return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     }
 
     static constexpr StringRef supportedArithOps[] = {
-        "arith.addf",  "arith.subf", "arith.mulf",  "arith.extf",
+        "arith.addf",  "arith.subf", "arith.mulf",  "arith.divf",  "arith.extf",
         "arith.truncf", "arith.addi", "arith.subi",  "arith.muli",
         "arith.cmpf",  "arith.cmpi", "arith.select"};
     if (!hasAnyName(op, supportedArithOps))
@@ -2548,6 +2658,12 @@ private:
     state.addTypes(resultTypes);
     for (NamedAttribute attr : op->getAttrs())
       state.addAttribute(attr.getName(), attr.getValue());
+    if (hasName(op, "arith.divf")) {
+      state.addAttribute(kVC4ValueMathPolicyAttr,
+                         builder.getStringAttr("approx_sfu"));
+      state.addAttribute(kVC4ValueFPDomainAttr,
+                         builder.getStringAttr("finite"));
+    }
     Operation *created = builder.create(state);
     for (auto [oldResult, newResult] :
          llvm::zip(op->getResults(), created->getResults()))
@@ -2579,6 +2695,36 @@ private:
                                   op.getLoc(), resultType, typedAttr));
     return finishLowering(op.getOperation(),
                           LoweringOutcome::LoweredWithResultsBound);
+  }
+
+  LogicalResult lowerMath(Operation *op) {
+    if (!llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp, math::SqrtOp>(op))
+      return emitStagedDiagnostic(op, op->getName().getStringRef());
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+      return emitStagedDiagnostic(op, "math operation arity");
+
+    Value operand = lookup(op->getOperand(0));
+    if (!operand)
+      return emitStagedDiagnostic(op,
+                                  "math operand not available in value IR");
+    Type resultType = convertResultType(op->getResult(0).getType());
+    if (!resultType)
+      return emitStagedDiagnostic(op, "math result type");
+
+    OperationState state(op->getLoc(), op->getName().getStringRef());
+    state.addOperands(operand);
+    state.addTypes(resultType);
+    state.addAttribute(kVC4ValueMathPolicyAttr,
+                       builder.getStringAttr("approx_sfu"));
+    state.addAttribute(kVC4ValueFPDomainAttr,
+                       builder.getStringAttr(
+                           llvm::isa<math::LogOp, math::RsqrtOp, math::SqrtOp>(
+                               op)
+                               ? "finite_positive"
+                               : "finite"));
+    Operation *created = builder.create(state);
+    bindValue(op->getResult(0), created->getResult(0));
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   Type convertResultType(Type type) {

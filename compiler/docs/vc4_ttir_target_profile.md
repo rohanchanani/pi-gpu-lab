@@ -992,3 +992,25 @@ the lock.
 Native f16 arithmetic, bf16/fp8, int8/int16 quantized storage, fp-to-int casts,
 exact/unpolicy numeric casts, softmax/SFU, `tt.dot`, `vector.contract`, and GEMM
 remain staged.
+
+## 33. Phase 15B.3 Natural math TTIR static profile
+
+TTIR_TL_EXP_NATURAL_STATIC=PASS
+TTIR_TL_EXP_NATURAL_LOWERING=EXP2_X_LOG2E
+TTIR_SOFTMAX_USES_NATURAL_EXP=YES
+TTIR_TL_LOG_NATURAL_STATIC=PASS
+TTIR_TL_SQRT_STATIC=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15B_4_STALE_DOCS_PLAN_CLEANUP=YES
+READY_FOR_TRITON=NO
+
+Controlled real Triton snapshots for `tl.exp`, `tl.log`, `tl.sqrt`, and stable
+one-block softmax lower through the C++ TTIR importer into the standard value
+layer. The importer emits value `math.exp`, `math.log`, and `math.sqrt` with
+explicit approximate-SFU and finite-domain policy metadata; it does not emit
+VC4Kernel, SSAVC4, scheduled VC4, or source-name/path-specific forms.
+
+Public TTIR `tl.exp` and `tl.log` are natural math functions. They reach target
+VC4 base-2 SFU modes only after the value lowering applies the locked scaling:
+`EXP2_X_LOG2E` for exp and `LOG2_X_LN2` for log. Public TTIR `tl.sqrt` lowers
+through the positive finite `RSQRT_TIMES_X` value composite.

@@ -167,3 +167,29 @@ The natural reproof uses `active_qpus=12`, zero mismatch/sentinel/launch-failure
 requirements, nonzero output hashes, strict expected JSON checking, and
 explicit tolerance policy. The older direct target exp2/log2 claims remain
 target-only and do not stand in for public natural math semantics.
+
+## Phase 15B.3 TTIR Natural Math Static Bridge
+
+The controlled TTIR snapshots now lock the public math semantics at the TTIR
+boundary:
+
+- `ttir_sfu_exp_f32_b16` uses `tl.exp` as natural exp and imports to value
+  `math.exp`, then statically lowers through `EXP2_X_LOG2E`.
+- `ttir_sfu_log_f32_b16` uses `tl.log` as natural log and imports to value
+  `math.log`, then statically lowers through `LOG2_X_LN2`.
+- `ttir_sfu_sqrt_f32_b16` uses `tl.sqrt` as sqrt and imports to value
+  `math.sqrt`, then statically lowers through `RSQRT_TIMES_X`.
+- `ttir_softmax_stable_f32_b16` uses natural `tl.exp` in the stable softmax
+  composite.
+
+TTIR_TL_EXP_IS_NATURAL_EXP=YES
+TTIR_TL_LOG_IS_NATURAL_LOG=YES
+TTIR_TL_SQRT_IS_SQRT=YES
+TTIR_TL_EXP_NATURAL_STATIC=PASS
+TTIR_TL_EXP_NATURAL_LOWERING=EXP2_X_LOG2E
+TTIR_SOFTMAX_USES_NATURAL_EXP=YES
+TTIR_TL_LOG_NATURAL_STATIC=PASS
+TTIR_TL_SQRT_STATIC=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15B_4_STALE_DOCS_PLAN_CLEANUP=YES
+READY_FOR_TRITON=NO
