@@ -36,12 +36,15 @@ VALUE_LOG_NATURAL_HARDWARE=PASS
 VALUE_SQRT_HARDWARE=PASS
 VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS
 EXP2_LOG2_TARGET_ONLY_CLAIMS_HONEST=YES
+VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_PROVEN
 EXACT_DEFAULT_MATH_FIXTURE_STAGED=YES
 ZERO_ACTIVE_SOFTMAX_STAGED_OR_GUARD_REQUIRED=YES
 MULTIBLOCK_SOFTMAX_STAGED=YES
+READY_FOR_PHASE15_7_TTIR_IMPORTER_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE15_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
@@ -167,6 +170,27 @@ The natural reproof uses `active_qpus=12`, zero mismatch/sentinel/launch-failure
 requirements, nonzero output hashes, strict expected JSON checking, and
 explicit tolerance policy. The older direct target exp2/log2 claims remain
 target-only and do not stand in for public natural math semantics.
+
+## Phase 15.6 Value Mixed Acceptance
+
+Phase 15.6 adds the cumulative value mixed hardware fixture
+`mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value`. The fixture
+combines multi-axis launch identity, control flow, tail masks, row-strided f16
+storage, finite f32 reductions, scalar-to-vector broadcast, approximate
+reciprocal/division, and one-block softmax v0. It uses public natural
+`math.exp` semantics for the softmax CPU oracle, and the target exp2/log2 SFU
+claims remain target-only.
+
+The full current VC4Value mixed suite passes with `active_qpus=12` where
+applicable, zero output mismatches, zero sentinel mismatches, zero launch
+failures, and claim-audit coverage for the Phase 15 softmax and approximate-SFU
+features.
+
+VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+VALUE_MIXED_CLAIM_AUDIT=PASS
+READY_FOR_PHASE15_7_TTIR_IMPORTER_SFU_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
 
 ## Phase 15B.3 TTIR Natural Math Static Bridge
 

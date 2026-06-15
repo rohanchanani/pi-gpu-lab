@@ -57,6 +57,9 @@ VALUE_NATURAL_LOG_STATIC=PASS
 VALUE_SQRT_STATIC=PASS
 SQRT_LOWERING=RSQRT_TIMES_X
 SOFTMAX_USES_NATURAL_EXP=YES
+VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_CLAIM_AUDIT=PASS
+READY_FOR_PHASE15_7_TTIR_IMPORTER_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE15B_2_VALUE_HARDWARE_EXP_LOG_SQRT_REPROOF=YES
 VALUE_F16_STORAGE_F32_COMPUTE_STATIC=PASS
 VALUE_F16_STORE_F32_COMPUTE_STATIC=PASS
@@ -843,6 +846,19 @@ READY_FOR_TRITON=NO
 The Phase 15B.2 fixtures keep `active_qpus=12`, strict sentinels, expected JSON
 checking, and natural exp/log/sqrt host oracles. The old Phase 15.5 target-mode
 exp2/log2 proof remains target-only and is not a public natural math proof.
+
+Phase 15.6 mixed value acceptance extends the cumulative VC4Value mixed suite
+with `mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value`. The mixed
+fixture keeps the standard value-to-VC4Kernel layering, combines axes, control
+flow, masks, row-strided f16 storage, finite reductions, broadcast,
+approximate reciprocal/division, and one-block softmax v0, and uses the
+Phase 15B public natural-exp softmax oracle rather than target exp2 semantics.
+
+VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+VALUE_MIXED_CLAIM_AUDIT=PASS
+READY_FOR_PHASE15_7_TTIR_IMPORTER_SFU_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
 
 ## 16. Shuffle, rotate, and lane-broadcast planning
 

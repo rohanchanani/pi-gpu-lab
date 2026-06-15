@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase14_mixed_acceptance",
+  "suite_name": "vc4value_phase5_phase15_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -677,6 +677,81 @@
         "value_reduction",
         "value_control_flow"
       ]
+    },
+    {
+      "name": "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "cumulative Phase 15 mixed fixture combining row-strided f16 storage, multi-axis launch identity, scalar control flow, tail masks, finite max/add reductions, approximate natural-exp softmax, reciprocal division, and f16 output storage",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_multi_axis_launch_identity",
+        "value_program_id_axis1",
+        "value_f16_storage_load",
+        "value_f16_storage_store",
+        "value_f32_compute_after_f16_load",
+        "value_f16_storage_finite_policy",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_cf_cond_br",
+        "value_row_strided_memory",
+        "value_vector_reduction_add_f32_finite",
+        "value_f32_finite_tree_policy",
+        "value_finite_f32_max_reduction",
+        "value_approx_sfu_exp",
+        "value_approx_sfu_recip_div",
+        "value_scalar_to_vector_f32_broadcast",
+        "value_softmax_v0",
+        "value_approx_math_policy",
+        "value_softmax_uses_natural_exp",
+        "value_no_exact_default_math",
+        "value_no_multiblock_softmax",
+        "value_no_full_attention",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_value_multi_axis",
+        "saw_value_control_flow",
+        "saw_value_mask_tail",
+        "saw_value_row_strided_memory",
+        "saw_value_reduction_f32_finite_add",
+        "saw_value_f16_storage_load",
+        "saw_value_f16_storage_store",
+        "saw_value_f32_compute_after_f16_load",
+        "saw_f16_storage_finite_policy",
+        "saw_value_approx_sfu_exp",
+        "saw_value_approx_sfu_recip_div",
+        "saw_value_finite_f32_max_reduction",
+        "saw_value_softmax_v0",
+        "saw_scalar_to_vector_f32_broadcast",
+        "saw_approx_math_policy",
+        "saw_softmax_uses_natural_exp",
+        "saw_no_exact_default_math",
+        "saw_no_multiblock_softmax",
+        "saw_no_full_attention"
+      ],
+      "expected_cases_summary": "15 repeated launches across rows=1,2,7 and ncols=1,2,7,15,16 with stride padding; active_qpus=12; natural-exp softmax oracle, f16 storage, row/output sentinels, and approximate tolerance checks",
+      "triage_feature_bands": [
+        "value_phase15_sfu_softmax_mixed",
+        "value_multi_axis_launch_identity",
+        "value_cf",
+        "value_f16_storage",
+        "finite_max_reduction",
+        "finite_add_reduction",
+        "approx_sfu_exp_recip",
+        "softmax_v0",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -1186,7 +1261,8 @@
       "id": "value_f16_storage_load",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value"
+        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
       ],
       "required": true
     },
@@ -1194,7 +1270,8 @@
       "id": "value_f16_storage_store",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value"
+        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
       ],
       "required": true
     },
@@ -1202,7 +1279,8 @@
       "id": "value_f32_compute_after_f16_load",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value"
+        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
       ],
       "required": true
     },
@@ -1210,7 +1288,8 @@
       "id": "value_f16_storage_finite_policy",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value"
+        "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
       ],
       "required": true
     },
@@ -1237,10 +1316,90 @@
         "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value"
       ],
       "required": true
+    },
+    {
+      "id": "value_finite_f32_max_reduction",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_approx_sfu_exp",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_approx_sfu_recip_div",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_scalar_to_vector_f32_broadcast",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_softmax_v0",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_approx_math_policy",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_softmax_uses_natural_exp",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_exact_default_math",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_multiblock_softmax",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_full_attention",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value"
+      ],
+      "required": true
     }
   ],
   "isolation_backstops": [
     "value_i32_add_select_tail_vc4value"
   ],
-  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, Phase 9 multi-axis launch identity, Phase 10 mask/memory legality, Phase 11 strided/ranked memory, Phase 12 reductions, and Phase 13 GEMV row-wise dot, and Phase 14 f16 storage/numeric policy."
+  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5, Phase 8 control flow, Phase 9 multi-axis launch identity, Phase 10 mask/memory legality, Phase 11 strided/ranked memory, Phase 12 reductions, Phase 13 GEMV row-wise dot, Phase 14 f16 storage/numeric policy, and Phase 15 approximate SFU softmax with natural-exp semantics."
 }

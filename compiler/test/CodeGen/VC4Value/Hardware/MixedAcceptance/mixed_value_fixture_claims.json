@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase14_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase15_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -887,6 +887,159 @@
             "guard_fixtures": [
               "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-gemv-multiblock-k-accumulation-staged.mlir"
             ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value/candidate/mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses grid_rank=2 with program_id axes 0/1; the harness launches grid=(1, rows, 1) and checks row-strided output for rows 1, 2, and 7."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.cond_br on the block axis to keep one-block softmax semantics; expected.json requires saw_value_control_flow=1 and zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask %cols and masked f16 transfer_write; the harness checks ncols 1,2,7,15,16 and verifies inactive output sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses strided row memrefs for f16 input/output; the harness varies stride and verifies row padding input/output sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses finite-policy vector.reduction <add> for the softmax denominator; the harness checks natural-exp softmax probabilities and row sums."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir loads vector<16xf16> and extends to f32; the harness fills f16 logits and expected output depends on f16_to_f32 input values."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir truncates f32 softmax output to vector<16xf16> and stores it; the harness reads f16 output bits and compares f16_to_f32 values."
+          }
+        },
+        {
+          "claim": "saw_value_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir extends f16 input to f32 before max, exp, add reduction, reciprocal, and multiply; the CPU oracle computes in f32-like finite values."
+          }
+        },
+        {
+          "claim": "saw_f16_storage_finite_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir carries vc4value.f16_storage_policy = \"finite\" and expected.json requires saw_f16_storage_finite_policy=1."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses math.exp inside the softmax composite under approx_sfu policy; the harness oracle uses natural_exp_ref and requires saw_softmax_uses_natural_exp=1."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu_recip_div",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses arith.divf 1.0 / denom under approx_sfu policy; output probabilities and row-sum checks depend on reciprocal division."
+          }
+        },
+        {
+          "claim": "saw_value_finite_f32_max_reduction",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.reduction <maxnumf> over finite active logits; the harness oracle subtracts the per-row finite max before natural exp."
+          }
+        },
+        {
+          "claim": "saw_value_softmax_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir implements the softmax v0 composite without a vc4value.softmax op; expected.json requires probabilities and row sums to match the CPU oracle."
+          }
+        },
+        {
+          "claim": "saw_scalar_to_vector_f32_broadcast",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir broadcasts max and reciprocal scalars to vector<16xf32>; checked output depends on those broadcasts in every active lane."
+          }
+        },
+        {
+          "claim": "saw_approx_math_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir carries vc4value.math_policy = \"approx_sfu\" and expected.json requires saw_approx_math_policy=1."
+          }
+        },
+        {
+          "claim": "saw_softmax_uses_natural_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the harness oracle calls natural_exp_ref(logit - max), not exp2, and expected.json requires saw_softmax_uses_natural_exp=1."
+          }
+        },
+        {
+          "claim": "saw_no_exact_default_math",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "invalid-exact-math-no-approx-policy.mlir",
+              "invalid-exact-default-exp-log-sqrt.mlir"
+            ],
+            "guard": "exact/default math remains rejected by static tests; this fixture carries explicit approximate policy."
+          }
+        },
+        {
+          "claim": "saw_no_multiblock_softmax",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "invalid-multiblock-softmax-staged.mlir"
+            ],
+            "guard": "input.mlir gates to block 0 and the harness launches one x block for one-block active_count 1..16 softmax only."
+          }
+        },
+        {
+          "claim": "saw_no_full_attention",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_tl_dot_reject_b16.ttir.mlir"
+            ],
+            "guard": "fixture contains no dot, attention score generation, K/V state, or FlashAttention path."
           }
         }
       ]

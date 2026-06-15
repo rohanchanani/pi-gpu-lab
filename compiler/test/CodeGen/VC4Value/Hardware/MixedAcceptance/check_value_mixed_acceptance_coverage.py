@@ -53,6 +53,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_reduction_axes_mask_cf_strided_vc4value",
     "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
     "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
+    "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -113,6 +114,16 @@ REQUIRED_FEATURES = {
     "value_no_native_f16_arithmetic",
     "value_no_bf16_fp8",
     "value_no_softmax_sfu",
+    "value_finite_f32_max_reduction",
+    "value_approx_sfu_exp",
+    "value_approx_sfu_recip_div",
+    "value_scalar_to_vector_f32_broadcast",
+    "value_softmax_v0",
+    "value_approx_math_policy",
+    "value_softmax_uses_natural_exp",
+    "value_no_exact_default_math",
+    "value_no_multiblock_softmax",
+    "value_no_full_attention",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -245,10 +256,17 @@ def validate_fixture(repo_root, fixture):
         "value_f32_finite_tree_policy": "vc4value.reduction_policy = \"finite_tree\"",
         "value_gemv_f32_row_dot": "arith.mulf",
         "value_gemv_partial_kblock": "%partial_index = arith.addi",
-        "value_f16_storage_load": "vector.transfer_read %rank_f16",
+        "value_f16_storage_load": "vector.transfer_read",
         "value_f16_storage_store": "arith.truncf",
         "value_f32_compute_after_f16_load": "arith.extf",
         "value_f16_storage_finite_policy": "vc4value.f16_storage_policy = \"finite\"",
+        "value_finite_f32_max_reduction": "vector.reduction <maxnumf>",
+        "value_approx_sfu_exp": "math.exp",
+        "value_approx_sfu_recip_div": "arith.divf",
+        "value_scalar_to_vector_f32_broadcast": "vector.broadcast",
+        "value_softmax_v0": "vc4value.softmax_v0 = \"one_block_active_1_to_16\"",
+        "value_approx_math_policy": "vc4value.math_policy = \"approx_sfu\"",
+        "value_softmax_uses_natural_exp": "math.exp",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -260,12 +278,17 @@ def validate_fixture(repo_root, fixture):
             and "vc4value.num_programs {axis = 0" in mlir
             and "%row_base = arith.muli %pid1, %num0" in mlir
         )
+        has_rank2_row_block = (
+            "vc4value.grid_rank = 2" in mlir
+            and "vc4value.program_id {axis = 0" in mlir
+            and "vc4value.program_id {axis = 1" in mlir
+        )
         has_rank3_flatten = (
             "vc4value.grid_rank = 3" in mlir
             and "vc4value.program_id {axis = 2" in mlir
             and "vc4value.num_programs {axis = 1" in mlir
         )
-        if not has_rank2_flatten and not has_rank3_flatten:
+        if not has_rank2_flatten and not has_rank2_row_block and not has_rank3_flatten:
             fail(f"{name} claims value_multi_axis_launch_identity without rank-2 or rank-3 flattening")
     if "value_f32_finite_cmp_select" in tags and 'vc4value.fp_domain = "finite"' not in mlir:
         fail(f"{name} uses f32 cmp/select without finite domain policy")
@@ -309,6 +332,16 @@ def validate_fixture(repo_root, fixture):
         for marker in ("math.", "softmax", "exp", "log", "rsqrt", "recip"):
             if marker in mlir.lower():
                 fail(f"{name} claims no softmax/SFU but input uses {marker}")
+    if "value_no_exact_default_math" in tags and 'vc4value.math_policy = "approx_sfu"' not in mlir:
+        fail(f"{name} claims no exact/default math but lacks explicit approx_sfu policy")
+    if "value_no_multiblock_softmax" in tags:
+        for marker in ("atomic", "memref.load %y", "cross_program", "block_pointer"):
+            if marker in mlir:
+                fail(f"{name} claims no multiblock softmax but input uses {marker}")
+    if "value_no_full_attention" in tags:
+        for marker in ("attention", "flashattention", "vector.contract", "tt.dot", "tl.dot"):
+            if marker in mlir.lower():
+                fail(f"{name} claims no full attention but input uses {marker}")
 
 
 def validate_manifest(repo_root, manifest):
@@ -320,7 +353,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase14_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase15_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -392,7 +425,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14", "phase15"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 
