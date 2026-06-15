@@ -1666,3 +1666,38 @@ active_qpus=12 repeated launches. The full VC4Value mixed hardware suite
 passes, and the mixed claim audit covers the new attention-apply claims without
 claiming QK score generation, dot/contract, scalar global loads,
 non-transposed V gather, full attention, or FlashAttention.
+
+## 39. Phase 16 final attention-apply v0 lock
+
+PHASE16_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_ATTENTION_APPLY_V0
+VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_STATIC=PASS
+VALUE_ATTENTION_APPLY_V0_HARDWARE_ISOLATION=PASS
+VALUE_ATTENTION_APPLY_V0_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_ATTENTION_APPLY_V0_SOURCES=YES
+REAL_TTIR_ATTENTION_APPLY_V0_SNAPSHOTS=YES
+TTIR_ATTENTION_APPLY_V0_IMPORTER_STATIC=PASS
+TTIR_ATTENTION_APPLY_V0_HARDWARE_ISOLATION=PASS
+TTIR_ATTENTION_APPLY_V0_MIXED_ACCEPTANCE=PASS
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
+MULTIBLOCK_SOFTMAX_STAGED=YES
+QK_SCORE_GENERATION_STAGED=YES
+TL_DOT_TT_DOT_STAGED=YES
+FULL_ATTENTION_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_ATTENTION_APPLY_WORKAROUNDS=YES
+READY_FOR_PHASE17_ONLINE_MULTIBLOCK_SOFTMAX_STATE=YES
+READY_FOR_TRITON=NO
+
+Phase 16 final-locks attention-apply v0 as a standard value composite, not a
+new `vc4value` operation. The value path remains precomputed-score only and
+requires transposed-V row slices. Scalar global loads, non-transposed V gather,
+K=0 without an explicit guard, multiblock softmax, QK score generation,
+dot/contract, full attention, and FlashAttention remain staged.

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4_triton_phase15_mixed_acceptance_claims",
+  "suite_name": "vc4_triton_phase16_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
@@ -2169,6 +2169,373 @@
           "claim_kind": "CHECKED_OUTPUT",
           "evidence": {
             "checked_output": "hardware harness prints saw_output_padding_sentinels=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+      "source_paths": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton/input.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton/candidate/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_real_ttir_snapshot",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "snapshot provenance audit requires input.ttir.mlir to match examples/triton/phase16_attention_apply_v0/generated/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.ttir.mlir byte-for-byte."
+          }
+        },
+        {
+          "claim": "saw_cpp_ttir_importer",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_cpp_ttir_importer=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_value_surface_verification",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner executes vc4-opt --vc4-verify-value-surface before hardware workdir generation."
+          }
+        },
+        {
+          "claim": "saw_value_to_vc4kernel",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR runner executes --convert-vc4-value-to-vc4kernel --verify-vc4kernel and validates no producer dialect ops remain in verified vc4kernel."
+          }
+        },
+        {
+          "claim": "saw_value_scf_cf",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_scf_cf=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_elementwise=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_control_flow=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_multi_axis=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_program_id_axis1",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR contains tt.get_program_id y and the harness checks q,d output coordinates."
+          }
+        },
+        {
+          "claim": "saw_ttir_program_id_axis2",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "TTIR contains tt.get_program_id z and the harness launches GROUPS=2 to exercise the group control-flow guard."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_mask_tail=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_row_strided_memory=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_reduction_f32_finite_add=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_scalar_reduction_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_scalar_reduction_store=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_f16_storage_load=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_f32_compute_after_f16_load=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_f16_storage=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_approx_sfu_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_approx_sfu_exp=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_approx_sfu_recip_div",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_approx_sfu_recip_div=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_finite_f32_max_reduction",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_finite_f32_max_reduction=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_softmax_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_softmax_v0=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_attention_apply_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_attention_apply_v0=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_precomputed_scores",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_precomputed_scores=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_transposed_v_layout",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_transposed_v_layout=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_weighted_sum_reduction",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_weighted_sum_reduction=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_ttir_scalar_result_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_ttir_scalar_result_store=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_approx_sfu=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_value_softmax_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_softmax_v0=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_scalar_to_vector_f32_broadcast",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_scalar_to_vector_f32_broadcast=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_approx_math_policy",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_approx_math_policy=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_softmax_uses_natural_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_softmax_uses_natural_exp=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_no_exact_default_math",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_exact_default_math remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_multiblock_softmax",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_multiblock_softmax remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_scalar_global_load",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_scalar_global_load remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_nontransposed_v_gather",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_nontransposed_v_gather remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_qk_score_generation",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_qk_score_generation remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_full_attention",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_full_attention remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_tl_dot_tt_dot",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_tl_dot_tt_dot remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_vector_contract",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_vector_contract remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_no_gemm",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "ttir_attention_apply_nontransposed_v_reject_b16",
+              "ttir_attention_apply_scalar_scale_load_reject_b16",
+              "ttir_attention_apply_k_zero_reject_b16",
+              "ttir_attention_apply_multiblock_reject_b16",
+              "ttir_attention_apply_tl_dot_reject_b16"
+            ],
+            "phase_guard": "saw_no_gemm remains staged by Phase 16 controlled reject snapshots and importer diagnostics; this mixed fixture claims only the accepted precomputed-score transposed-V attention-apply form."
+          }
+        },
+        {
+          "claim": "saw_row_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_row_padding_sentinels=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
+          }
+        },
+        {
+          "claim": "saw_output_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_output_padding_sentinels=1 and the harness prints it only with status=PASS, zero mismatches, zero sentinel mismatches, and a nonzero output hash."
           }
         }
       ]

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4_triton_phase15_mixed_acceptance",
+  "suite_name": "vc4_triton_phase16_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
@@ -897,6 +897,134 @@
         "phase15_approx_sfu_softmax",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 16 TTIR mixed fixture combining multi-axis launch identity, control flow, tail masks, row-strided f16 precomputed score and transposed-V storage loads, finite f32 reductions, natural-exp softmax v0, weighted sum, and scalar output/audit stores through the C++ TTIR importer to hardware",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "program_id_axis1",
+        "ttir_program_id_axis1",
+        "ttir_program_id_axis2",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "ttir_elementwise",
+        "ttir_control_flow",
+        "ttir_multi_axis",
+        "ttir_mask_tail",
+        "ttir_row_strided_memory",
+        "ttir_reduction_f32_finite_add",
+        "ttir_scalar_reduction_store",
+        "ttir_f16_storage_load",
+        "ttir_f32_compute_after_f16_load",
+        "value_f16_storage",
+        "ttir_approx_sfu_exp",
+        "ttir_approx_sfu_recip_div",
+        "ttir_finite_f32_max_reduction",
+        "ttir_softmax_v0",
+        "ttir_attention_apply_v0",
+        "ttir_precomputed_scores",
+        "ttir_transposed_v_layout",
+        "ttir_weighted_sum_reduction",
+        "ttir_scalar_result_store",
+        "value_approx_sfu",
+        "value_softmax_v0",
+        "scalar_to_vector_f32_broadcast",
+        "approx_math_policy",
+        "softmax_natural_exp",
+        "no_exact_default_math",
+        "no_multiblock_softmax",
+        "no_scalar_global_load",
+        "no_nontransposed_v_gather",
+        "no_qk_score_generation",
+        "no_full_attention",
+        "no_tl_dot_tt_dot",
+        "no_vector_contract",
+        "no_gemm",
+        "sentinel_preserve",
+        "active_qpus_12",
+        "row_padding_sentinels",
+        "output_padding_sentinels",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "block_x",
+        "output_hash_nonzero",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_ttir_elementwise",
+        "saw_ttir_control_flow",
+        "saw_ttir_multi_axis",
+        "saw_ttir_program_id_axis1",
+        "saw_ttir_program_id_axis2",
+        "saw_ttir_mask_tail",
+        "saw_ttir_row_strided_memory",
+        "saw_ttir_reduction_f32_finite_add",
+        "saw_ttir_scalar_reduction_store",
+        "saw_ttir_f16_storage_load",
+        "saw_ttir_f32_compute_after_f16_load",
+        "saw_value_f16_storage",
+        "saw_ttir_approx_sfu_exp",
+        "saw_ttir_approx_sfu_recip_div",
+        "saw_ttir_finite_f32_max_reduction",
+        "saw_ttir_softmax_v0",
+        "saw_ttir_attention_apply_v0",
+        "saw_ttir_precomputed_scores",
+        "saw_ttir_transposed_v_layout",
+        "saw_ttir_weighted_sum_reduction",
+        "saw_ttir_scalar_result_store",
+        "saw_value_approx_sfu",
+        "saw_value_softmax_v0",
+        "saw_scalar_to_vector_f32_broadcast",
+        "saw_approx_math_policy",
+        "saw_softmax_uses_natural_exp",
+        "saw_no_exact_default_math",
+        "saw_no_multiblock_softmax",
+        "saw_no_scalar_global_load",
+        "saw_no_nontransposed_v_gather",
+        "saw_no_qk_score_generation",
+        "saw_no_full_attention",
+        "saw_no_tl_dot_tt_dot",
+        "saw_no_vector_contract",
+        "saw_no_gemm",
+        "saw_row_padding_sentinels",
+        "saw_output_padding_sentinels"
+      ],
+      "expected_cases_summary": "Twelve source-controlled Phase 16 TTIR mixed attention-apply cases with q/d/group axes, group-0 control-flow guard, K tail masks, row-strided f16 precomputed scores, row-contiguous transposed Vt, natural-exp softmax, weighted add reduction, scalar output/audit stores, active_qpus=12, block.x=16, strict CPU oracle, and row/output padding sentinels.",
+      "triage_feature_bands": [
+        "ttir_import",
+        "phase10_mask_memory",
+        "phase11_strided_memory",
+        "phase12_reductions",
+        "phase14_f16_storage_numeric",
+        "phase15_sfu_softmax",
+        "phase16_attention_apply_v0",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -1604,6 +1732,70 @@
       "verification_kind": "Phase 15 mixed acceptance keeps GEMM staged",
       "covered_by": [
         "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_attention_apply_v0",
+      "verification_kind": "checked output proves imported real TTIR precomputed-score attention-apply v0 through natural-exp softmax and weighted sum on hardware",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_precomputed_scores",
+      "verification_kind": "checked output and audit prove scores are loaded from precomputed S, with no QK score generation claimed",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_transposed_v_layout",
+      "verification_kind": "structural TTIR audit and output oracle prove Vt[d, offs] row-contiguous layout",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_weighted_sum_reduction",
+      "verification_kind": "real TTIR weighted probabilities times Vt are reduced and checked against a CPU oracle",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_scalar_result_store",
+      "verification_kind": "scalar output and audit stores are checked with padding sentinels",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_scalar_global_load",
+      "verification_kind": "phase guard and structural audit keep scalar global tt.load staged",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_nontransposed_v_gather",
+      "verification_kind": "phase guard and structural audit keep non-transposed V lane-varying gather staged",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_qk_score_generation",
+      "verification_kind": "phase guard and structural audit keep QK score generation staged",
+      "covered_by": [
+        "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
       ],
       "required": true
     }

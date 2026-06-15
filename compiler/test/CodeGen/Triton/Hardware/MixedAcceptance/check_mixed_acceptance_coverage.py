@@ -43,6 +43,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton",
     "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
     "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+    "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -111,7 +112,15 @@ REQUIRED_FEATURES = {
     "scalar_to_vector_f32_broadcast",
     "approx_math_policy",
     "softmax_natural_exp",
+    "ttir_attention_apply_v0",
+    "ttir_precomputed_scores",
+    "ttir_transposed_v_layout",
+    "ttir_weighted_sum_reduction",
+    "ttir_scalar_result_store",
     "no_exact_default_math",
+    "no_scalar_global_load",
+    "no_nontransposed_v_gather",
+    "no_qk_score_generation",
     "no_multiblock_softmax",
     "no_full_attention",
     "no_gemm",
@@ -295,7 +304,15 @@ def validate_fixture(repo_root, fixture, lock_mode):
             and re.search(r"arith\.muli %row, %[A-Za-z0-9_]+", ttir_text)
             and "!tt.ptr<f16>" in ttir_text
         )
-        if "tt.get_program_id y" not in ttir_text or not (has_symbolic_stride or has_phase14_static_stride):
+        has_phase16_attention_stride = (
+            name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+            and "arith.muli %q, %LDS" in ttir_text
+            and "arith.muli %d, %LDV" in ttir_text
+            and "!tt.ptr<f16>" in ttir_text
+        )
+        if "tt.get_program_id y" not in ttir_text or not (
+            has_symbolic_stride or has_phase14_static_stride or has_phase16_attention_stride
+        ):
             fail(f"{name} claims ttir_row_strided_memory but TTIR lacks row*stride pointer arithmetic")
     if "value_mask_classifier" in tags and "saw_value_mask_classifier" not in (repo_root / fixture["path"] / "expected.json").read_text():
         fail(f"{name} claims value_mask_classifier but expected.json lacks saw_value_mask_classifier")
@@ -357,8 +374,32 @@ def validate_fixture(repo_root, fixture, lock_mode):
         for marker in ("arith.maxnumf", "math.exp", "arith.addf", "arith.divf", "tt.store"):
             if marker not in ttir_text:
                 fail(f"{name} claims ttir_softmax_v0 but TTIR lacks {marker}")
-    if "no_full_attention" in tags and any(marker in ttir_text.lower() for marker in ("attention", "flashattention", "flash_attention")):
-        fail(f"{name} claims no_full_attention but TTIR contains attention marker")
+    if "ttir_attention_apply_v0" in tags:
+        for marker in ("math.exp", "arith.divf", "arith.mulf", "tt.reduce", "tt.store"):
+            if marker not in ttir_text:
+                fail(f"{name} claims ttir_attention_apply_v0 but TTIR lacks {marker}")
+    if "ttir_precomputed_scores" in tags and "!tt.ptr<f16>" not in ttir_text:
+        fail(f"{name} claims ttir_precomputed_scores but TTIR lacks precomputed score pointer input")
+    if "ttir_transposed_v_layout" in tags and (
+        "arith.muli %d, %LDV" not in ttir_text or "tt.addptr %v_36, %offs" not in ttir_text
+    ):
+        fail(f"{name} claims ttir_transposed_v_layout but TTIR lacks Vt[d, offs] pointer form")
+    if "ttir_weighted_sum_reduction" in tags and (
+        "arith.mulf %probs" not in ttir_text or "tt.reduce" not in ttir_text or "arith.addf" not in ttir_text
+    ):
+        fail(f"{name} claims ttir_weighted_sum_reduction but TTIR lacks weighted add reduction")
+    if "ttir_scalar_result_store" in tags and "tt.store" not in ttir_text:
+        fail(f"{name} claims ttir_scalar_result_store but TTIR lacks scalar result store")
+    if "no_scalar_global_load" in tags and re.search(r"tt\.load %[A-Za-z0-9_]+ : !tt\.ptr<", ttir_text):
+        fail(f"{name} claims no_scalar_global_load but TTIR contains scalar tt.load")
+    if "no_nontransposed_v_gather" in tags and (
+        "arith.muli %offs, %LDV" in ttir_text or re.search(r"arith\.muli %[A-Za-z0-9_]+, %LDV : tensor<16xi32>", ttir_text)
+    ):
+        fail(f"{name} claims no_nontransposed_v_gather but TTIR contains lane-varying V stride")
+    if "no_qk_score_generation" in tags and ("tt.dot" in ttir_text or "qk_score" in ttir_text.lower()):
+        fail(f"{name} claims no_qk_score_generation but TTIR contains QK/dot marker")
+    if "no_full_attention" in tags and any(marker in ttir_text.lower() for marker in ("flashattention", "flash_attention", "full_attention")):
+        fail(f"{name} claims no_full_attention but TTIR contains full-attention marker")
     if "no_multiblock_softmax" in tags and "atomic" in ttir_text.lower():
         fail(f"{name} claims no_multiblock_softmax but TTIR contains atomic marker")
     if "no_gemm" in tags and any(marker in ttir_text.lower() for marker in ("gemm", "matmul", "tt.dot")):
@@ -377,6 +418,7 @@ def validate_manifest(repo_root, manifest, lock_mode):
     if manifest.get("suite_name") not in {
         "vc4_triton_phase7_mixed_acceptance",
         "vc4_triton_phase15_mixed_acceptance",
+        "vc4_triton_phase16_mixed_acceptance",
     }:
         fail("unexpected suite_name")
 

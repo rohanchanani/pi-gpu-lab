@@ -114,6 +114,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             repo_root
             / "examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir"
         )
+        phase16_mixed_attention_snapshot = (
+            repo_root
+            / "examples/triton/phase16_attention_apply_v0/generated/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.ttir.mlir"
+        )
         if fixture_name == "mixed_ttir_cf_loop_if_tail_vc4triton":
             if not fixture_input.exists() or not phase85_snapshot.exists():
                 fail(f"{fixture_name} snapshot provenance paths are missing")
@@ -176,6 +180,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
                 fail(f"{fixture_name} snapshot provenance paths are missing")
             if fixture_input.read_bytes() != phase15_mixed_sfu_softmax_snapshot.read_bytes():
                 fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 15 mixed SFU/softmax snapshot")
+        if fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            if not fixture_input.exists() or not phase16_mixed_attention_snapshot.exists():
+                fail(f"{fixture_name} snapshot provenance paths are missing")
+            if fixture_input.read_bytes() != phase16_mixed_attention_snapshot.read_bytes():
+                fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 16 mixed attention-apply snapshot")
 
     if "saw_cpp_ttir_importer" in claim_names:
         require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
@@ -254,6 +263,9 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
             for marker in ("arith.mulf", "arith.subf", "arith.divf", "arith.select"):
                 require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            for marker in ("arith.mulf", "arith.subf", "arith.divf", "arith.select"):
+                require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
         else:
             for marker in ("arith.addf", "arith.subf", "arith.mulf", "arith.cmpf", "arith.select"):
                 require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
@@ -262,6 +274,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         elif fixture_name == "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton":
             require_marker(harness, "verify_mixed_outputs", "saw_ttir_elementwise harness")
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "verify_outputs", "saw_ttir_elementwise harness")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(harness, "verify_outputs", "saw_ttir_elementwise harness")
         else:
             require_marker(harness, "verify_results", "saw_ttir_elementwise harness")
@@ -322,6 +336,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, "mixed_grid", "saw_ttir_multi_axis harness")
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(harness, "vc4_m2_dim3(tc->rows, 2u, 1u)", "saw_ttir_multi_axis harness")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "vc4_m2_dim3(tc->q_rows, tc->out_dims, GROUPS)", "saw_ttir_multi_axis harness")
         else:
             require_marker(harness, "grid_y", "saw_ttir_multi_axis harness")
 
@@ -346,6 +362,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, "MIXED_KBLOCKS", "saw_ttir_control_flow harness")
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(harness, "tc->rows, 2u, 1u", "saw_ttir_control_flow harness")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "GROUPS", "saw_ttir_control_flow harness")
         else:
             require_marker(harness, "flag", "saw_ttir_control_flow harness")
 
@@ -382,6 +400,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(ttir, "!tt.ptr<f16>", "saw_ttir_row_strided_memory TTIR")
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(ttir, "arith.muli %row", "saw_ttir_row_strided_memory TTIR")
+            require_marker(ttir, "!tt.ptr<f16>", "saw_ttir_row_strided_memory TTIR")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(ttir, "arith.muli %q, %LDS", "saw_ttir_row_strided_memory TTIR")
+            require_marker(ttir, "arith.muli %d, %LDV", "saw_ttir_row_strided_memory TTIR")
             require_marker(ttir, "!tt.ptr<f16>", "saw_ttir_row_strided_memory TTIR")
         else:
             for marker in ("arith.muli %row, %ldx", "arith.muli %row, %ldy", "arith.muli %row, %ldo"):
@@ -425,6 +447,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         elif fixture_name == "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton":
             require_marker(harness, "verify_mixed_outputs", "saw_ttir_reduction_f32_finite_add harness")
         elif fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "verify_outputs", "saw_ttir_reduction_f32_finite_add harness")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(harness, "verify_outputs", "saw_ttir_reduction_f32_finite_add harness")
         else:
             require_marker(harness, "verify_f32_reduction", "saw_ttir_reduction_f32_finite_add harness")
@@ -491,6 +515,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(ttir, "arith.mulf", "saw_ttir_f32_compute_after_f16_load TTIR")
         if fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
             require_marker(harness, "expected_softmax", "saw_ttir_f32_compute_after_f16_load harness")
+        elif fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "expected_attention", "saw_ttir_f32_compute_after_f16_load harness")
         else:
             require_marker(harness, "expected_dot", "saw_ttir_f32_compute_after_f16_load harness")
 
@@ -520,7 +546,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(harness, "saw_no_softmax_sfu", "saw_no_softmax_sfu harness")
 
     if "saw_output_padding_sentinels" in claim_names:
-        if fixture_name == "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton":
+        if fixture_name in (
+            "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+            "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+        ):
             require_marker(harness, "verify_sentinels", "saw_output_padding_sentinels harness")
         else:
             require_marker(harness, "verify_store_sentinels", "saw_output_padding_sentinels harness")
@@ -532,7 +561,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_ttir_approx_sfu_recip_div" in claim_names:
         require_marker(ttir, "arith.divf", "saw_ttir_approx_sfu_recip_div TTIR")
-        require_marker(harness, "expected_softmax", "saw_ttir_approx_sfu_recip_div harness")
+        if fixture_name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton":
+            require_marker(harness, "expected_attention", "saw_ttir_approx_sfu_recip_div harness")
+        else:
+            require_marker(harness, "expected_softmax", "saw_ttir_approx_sfu_recip_div harness")
 
     if "saw_ttir_finite_f32_max_reduction" in claim_names:
         require_marker(ttir, "arith.maxnumf", "saw_ttir_finite_f32_max_reduction TTIR")
@@ -543,13 +575,51 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(ttir, marker, "saw_ttir_softmax_v0 TTIR")
         require_marker(harness, "expected_softmax", "saw_ttir_softmax_v0 harness")
 
+    if "saw_ttir_attention_apply_v0" in claim_names:
+        for marker in ("math.exp", "arith.divf", "arith.mulf", "tt.reduce", "tt.store"):
+            require_marker(ttir, marker, "saw_ttir_attention_apply_v0 TTIR")
+        require_marker(harness, "expected_attention", "saw_ttir_attention_apply_v0 harness")
+
+    if "saw_ttir_precomputed_scores" in claim_names:
+        require_marker(ttir, "%S: !tt.ptr<f16>", "saw_ttir_precomputed_scores TTIR")
+        require_marker(harness, "score_value", "saw_ttir_precomputed_scores harness")
+
+    if "saw_ttir_transposed_v_layout" in claim_names:
+        require_marker(ttir, "arith.muli %d, %LDV", "saw_ttir_transposed_v_layout TTIR")
+        require_marker(ttir, "tt.addptr %v_36, %offs", "saw_ttir_transposed_v_layout TTIR")
+        require_marker(harness, "vt_value", "saw_ttir_transposed_v_layout harness")
+
+    if "saw_ttir_weighted_sum_reduction" in claim_names:
+        require_marker(ttir, "arith.mulf %probs", "saw_ttir_weighted_sum_reduction TTIR")
+        require_marker(ttir, "tt.reduce", "saw_ttir_weighted_sum_reduction TTIR")
+        require_marker(harness, "expected_attention", "saw_ttir_weighted_sum_reduction harness")
+
+    if "saw_ttir_scalar_result_store" in claim_names:
+        require_marker(ttir, "tt.store", "saw_ttir_scalar_result_store TTIR")
+        require_marker(harness, "q * tc->ldo + d", "saw_ttir_scalar_result_store harness")
+
     if "saw_softmax_uses_natural_exp" in claim_names:
         require_marker(harness, "natural_exp_ref", "saw_softmax_uses_natural_exp harness")
 
     if "saw_no_full_attention" in claim_names:
-        if any(marker in ttir.lower() for marker in ("attention", "flashattention", "flash_attention")):
-            fail(f"{fixture_name} saw_no_full_attention claimed but TTIR contains attention marker")
+        if any(marker in ttir.lower() for marker in ("flashattention", "flash_attention", "full_attention")):
+            fail(f"{fixture_name} saw_no_full_attention claimed but TTIR contains full-attention marker")
         require_marker(harness, "saw_no_full_attention", "saw_no_full_attention harness")
+
+    if "saw_no_scalar_global_load" in claim_names:
+        if re.search(r"tt\.load %[A-Za-z0-9_]+ : !tt\.ptr<", ttir):
+            fail(f"{fixture_name} saw_no_scalar_global_load claimed but TTIR contains scalar tt.load")
+        require_marker(harness, "saw_no_scalar_global_load", "saw_no_scalar_global_load harness")
+
+    if "saw_no_nontransposed_v_gather" in claim_names:
+        if "arith.muli %offs, %LDV" in ttir:
+            fail(f"{fixture_name} saw_no_nontransposed_v_gather claimed but TTIR contains lane-varying V stride")
+        require_marker(harness, "saw_no_nontransposed_v_gather", "saw_no_nontransposed_v_gather harness")
+
+    if "saw_no_qk_score_generation" in claim_names:
+        if "tt.dot" in ttir or "qk_score" in ttir.lower():
+            fail(f"{fixture_name} saw_no_qk_score_generation claimed but TTIR contains QK/dot marker")
+        require_marker(harness, "saw_no_qk_score_generation", "saw_no_qk_score_generation harness")
 
     if "saw_no_multiblock_softmax" in claim_names:
         if "atomic" in ttir.lower():
