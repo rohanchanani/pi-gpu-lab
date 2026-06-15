@@ -1,0 +1,32 @@
+{
+  "name": "value_attention_apply_v0_f16_storage_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 45,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_q_rows": 7,
+    "max_out_dims": 5,
+    "max_k": 16,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 45,
+    "saw_value_attention_apply_v0": 1,
+    "saw_value_precomputed_scores": 1,
+    "saw_value_transposed_v_layout": 1,
+    "saw_value_softmax_v0": 1,
+    "saw_value_weighted_sum_reduction": 1,
+    "saw_value_scalar_result_store": 1,
+    "saw_softmax_uses_natural_exp": 1,
+    "saw_value_f16_storage_load": 1,
+    "saw_value_f32_compute_after_f16_load": 1,
+    "saw_f16_storage_finite_policy": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.03,
+    "max_rel_diff": 0.04
+  }
+}

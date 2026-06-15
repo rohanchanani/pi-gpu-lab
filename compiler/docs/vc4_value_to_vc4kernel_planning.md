@@ -1621,3 +1621,26 @@ The Phase 14 planner path accepts only f16 storage conversion plus f32 compute.
 Native f16 arithmetic, bf16/fp8, quantized int storage, fp-to-int casts, exact
 unpolicy numeric casts, softmax/SFU, `tt.dot`, `vector.contract`, and GEMM
 remain staged.
+
+## 37. Phase 16.5 attention-apply value hardware isolation
+
+VALUE_ATTENTION_APPLY_V0_HARDWARE_ISOLATION=PASS
+VALUE_ATTENTION_APPLY_V0_F32_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_SCALED_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_F16_STORAGE_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_TOLERANCE_POLICY=LOCKED
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+READY_FOR_PHASE16_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+
+Phase 16.5 hardware isolation proves the Phase 16 value attention-apply v0
+composite on real VC4 hardware. The proof covers precomputed scores,
+transposed-V row-contiguous loads, natural-exp stable softmax, weighted add
+reduction, scalar output stores, scalar f32 scale argument, repeat launches,
+and f16 score/Vt storage with f32 compute. Scalar global loads, non-transposed
+V gather, K=0, QK score generation, dot/contract, multiblock softmax, full
+attention, and FlashAttention remain staged.

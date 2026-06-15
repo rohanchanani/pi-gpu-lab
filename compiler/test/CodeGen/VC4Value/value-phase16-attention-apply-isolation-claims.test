@@ -1,0 +1,5 @@
+# RUN: python3 %S/Support/audit_phase16_attention_apply_isolation_claims.py --repo-root %vc4_repo_root --claims compiler/test/CodeGen/VC4Value/Hardware/Run/phase16_attention_apply_isolation_claims.json | FileCheck %s
+
+# CHECK: PASS Phase 16 attention-apply isolation claim audit:
+# CHECK-SAME: fixtures=5
+# CHECK: VALUE_ATTENTION_APPLY_CLAIM_AUDIT=PASS

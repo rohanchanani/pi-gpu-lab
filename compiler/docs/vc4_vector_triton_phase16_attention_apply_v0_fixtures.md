@@ -3,6 +3,11 @@ PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
+VALUE_ATTENTION_APPLY_V0_HARDWARE_ISOLATION=PASS
+VALUE_ATTENTION_APPLY_V0_F32_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_SCALED_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_F16_STORAGE_HARDWARE=PASS
+VALUE_ATTENTION_APPLY_V0_TOLERANCE_POLICY=LOCKED
 REAL_TRITON_ATTENTION_APPLY_V0_SOURCES=YES
 REAL_TTIR_ATTENTION_APPLY_V0_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -13,6 +18,7 @@ SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE16_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE16_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
 
@@ -33,6 +39,16 @@ storage, and a mixed axes/mask/control-flow/f16-storage candidate. This proof
 composes already locked planners; it does not add QK score generation, dot,
 contract, scalar global load, non-transposed V gather, or executable hardware
 claims.
+
+Phase 16.5 proves the accepted value composite on real VC4 hardware with
+targeted isolation fixtures. The f32 fixture covers the requested cartesian
+cases for `q_rows`, `out_dims`, `K`, score stride, and transposed-V stride with
+`active_qpus=12`. The scaled fixture proves the scalar f32 scale argument
+without scalar global loads. The repeat fixture alternates K=1 and K=16
+launches to check repeat-invocation behavior. The f16-storage fixture proves
+f16 score/Vt storage with f32 softmax and weighted-sum compute. All fixtures
+use strict CPU oracles, sentinels, expected JSON checks, nonzero output hashes,
+and the Phase15 natural-exp softmax tolerance policy.
 
 Accepted attention-apply v0 is intentionally narrow:
 
