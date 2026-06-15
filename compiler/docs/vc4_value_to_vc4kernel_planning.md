@@ -827,6 +827,23 @@ Phase 15.4 planned rejects:
 This planning entry does not implement executable lowering and does not claim
 hardware proof.
 
+Phase 15B.2 hardware re-proves the corrected natural-math value path:
+
+VALUE_EXP_NATURAL_HARDWARE=PASS
+VALUE_LOG_NATURAL_HARDWARE=PASS
+VALUE_SQRT_HARDWARE=PASS
+VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS
+NATURAL_EXP_LOWERING=EXP2_X_LOG2E
+NATURAL_LOG_LOWERING=LOG2_X_LN2
+SQRT_LOWERING=RSQRT_TIMES_X
+EXP2_LOG2_TARGET_ONLY_CLAIMS_HONEST=YES
+READY_FOR_PHASE15B_3_TTIR_NATURAL_MATH_STATIC_BRIDGE=YES
+READY_FOR_TRITON=NO
+
+The Phase 15B.2 fixtures keep `active_qpus=12`, strict sentinels, expected JSON
+checking, and natural exp/log/sqrt host oracles. The old Phase 15.5 target-mode
+exp2/log2 proof remains target-only and is not a public natural math proof.
+
 ## 16. Shuffle, rotate, and lane-broadcast planning
 
 Rotate patterns map to VC4Kernel dynamic rotate only when the amount is scalar

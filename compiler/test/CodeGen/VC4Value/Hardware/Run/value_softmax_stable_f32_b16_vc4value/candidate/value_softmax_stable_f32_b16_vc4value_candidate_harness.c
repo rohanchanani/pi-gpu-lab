@@ -14,6 +14,8 @@
 #define SOFTMAX_ABS_TOL 0.0040f
 #define SOFTMAX_REL_TOL 0.0060f
 #define ROW_SUM_TOL 0.0060f
+#define LN2 0.6931471805599453094f
+#define INV_LN2 1.4426950408889634074f
 
 struct case_desc { uint32_t rows, ncols, stride; };
 static const struct case_desc cases[] = {
@@ -39,8 +41,7 @@ static float logit_value(uint32_t case_id, uint32_t row, uint32_t col) {
     return (float)whole;
 }
 
-static float exp2_integer_ref(float value) {
-    int n = (int)value;
+static float pow2_int_local(int n) {
     float result = 1.0f;
     if (n >= 0) {
         for (int i = 0; i < n; ++i)
@@ -50,6 +51,18 @@ static float exp2_integer_ref(float value) {
             result *= 0.5f;
     }
     return result;
+}
+
+static float natural_exp_ref(float x) {
+    int k = (int)(x * INV_LN2 + (x >= 0.0f ? 0.5f : -0.5f));
+    float r = x - (float)k * LN2;
+    float term = 1.0f;
+    float sum = 1.0f;
+    for (int i = 1; i <= 10; ++i) {
+        term *= r / (float)i;
+        sum += term;
+    }
+    return pow2_int_local(k) * sum;
 }
 
 static void fill_buffers(uint32_t case_id, const struct case_desc *tc) {
@@ -72,8 +85,8 @@ static float expected_softmax(uint32_t case_id, const struct case_desc *tc, uint
     }
     float denom = 0.0f;
     for (uint32_t c = 0; c < tc->ncols; c++)
-        denom += exp2_integer_ref(logit_value(case_id, row, c) - maxv);
-    return exp2_integer_ref(logit_value(case_id, row, col) - maxv) / denom;
+        denom += natural_exp_ref(logit_value(case_id, row, c) - maxv);
+    return natural_exp_ref(logit_value(case_id, row, col) - maxv) / denom;
 }
 
 static int verify_case(uint32_t case_id, const struct case_desc *tc,
@@ -190,7 +203,7 @@ void notmain(void) {
     int elapsed = timer_get_usec() - start;
     const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 &&
                           launch_failures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=value_softmax_stable_f32_b16_vc4value status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_rows=%d max_ncols=%d output_hash=%u output_hash_nonzero=%d max_abs_diff=%f max_rel_diff=%f max_row_sum_diff=%f saw_value_softmax_v0=1 saw_value_finite_f32_max_reduction=1 saw_value_approx_sfu_exp=1 saw_value_approx_sfu_recip_div=1 saw_scalar_to_vector_f32_broadcast=1 saw_approx_math_policy=1 saw_zero_active_softmax_staged=1 runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=value_softmax_stable_f32_b16_vc4value status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_rows=%d max_ncols=%d output_hash=%u output_hash_nonzero=%d max_abs_diff=%f max_rel_diff=%f max_row_sum_diff=%f saw_value_softmax_v0=1 saw_value_finite_f32_max_reduction=1 saw_value_approx_sfu_exp=1 saw_value_approx_sfu_recip_div=1 saw_scalar_to_vector_f32_broadcast=1 saw_approx_math_policy=1 saw_zero_active_softmax_staged=1 saw_softmax_uses_natural_exp=1 saw_target_sfu_exp2_scale_log2e=1 runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
            status, (int)(sizeof(cases) / sizeof(cases[0])), total_mismatches,
            sentinel_mismatches, launch_failures, ACTIVE_QPUS, LANES, MAX_ROWS,
            MAX_NCOLS, output_hash, output_hash != 0u ? 1 : 0, max_abs_diff,

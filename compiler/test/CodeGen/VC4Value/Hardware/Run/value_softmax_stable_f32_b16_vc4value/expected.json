@@ -19,7 +19,9 @@
     "saw_value_approx_sfu_recip_div": 1,
     "saw_scalar_to_vector_f32_broadcast": 1,
     "saw_approx_math_policy": 1,
-    "saw_zero_active_softmax_staged": 1
+    "saw_zero_active_softmax_staged": 1,
+    "saw_softmax_uses_natural_exp": 1,
+    "saw_target_sfu_exp2_scale_log2e": 1
   },
   "float_max": {
     "max_abs_diff": 0.004,

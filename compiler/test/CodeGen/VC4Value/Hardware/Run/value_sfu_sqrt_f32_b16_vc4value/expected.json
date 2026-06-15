@@ -1,0 +1,25 @@
+{
+  "name": "value_sfu_sqrt_f32_b16_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 10,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "wave_boundary_n": 192,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 10,
+    "saw_value_math_sqrt": 1,
+    "saw_target_sfu_rsqrt_times_x": 1,
+    "saw_positive_finite_domain": 1,
+    "saw_approx_math_policy": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.006,
+    "max_rel_diff": 0.012
+  }
+}

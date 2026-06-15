@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase15b_natural_math_reproof_claims",
+  "fixtures": [
+    {
+      "name": "value_sfu_natural_exp_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_natural_exp_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_math_exp_natural", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_math_exp_natural", "input_marker": "math.exp %v : vector<16xf32>", "oracle_marker": "natural_exp_ref"},
+        {"claim": "saw_target_sfu_exp2_scale_log2e", "kind": "CHECKED_AUDIT", "expected_field": "saw_target_sfu_exp2_scale_log2e", "static_test": "approx-sfu-natural-exp-f32-lowers-via-exp2-scale.mlir", "oracle_marker": "INV_LN2"},
+        {"claim": "saw_not_raw_exp2_oracle", "kind": "CHECKED_OUTPUT", "expected_field": "saw_not_raw_exp2_oracle", "forbidden_oracle_marker": "exp2_integer_ref", "oracle_marker": "raw_exp2_oracle"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"},
+        {"claim": "exp_oracle_is_natural_exp", "kind": "CHECKED_AUDIT", "oracle_marker": "natural_exp_ref", "forbidden_oracle_marker": "exp2_integer_ref"}
+      ]
+    },
+    {
+      "name": "value_sfu_natural_log_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_natural_log_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_math_log_natural", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_math_log_natural", "input_marker": "math.log %active : vector<16xf32>", "oracle_marker": "natural_log_ref"},
+        {"claim": "saw_target_sfu_log2_scale_ln2", "kind": "CHECKED_AUDIT", "expected_field": "saw_target_sfu_log2_scale_ln2", "static_test": "approx-sfu-natural-log-f32-lowers-via-log2-scale.mlir", "oracle_marker": "LN2"},
+        {"claim": "saw_not_raw_log2_oracle", "kind": "CHECKED_OUTPUT", "expected_field": "saw_not_raw_log2_oracle", "oracle_marker": "raw_log2_oracle"},
+        {"claim": "saw_positive_finite_domain", "kind": "CHECKED_AUDIT", "expected_field": "saw_positive_finite_domain", "input_marker": "vc4value.fp_domain = \"finite_positive\"", "oracle_marker": "saw_positive_finite_domain=1"},
+        {"claim": "log_oracle_is_natural_log", "kind": "CHECKED_AUDIT", "oracle_marker": "natural_log_ref"}
+      ]
+    },
+    {
+      "name": "value_sfu_sqrt_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_sqrt_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_math_sqrt", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_math_sqrt", "input_marker": "math.sqrt %active : vector<16xf32>", "oracle_marker": "sqrt_ref"},
+        {"claim": "saw_target_sfu_rsqrt_times_x", "kind": "CHECKED_AUDIT", "expected_field": "saw_target_sfu_rsqrt_times_x", "static_test": "approx-sfu-sqrt-f32-lowers-via-rsqrt-times-x.mlir", "oracle_marker": "raw_rsqrt_oracle"},
+        {"claim": "saw_positive_finite_domain", "kind": "CHECKED_AUDIT", "expected_field": "saw_positive_finite_domain", "input_marker": "vc4value.fp_domain = \"finite_positive\"", "oracle_marker": "saw_positive_finite_domain=1"}
+      ]
+    },
+    {
+      "name": "value_softmax_stable_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_softmax_stable_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_softmax_v0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_softmax_v0", "input_marker": "vc4value.softmax_v0 = \"one_block_active_1_to_16\"", "oracle_marker": "expected_softmax"},
+        {"claim": "saw_softmax_uses_natural_exp", "kind": "CHECKED_AUDIT", "expected_field": "saw_softmax_uses_natural_exp", "input_marker": "math.exp %shifted", "oracle_marker": "natural_exp_ref", "forbidden_oracle_marker": "exp2_integer_ref"},
+        {"claim": "saw_target_sfu_exp2_scale_log2e", "kind": "CHECKED_AUDIT", "expected_field": "saw_target_sfu_exp2_scale_log2e", "static_test": "softmax-v0-composite-natural-exp-lowers.mlir", "oracle_marker": "INV_LN2"},
+        {"claim": "row_padding_sentinels", "kind": "CHECKED_OUTPUT", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "value_softmax sentinel"},
+        {"claim": "softmax_oracle_is_natural_exp", "kind": "CHECKED_AUDIT", "oracle_marker": "natural_exp_ref", "forbidden_oracle_marker": "exp2_integer_ref"}
+      ]
+    },
+    {
+      "name": "phase15b_static_guards",
+      "claims": [
+        {"claim": "exact_default_math_static_reject", "kind": "PHASE_GUARD", "static_test": "invalid-exact-default-exp-log-sqrt.mlir"},
+        {"claim": "exp2_log2_target_only_claims_honest", "kind": "PHASE_GUARD", "doc_marker": "PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES"}
+      ]
+    }
+  ]
+}
