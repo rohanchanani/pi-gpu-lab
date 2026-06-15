@@ -570,18 +570,32 @@ value contract.
 ## 14.4 Phase 16 attention-apply v0 contract
 
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
+ATTENTION_APPLY_METADATA_POLICY_ONLY=YES
+ATTENTION_APPLY_METADATA_USED_FOR_LOWERING=NO
+STRUCTURAL_ATTENTION_APPLY_TESTS_REQUIRED=YES
+MAGIC_METADATA_NOT_COUNTED_AS_EXECUTABLE_SUPPORT=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_TRITON=NO
 
 Phase 16 admits attention-apply v0 as a standard value IR composite. It does
 not add a `vc4value.attention`, `vc4value.softmax_apply`, dot, contract, or
 full-attention operation.
+
+The `vc4value.attention_apply_v0` attribute is not a `vc4value` op, not a
+target op, and not a substitute for structural matching. It is only a contract
+label used by the value-surface verifier to produce deterministic diagnostics
+for Phase 16 surface metadata. The metadata validator alone does not prove
+`VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED`,
+`VALUE_ATTENTION_APPLY_V0_STATIC=PASS`, or
+`VALUE_ATTENTION_APPLY_V0_LOWERING=YES`; those claims require the structural
+value IR composite tests and later static/hardware proof.
 
 The accepted composite is:
 
@@ -638,6 +652,10 @@ The verifier also provides deterministic staged diagnostics for explicit
 metadata spellings covering zero-active attention-apply, non-transposed V
 gather, scalar global load, online/multiblock softmax, QK score generation,
 `tl.dot`, `tt.dot`, and `vector.contract`.
+
+These spellings are centralized in the verifier as temporary metadata strings.
+They must not be used by value-to-VC4Kernel or TTIR importer lowering as the
+semantic discriminator for attention-apply support.
 
 Still staged:
 

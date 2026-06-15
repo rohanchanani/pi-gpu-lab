@@ -11,6 +11,14 @@ import argparse
 from pathlib import Path
 
 
+LOWERING_DIRS = [
+    "compiler/lib/Conversion/VC4ValueToVC4Kernel",
+    "compiler/lib/Conversion/TritonToVC4Value",
+    "compiler/lib/Conversion/VC4KernelToSSAVC4",
+    "compiler/lib/Conversion/SSAVC4ToVC4",
+]
+
+
 def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
@@ -18,6 +26,11 @@ def read(path: Path) -> str:
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise SystemExit(f"FAIL {message}")
+
+
+def iter_source_files(path: Path):
+    for suffix in ("*.cpp", "*.h", "*.td"):
+        yield from path.rglob(suffix)
 
 
 def main() -> None:
@@ -36,6 +49,19 @@ def main() -> None:
     planning = read(root / "compiler/docs/vc4_value_to_vc4kernel_planning.md")
     fixtures = read(
         root / "compiler/docs/vc4_vector_triton_phase16_attention_apply_v0_fixtures.md"
+    )
+    value_surface_doc = read(root / "compiler/docs/vc4_value_surface_verifier.md")
+
+    lowering_attr_hits = []
+    for rel in LOWERING_DIRS:
+        for source_file in iter_source_files(root / rel):
+            text = read(source_file)
+            if "vc4value.attention_apply_v0" in text:
+                lowering_attr_hits.append(str(source_file.relative_to(root)))
+    require(
+        not lowering_attr_hits,
+        "vc4value.attention_apply_v0 must not be used in lowering: "
+        + ", ".join(lowering_attr_hits),
     )
 
     require(
@@ -68,8 +94,17 @@ def main() -> None:
         "natural-exp softmax semantics must preserve Phase15B exp2 scaling",
     )
     require(
-        "precomputed_transposed_v_active_1_to_16" in value_verifier,
-        "value surface must carry the locked Phase16 attention metadata spelling",
+        "kAttentionApplyV0Attr" in value_verifier
+        and "kAttentionApplyV0Accepted" in value_verifier
+        and "verifier metadata only" in value_verifier,
+        "Phase16 attention metadata spellings must be centralized and verifier-only",
+    )
+    require(
+        "VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS" in value_surface_doc
+        and "MAGIC_METADATA_NOT_COUNTED_AS_EXECUTABLE_SUPPORT=YES" in value_surface_doc
+        and "not a `vc4value` op" in value_surface_doc
+        and "target op" in value_surface_doc,
+        "value surface docs must classify attention metadata as non-executable metadata",
     )
     require(
         "VALUE_ATTENTION_APPLY_V0_STATIC=PASS" in planning
@@ -99,6 +134,10 @@ def main() -> None:
         require((tests / name).is_file(), f"missing Phase16.4 conversion test {name}")
 
     print("VALUE_ATTENTION_APPLY_SOURCE_AUDIT=PASS")
+    print("ATTENTION_APPLY_METADATA_POLICY_ONLY=YES")
+    print("ATTENTION_APPLY_METADATA_USED_FOR_LOWERING=NO")
+    print("STRUCTURAL_ATTENTION_APPLY_TESTS_REQUIRED=YES")
+    print("MAGIC_METADATA_NOT_COUNTED_AS_EXECUTABLE_SUPPORT=YES")
     print("ATTENTION_APPLY_STANDARD_VALUE_COMPOSITE=YES")
     print("NO_NEW_VC4VALUE_ATTENTION_OP=YES")
     print("NO_SCALAR_MEMREF_LOAD_SUPPORT_INTRODUCED=YES")

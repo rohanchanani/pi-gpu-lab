@@ -7,6 +7,7 @@ PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS
 PHASE14_RESULT=LOCKED
 PHASE15_RESULT=LOCKED
 FEATURE=VALUE_AND_TTIR_ML_STORAGE_NUMERIC_CONVERSION_POLICY
@@ -23,6 +24,10 @@ VALUE_ATTENTION_APPLY_V0_F16_STORAGE_STATIC_PLANNED=YES
 VALUE_ATTENTION_APPLY_V0_SCALAR_GLOBAL_LOAD_STAGED=YES
 VALUE_ATTENTION_APPLY_V0_NONTRANSPOSED_V_GATHER_STAGED=YES
 VALUE_ATTENTION_APPLY_V0_K_ZERO_STAGED_OR_GUARD_REQUIRED=YES
+ATTENTION_APPLY_METADATA_POLICY_ONLY=YES
+ATTENTION_APPLY_METADATA_USED_FOR_LOWERING=NO
+STRUCTURAL_ATTENTION_APPLY_TESTS_REQUIRED=YES
+MAGIC_METADATA_NOT_COUNTED_AS_EXECUTABLE_SUPPORT=YES
 VALUE_GEMV_ROWWISE_DOT_STATIC=PASS
 VALUE_GEMV_F32_ROW_DOT_STATIC=PASS
 VALUE_GEMV_I32_ROW_DOT_STATUS=STAGED_BY_I32_POLICY
@@ -227,6 +232,7 @@ Executable value-lowering hardware proof requirements are recorded in
 ## 1.1 Phase 16 attention-apply v0 planned coverage
 
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
@@ -1644,6 +1650,13 @@ reduction, scalar output stores, scalar f32 scale argument, repeat launches,
 and f16 score/Vt storage with f32 compute. Scalar global loads, non-transposed
 V gather, K=0, QK score generation, dot/contract, multiblock softmax, full
 attention, and FlashAttention remain staged.
+
+The `vc4value.attention_apply_v0` attribute is verifier metadata only and is
+not used by value-to-VC4Kernel lowering. Phase 16 lowering support is proven by
+the actual value IR composite: score transfer read, optional scale
+broadcast/multiply, finite-low inactive select, max reduction, natural-exp
+softmax path, denominator add reduction, reciprocal/division, transposed-V
+transfer read, weighted multiply, add reduction, and scalar store.
 
 ## 38. Phase 16.6 attention-apply value mixed acceptance
 

@@ -2,6 +2,7 @@ PHASE16_CONTROLLED_TRITON_ATTENTION_APPLY_FIXTURES=YES
 PHASE16_RESULT=LOCKED
 FEATURE=VALUE_AND_TTIR_ATTENTION_APPLY_V0
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
@@ -20,6 +21,10 @@ TRANSPOSED_V_LAYOUT_REQUIRED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
+ATTENTION_APPLY_METADATA_POLICY_ONLY=YES
+ATTENTION_APPLY_METADATA_USED_FOR_LOWERING=NO
+STRUCTURAL_ATTENTION_APPLY_TESTS_REQUIRED=YES
+MAGIC_METADATA_NOT_COUNTED_AS_EXECUTABLE_SUPPORT=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE16_6_VALUE_MIXED_ACCEPTANCE=YES
@@ -37,6 +42,9 @@ Phase 16.3 locks the matching value-surface contract. The accepted value form
 is the explicit standard-IR composite tagged with
 `vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"`;
 there is no new `vc4value` attention or softmax-apply operation.
+The tag is metadata-only verifier policy. It is not a lowering discriminator,
+not a target op, and not executable support by itself; structural value IR
+tests and later static/hardware proof carry the support claims.
 
 Phase 16.4 proves the accepted value composite statically through
 `value -> vc4kernel -> ssavc4 -> scheduled vc4` for f32, scaled f32, f16

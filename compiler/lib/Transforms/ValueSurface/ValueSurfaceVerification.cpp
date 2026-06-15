@@ -28,6 +28,33 @@ using namespace mlir::vc4value;
 
 namespace {
 
+static constexpr llvm::StringLiteral kAttentionApplyV0Attr =
+    "vc4value.attention_apply_v0";
+static constexpr llvm::StringLiteral kAttentionApplyV0Accepted =
+    "precomputed_transposed_v_active_1_to_16";
+static constexpr llvm::StringLiteral kAttentionApplyV0ZeroActive =
+    "zero_active";
+static constexpr llvm::StringLiteral kAttentionApplyV0ActiveCountZero =
+    "active_count_zero";
+static constexpr llvm::StringLiteral kAttentionApplyV0NonTransposedGather =
+    "nontransposed_v_gather";
+static constexpr llvm::StringLiteral kAttentionApplyV0LaneVaryingStride =
+    "lane_varying_stride";
+static constexpr llvm::StringLiteral kAttentionApplyV0ScalarGlobalLoad =
+    "scalar_global_load";
+static constexpr llvm::StringLiteral kAttentionApplyV0ScalarScaleLoad =
+    "scalar_scale_load";
+static constexpr llvm::StringLiteral kAttentionApplyV0Multiblock =
+    "multiblock";
+static constexpr llvm::StringLiteral kAttentionApplyV0OnlineSoftmax =
+    "online_softmax";
+static constexpr llvm::StringLiteral kAttentionApplyV0QKScoreGeneration =
+    "qk_score_generation";
+static constexpr llvm::StringLiteral kAttentionApplyV0TlDot = "tl_dot";
+static constexpr llvm::StringLiteral kAttentionApplyV0TtDot = "tt_dot";
+static constexpr llvm::StringLiteral kAttentionApplyV0VectorContract =
+    "vector_contract";
+
 static StringRef getDialectNamespace(Operation *op) {
   return op->getName().getStringRef().split('.').first;
 }
@@ -1061,15 +1088,18 @@ static void checkPhase15SoftmaxPolicy(Operation *op, bool &sawError) {
 
 static void checkPhase16AttentionApplyPolicy(Operation *op, bool &sawError) {
   std::optional<StringRef> attentionApply =
-      getStringAttrValue(op, "vc4value.attention_apply_v0");
+      getStringAttrValue(op, kAttentionApplyV0Attr);
   if (!attentionApply)
     return;
 
-  if (*attentionApply == "precomputed_transposed_v_active_1_to_16")
+  // Phase 16 attention_apply_v0 is verifier metadata only. It provides stable
+  // surface diagnostics for the feature contract and must not be used by
+  // lowering passes as semantic feature recognition.
+  if (*attentionApply == kAttentionApplyV0Accepted)
     return;
 
-  if (*attentionApply == "zero_active" ||
-      *attentionApply == "active_count_zero") {
+  if (*attentionApply == kAttentionApplyV0ZeroActive ||
+      *attentionApply == kAttentionApplyV0ActiveCountZero) {
     op->emitError()
         << "active-count-zero attention-apply is staged without an explicit "
         << "finite no-op guard in Phase 16";
@@ -1077,8 +1107,8 @@ static void checkPhase16AttentionApplyPolicy(Operation *op, bool &sawError) {
     return;
   }
 
-  if (*attentionApply == "nontransposed_v_gather" ||
-      *attentionApply == "lane_varying_stride") {
+  if (*attentionApply == kAttentionApplyV0NonTransposedGather ||
+      *attentionApply == kAttentionApplyV0LaneVaryingStride) {
     op->emitError()
         << "non-transposed V gather/lane-varying stride is staged in "
         << "Phase 16 attention-apply v0";
@@ -1086,8 +1116,8 @@ static void checkPhase16AttentionApplyPolicy(Operation *op, bool &sawError) {
     return;
   }
 
-  if (*attentionApply == "scalar_global_load" ||
-      *attentionApply == "scalar_scale_load") {
+  if (*attentionApply == kAttentionApplyV0ScalarGlobalLoad ||
+      *attentionApply == kAttentionApplyV0ScalarScaleLoad) {
     op->emitError()
         << "scalar global load for attention-apply scale is staged in "
         << "Phase 16";
@@ -1095,17 +1125,18 @@ static void checkPhase16AttentionApplyPolicy(Operation *op, bool &sawError) {
     return;
   }
 
-  if (*attentionApply == "multiblock" ||
-      *attentionApply == "online_softmax") {
+  if (*attentionApply == kAttentionApplyV0Multiblock ||
+      *attentionApply == kAttentionApplyV0OnlineSoftmax) {
     op->emitError()
         << "online/multiblock attention-apply softmax is staged in Phase 16";
     sawError = true;
     return;
   }
 
-  if (*attentionApply == "qk_score_generation" ||
-      *attentionApply == "tl_dot" || *attentionApply == "tt_dot" ||
-      *attentionApply == "vector_contract") {
+  if (*attentionApply == kAttentionApplyV0QKScoreGeneration ||
+      *attentionApply == kAttentionApplyV0TlDot ||
+      *attentionApply == kAttentionApplyV0TtDot ||
+      *attentionApply == kAttentionApplyV0VectorContract) {
     op->emitError()
         << "QK score generation and dot/contract forms are staged in "
         << "Phase 16 attention-apply v0";
