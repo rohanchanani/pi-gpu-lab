@@ -1104,3 +1104,24 @@ accepted TTIR path remains TTIR to standard value, then value to VC4Kernel,
 SSAVC4, scheduled VC4, and hardware. The final TTIR mixed fixture proves the
 repaired f16-storage softmax snapshot through the C++ importer with natural-exp
 softmax semantics, strict sentinels, and `active_qpus=12`.
+
+## 37. Phase 16.7 attention-apply importer static lock
+
+TTIR_ATTENTION_APPLY_V0_IMPORTER_STATIC=PASS
+TTIR_ATTENTION_APPLY_V0_LOWERING=YES
+TTIR_ATTENTION_APPLY_V0_PRECOMPUTED_SCORES=YES
+TTIR_ATTENTION_APPLY_V0_TRANSPOSED_V_LAYOUT=YES
+TTIR_ATTENTION_APPLY_V0_NATURAL_EXP_SOFTMAX=YES
+TTIR_ATTENTION_APPLY_V0_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE16_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 16.7 accepts only controlled real TTIR snapshots for precomputed-score
+attention apply v0 with transposed V row slices, stable natural-exp softmax,
+weighted sum, optional scalar f32 scale argument, and scalar output store.
+Scalar `tt.load`, non-transposed V gather/lane-varying stride, QK score
+generation, dot/contract, multiblock softmax, block pointers, full attention,
+and FlashAttention remain staged or rejected.

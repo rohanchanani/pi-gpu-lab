@@ -115,3 +115,30 @@ by the Phase15B base-2 SFU semantic repair and the Phase15 explicit
 approximate-SFU finite tolerance policy. Exact/default math remains rejected.
 
 `READY_FOR_TRITON` remains `NO`.
+
+## Phase 16.7 TTIR Importer Static Lock
+
+TTIR_ATTENTION_APPLY_V0_IMPORTER_STATIC=PASS
+TTIR_ATTENTION_APPLY_V0_LOWERING=YES
+TTIR_ATTENTION_APPLY_V0_PRECOMPUTED_SCORES=YES
+TTIR_ATTENTION_APPLY_V0_TRANSPOSED_V_LAYOUT=YES
+TTIR_ATTENTION_APPLY_V0_NATURAL_EXP_SOFTMAX=YES
+TTIR_ATTENTION_APPLY_V0_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE16_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The controlled Phase 16 accepted TTIR snapshots lower through the C++ importer
+by composition of previously locked structural planners: program-id axes,
+row-contiguous score/Vt pointer slices, canonical tail masks, finite
+max/add reductions, natural `math.exp` with explicit approximate-SFU policy,
+scalar f32 scale splat where present, weighted elementwise multiply, and scalar
+`memref.store` output. The imported IR remains in the standard value layer and
+does not emit VC4Kernel, SSAVC4, or scheduled VC4 directly.
+
+The staged snapshots remain rejected structurally: non-transposed V uses a
+lane-varying stride/gather pointer expression, scalar scale memory uses scalar
+`tt.load`, K=0 uses a non-canonical memory mask, multiblock softmax uses staged
+K accumulation, and `tl.dot` emits staged `tt.dot`/contract form.

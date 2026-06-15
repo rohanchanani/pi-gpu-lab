@@ -209,3 +209,25 @@ int storage, fp-to-int, i32-to-f32, SFU/math, softmax, `tt.dot`,
 vector.contract, GEMM, raw TTIR text parsing, regex/substring semantic
 classification, fixture/path/name special casing, toolchain work, and direct
 lower-half output outside the accepted importer path.
+
+## Phase 16.7 Attention-Apply Importer Audit Extension
+
+The Phase 16.7 importer audit locks controlled TTIR attention-apply v0 static
+lowering as composition of structural C++ importer support for program IDs,
+row-contiguous pointer slices, canonical masks, finite reductions, natural-exp
+softmax, optional scalar argument splats, weighted add reduction, and scalar
+stores. It does not parse raw TTIR text, use regex or substring semantic
+classification, special-case fixture names, infer source path semantics, emit
+lower-half IR directly, accept scalar `tt.load`, or accept non-transposed V
+gather/lane-varying stride.
+
+TTIR_ATTENTION_APPLY_V0_IMPORTER_STATIC=PASS
+TTIR_ATTENTION_APPLY_V0_LOWERING=YES
+TTIR_ATTENTION_APPLY_V0_TRANSPOSED_V_LAYOUT=YES
+TTIR_ATTENTION_APPLY_V0_NATURAL_EXP_SOFTMAX=YES
+TTIR_ATTENTION_APPLY_V0_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE16_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
