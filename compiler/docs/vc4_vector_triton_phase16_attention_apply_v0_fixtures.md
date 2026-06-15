@@ -1,4 +1,6 @@
 PHASE16_CONTROLLED_TRITON_ATTENTION_APPLY_FIXTURES=YES
+PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 REAL_TRITON_ATTENTION_APPLY_V0_SOURCES=YES
 REAL_TTIR_ATTENTION_APPLY_V0_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -7,6 +9,7 @@ TRANSPOSED_V_LAYOUT_REQUIRED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
+READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
 
@@ -15,6 +18,11 @@ READY_FOR_TRITON=NO
 Phase 16.2 locks source-controlled real Triton sources and generated TTIR
 snapshots for precomputed-score attention-apply v0. These fixtures define the
 TTIR acceptance contract for the next Phase 16 value-surface work.
+
+Phase 16.3 locks the matching value-surface contract. The accepted value form
+is the explicit standard-IR composite tagged with
+`vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"`;
+there is no new `vc4value` attention or softmax-apply operation.
 
 Accepted attention-apply v0 is intentionally narrow:
 

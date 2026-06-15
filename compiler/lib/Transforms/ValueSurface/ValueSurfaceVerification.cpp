@@ -1059,6 +1059,67 @@ static void checkPhase15SoftmaxPolicy(Operation *op, bool &sawError) {
   }
 }
 
+static void checkPhase16AttentionApplyPolicy(Operation *op, bool &sawError) {
+  std::optional<StringRef> attentionApply =
+      getStringAttrValue(op, "vc4value.attention_apply_v0");
+  if (!attentionApply)
+    return;
+
+  if (*attentionApply == "precomputed_transposed_v_active_1_to_16")
+    return;
+
+  if (*attentionApply == "zero_active" ||
+      *attentionApply == "active_count_zero") {
+    op->emitError()
+        << "active-count-zero attention-apply is staged without an explicit "
+        << "finite no-op guard in Phase 16";
+    sawError = true;
+    return;
+  }
+
+  if (*attentionApply == "nontransposed_v_gather" ||
+      *attentionApply == "lane_varying_stride") {
+    op->emitError()
+        << "non-transposed V gather/lane-varying stride is staged in "
+        << "Phase 16 attention-apply v0";
+    sawError = true;
+    return;
+  }
+
+  if (*attentionApply == "scalar_global_load" ||
+      *attentionApply == "scalar_scale_load") {
+    op->emitError()
+        << "scalar global load for attention-apply scale is staged in "
+        << "Phase 16";
+    sawError = true;
+    return;
+  }
+
+  if (*attentionApply == "multiblock" ||
+      *attentionApply == "online_softmax") {
+    op->emitError()
+        << "online/multiblock attention-apply softmax is staged in Phase 16";
+    sawError = true;
+    return;
+  }
+
+  if (*attentionApply == "qk_score_generation" ||
+      *attentionApply == "tl_dot" || *attentionApply == "tt_dot" ||
+      *attentionApply == "vector_contract") {
+    op->emitError()
+        << "QK score generation and dot/contract forms are staged in "
+        << "Phase 16 attention-apply v0";
+    sawError = true;
+    return;
+  }
+
+  op->emitError()
+      << "Phase 16 attention_apply_v0 metadata must be "
+      << "\"precomputed_transposed_v_active_1_to_16\" or an explicit "
+      << "staged spelling";
+  sawError = true;
+}
+
 static bool isAllowedPhase12ScalarStore(memref::StoreOp storeOp) {
   Type valueType = storeOp.getValueToStore().getType();
   if (!isScalarI32OrF32(valueType))
@@ -1217,6 +1278,7 @@ struct VerifyValueSurfacePass
 
       checkPhase15ApproxMathOp(op, sawError);
       checkPhase15SoftmaxPolicy(op, sawError);
+      checkPhase16AttentionApplyPolicy(op, sawError);
 
       if (auto writeOp = dyn_cast<vector::TransferWriteOp>(op))
         checkPhase14F16StorageWrite(writeOp, sawError);

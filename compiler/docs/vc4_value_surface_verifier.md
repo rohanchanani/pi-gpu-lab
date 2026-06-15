@@ -6,6 +6,8 @@ PHASE12_VALUE_REDUCTION_CONTRACT=LOCKED
 PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
+PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
@@ -17,12 +19,18 @@ VALUE_F32_COMPUTE_TO_F16_STORAGE_SURFACE=ACCEPTED
 VALUE_APPROX_SFU_EXP_SURFACE=ACCEPTED
 VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
 VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
+VALUE_ATTENTION_APPLY_V0_COMPOSITE_SURFACE=ACCEPTED
 F32_REDUCTION_FINITE_TREE_POLICY=YES
 F32_DOT_FINITE_TREE_POLICY=YES
 F16_STORAGE_FINITE_POLICY=YES
 APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
 I32_TO_F32_CAST_STATUS=STAGED_BY_LOWER_HALF_GAP
 NATIVE_F16_ARITHMETIC_STAGED=YES
 BF16_FP8_STAGED=YES
@@ -39,6 +47,7 @@ READY_FOR_PHASE12_4_VALUE_REDUCTION_STATIC=YES
 READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
+READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -557,6 +566,89 @@ arithmetic remains rejected by the locked VC4Kernel surface.
 Native bf16/fp8 arithmetic or conversion remains outside the locked VC4Kernel
 surface unless a future phase proves an emulation strategy and updates the
 value contract.
+
+## 14.4 Phase 16 attention-apply v0 contract
+
+PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
+READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 16 admits attention-apply v0 as a standard value IR composite. It does
+not add a `vc4value.attention`, `vc4value.softmax_apply`, dot, contract, or
+full-attention operation.
+
+The accepted composite is:
+
+```text
+scores = vector.transfer_read scores : vector<16xf32>
+optional scaled_scores = scores * vector.broadcast(scalar_f32_scale)
+active_scores = arith.select(mask, scaled_scores_or_scores, finite_low)
+max = vector.reduction maxnumf/maximumf(active_scores)
+shifted = active_scores - vector.broadcast(max)
+e = math.exp(shifted)
+active_e = arith.select(mask, e, zero)
+denom = vector.reduction add(active_e)
+probs = active_e * vector.broadcast(approx_recip(denom))
+v = vector.transfer_read transposed_v : vector<16xf32>
+weighted = probs * v
+acc = vector.reduction add(weighted)
+memref.store acc, output[scalar_index]
+```
+
+The same composite may read f16 score/Vt storage when each f16 vector load is
+immediately promoted to f32 compute under the Phase 14 finite f16 storage
+policy. Native f16 arithmetic remains staged.
+
+Memory requirements:
+
+- scores and Vt use rank-1 flattened memory or the Phase 11 row-strided
+  row-slice memory form;
+- V is transposed so lanes are contiguous over K, `Vt[d, offs]`;
+- output uses the Phase 12 scalar f32 `memref.store` form,
+  `O[q * LDO + d]`;
+- scalar global loads are staged, including scalar memory loads for scale;
+- non-transposed V gather/lane-varying stride forms such as
+  `V + offs * D + d` are staged.
+
+Domain and scale requirements:
+
+- active count K is 1..16;
+- scores and V values are finite and bounded;
+- the denominator is positive by construction for K in 1..16;
+- natural `math.exp` and reciprocal/division require explicit
+  `vc4value.math_policy = "approx_sfu"` and finite domain policy;
+- approximate output tolerance is inherited from the Phase 15 natural-exp
+  softmax policy;
+- scale is an optional scalar f32 kernel argument or constexpr splat, not a
+  scalar global load.
+
+The verifier recognizes the accepted metadata spelling:
+
+```text
+vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"
+```
+
+The verifier also provides deterministic staged diagnostics for explicit
+metadata spellings covering zero-active attention-apply, non-transposed V
+gather, scalar global load, online/multiblock softmax, QK score generation,
+`tl.dot`, `tt.dot`, and `vector.contract`.
+
+Still staged:
+
+- K=0 unless a later phase proves an explicit finite no-op guard;
+- QK score generation;
+- non-transposed V layout/gather;
+- scalar global load;
+- online or multiblock softmax;
+- `tl.dot`, `tt.dot`, and `vector.contract`;
+- block pointers and tensor descriptors;
+- full attention and FlashAttention.
 
 ## 15. Shuffle, rotate, and lane broadcast boundary
 
