@@ -103,11 +103,11 @@
       "source": "examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py",
       "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir",
       "kernel_name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16",
-      "signature": "*fp16,*fp32,*fp32,*fp32,i32,i32,16",
-      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py --kernel-name mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16 --signature '*fp16,*fp32,*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.json",
+      "signature": "*fp16,fp32,*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py --kernel-name mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16 --signature '*fp16,fp32,*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_7r1_controlled_fixture_repair/metadata/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.json",
       "expected_classification": "ACCEPTED_LOWERABLE",
-      "approx_sfu_policy_caveat": "combines Phase 14 f16 storage input with Phase 15 one-block softmax and explicit approximate SFU policy",
-      "input_domain_contract": "finite f16 storage inputs promoted to f32, finite f32 scales, and 1 <= ncols <= 16",
+      "approx_sfu_policy_caveat": "combines Phase 14 f16 storage input with Phase 15 one-block softmax and explicit approximate SFU policy; scalar scale is a kernel argument, not a scalar global load",
+      "input_domain_contract": "finite f16 storage inputs promoted to f32, finite scalar scale argument, and 1 <= ncols <= 16",
       "expected_feature_claims": [
         "saw_real_triton_source",
         "saw_real_ttir_snapshot",
@@ -174,18 +174,39 @@
       ]
     },
     {
+      "name": "ttir_scalar_load_nonzero_other_reject_b16",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_scalar_load_nonzero_other_reject_b16.py",
+      "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_scalar_load_nonzero_other_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_scalar_load_nonzero_other_reject_b16",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_scalar_load_nonzero_other_reject_b16.py --kernel-name ttir_scalar_load_nonzero_other_reject_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_scalar_load_nonzero_other_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_7r1_controlled_fixture_repair/metadata/ttir_scalar_load_nonzero_other_reject_b16.json",
+      "expected_classification": "STAGED_SCALAR_TT_LOAD",
+      "SCALAR_TT_LOAD_SUPPORT_LOCKED": "NO",
+      "SCALAR_MEMREF_LOAD_SUPPORT_LOCKED": "NO",
+      "approx_sfu_policy_caveat": "scalar tt.load with scalar mask and nonzero other is staged; this is negative coverage and not an accepted Phase 15 lowerable form",
+      "input_domain_contract": "inventory only",
+      "expected_feature_claims": [
+        "saw_scalar_tt_load",
+        "saw_scalar_mask",
+        "saw_nonzero_other",
+        "saw_scalar_tt_load_staged"
+      ]
+    },
+    {
       "name": "ttir_exact_math_no_policy_reject_b16",
       "source": "examples/triton/phase15_sfu_softmax/sources/ttir_exact_math_no_policy_reject_b16.py",
       "generated_ttir": "examples/triton/phase15_sfu_softmax/generated/ttir_exact_math_no_policy_reject_b16.ttir.mlir",
       "kernel_name": "ttir_exact_math_no_policy_reject_b16",
       "signature": "*fp32,*fp32,i32,16",
       "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase15_sfu_softmax/sources/ttir_exact_math_no_policy_reject_b16.py --kernel-name ttir_exact_math_no_policy_reject_b16 --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase15_sfu_softmax/generated/ttir_exact_math_no_policy_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase15_2_controlled_fixtures/metadata/ttir_exact_math_no_policy_reject_b16.json",
-      "expected_classification": "STAGED_EXACT_DEFAULT_MATH",
-      "approx_sfu_policy_caveat": "same TTIR math.exp shape is rejected unless an explicit approximate SFU policy is attached by the importer contract",
-      "input_domain_contract": "finite f32 values; policy intentionally absent for staged fixture",
+      "expected_classification": "RECLASSIFIED_NOT_STRUCTURAL_TTIR_NEGATIVE",
+      "approx_sfu_policy_caveat": "this emitted TTIR is structurally indistinguishable from the accepted public tl.exp snapshot; exact/default negative coverage remains at the value/value-to-vc4kernel boundary until TTIR carries structural target-profile policy input",
+      "input_domain_contract": "finite f32 values; retained as reclassified fixture evidence, not a required TTIR importer negative",
       "expected_feature_claims": [
-        "saw_math_exp_without_accepted_policy"
-      ]
+        "saw_reclassified_not_structural_ttir_negative"
+      ],
+      "VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED": "YES",
+      "TTIR_EXACT_VS_APPROX_REQUIRES_STRUCTURAL_TARGET_PROFILE_INPUT": "YES"
     },
     {
       "name": "ttir_softmax_zero_active_reject_b16",

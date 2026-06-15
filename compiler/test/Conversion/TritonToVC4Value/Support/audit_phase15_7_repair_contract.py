@@ -19,6 +19,10 @@ REQUIRED_DOC_LINES = (
     "TTIR_EXACT_VS_APPROX_REQUIRES_STRUCTURAL_TARGET_PROFILE_INPUT=YES",
     "NO_NAME_PATH_MANIFEST_SEMANTICS=YES",
     "READY_FOR_PHASE15_7R1_CONTROLLED_FIXTURE_REPAIR=YES",
+    "PHASE15_CONTROLLED_FIXTURES_REPAIRED_AFTER_15_7_FAILURE=YES",
+    "MIXED_ACCEPTED_SNAPSHOT_HAS_SCALAR_TT_LOAD=NO",
+    "EXACT_DEFAULT_TTIR_NEGATIVE_RECLASSIFIED=YES",
+    "READY_FOR_PHASE15_7R2_IMPORTER_STATIC_RELOCK=YES",
     "READY_FOR_TRITON=NO",
 )
 
@@ -81,21 +85,42 @@ def main() -> int:
     if mixed is None:
         fail("missing mixed Phase 15 TTIR snapshot entry")
     if mixed.get("expected_classification") != "ACCEPTED_LOWERABLE":
-        fail("Phase 15.7R0 expected to record pre-repair accepted mixed mismatch")
+        fail("mixed Phase 15 TTIR snapshot must remain accepted/lowerable")
+    if "scalar scale is a kernel argument" not in mixed.get("approx_sfu_policy_caveat", ""):
+        fail("mixed snapshot manifest does not record scalar argument repair")
 
     mixed_ttir = (
         repo_root
         / "examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir"
     ).read_text(encoding="utf-8")
-    require(mixed_ttir, "tt.load", "mixed scalar-load evidence")
-    require(mixed_ttir, "!tt.ptr<f32>", "mixed scalar pointer evidence")
-    require(mixed_ttir, "1.000000e+00", "mixed nonzero-other evidence")
+    for line in mixed_ttir.splitlines():
+        if "tt.load" in line and ": !tt.ptr" in line:
+            fail(f"accepted mixed snapshot still has scalar tt.load: {line.strip()}")
+        if "tt.load" in line and "1.000000e+00" in line:
+            fail(f"accepted mixed snapshot still has nonzero-other tt.load: {line.strip()}")
+
+    scalar_load = snapshots.get("ttir_scalar_load_nonzero_other_reject_b16")
+    if scalar_load is None:
+        fail("missing staged scalar-load snapshot entry")
+    if scalar_load.get("expected_classification") != "STAGED_SCALAR_TT_LOAD":
+        fail("scalar-load snapshot must be classified STAGED_SCALAR_TT_LOAD")
+    if scalar_load.get("SCALAR_TT_LOAD_SUPPORT_LOCKED") != "NO":
+        fail("scalar-load snapshot must record SCALAR_TT_LOAD_SUPPORT_LOCKED=NO")
+    scalar_ttir = (
+        repo_root
+        / "examples/triton/phase15_sfu_softmax/generated/ttir_scalar_load_nonzero_other_reject_b16.ttir.mlir"
+    ).read_text(encoding="utf-8")
+    require(scalar_ttir, "tt.load", "staged scalar-load TTIR")
+    require(scalar_ttir, ": !tt.ptr<f32>", "staged scalar-load pointer form")
+    require(scalar_ttir, "1.000000e+00", "staged scalar-load nonzero other")
 
     exact = snapshots.get("ttir_exact_math_no_policy_reject_b16")
     if exact is None:
         fail("missing exact/default TTIR snapshot entry")
-    if exact.get("expected_classification") != "STAGED_EXACT_DEFAULT_MATH":
-        fail("Phase 15.7R0 expected to record pre-repair exact/default mismatch")
+    if exact.get("expected_classification") != "RECLASSIFIED_NOT_STRUCTURAL_TTIR_NEGATIVE":
+        fail("exact/default TTIR fixture must be reclassified")
+    if exact.get("VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED") != "YES":
+        fail("value exact/default math reject must remain required")
 
     print("PHASE15_7_REPAIR_CONTRACT_AUDIT=PASS")
     print("PHASE15_7_FAILURE_CLASSIFICATION=FIXTURE_AND_CONTRACT_MISMATCH")

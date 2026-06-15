@@ -1027,3 +1027,25 @@ Public TTIR `tl.exp` and `tl.log` are natural math functions. They reach target
 VC4 base-2 SFU modes only after the value lowering applies the locked scaling:
 `EXP2_X_LOG2E` for exp and `LOG2_X_LN2` for log. Public TTIR `tl.sqrt` lowers
 through the positive finite `RSQRT_TIMES_X` value composite.
+
+## 34. Phase 15.7R1 controlled fixture repair
+
+PHASE15_CONTROLLED_FIXTURES_REPAIRED_AFTER_15_7_FAILURE=YES
+MIXED_ACCEPTED_SNAPSHOT_HAS_SCALAR_TT_LOAD=NO
+SCALAR_TT_LOAD_STAGED=YES
+SCALAR_TT_LOAD_NONZERO_OTHER_STAGED=YES
+EXACT_DEFAULT_TTIR_NEGATIVE_RECLASSIFIED=YES
+VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED=YES
+READY_FOR_PHASE15_7R2_IMPORTER_STATIC_RELOCK=YES
+READY_FOR_TRITON=NO
+
+The accepted Phase 15 mixed TTIR snapshot uses a scalar kernel argument for
+scale and does not require scalar global memory load. Scalar `tt.load` with
+scalar mask and nonzero `other` is staged as
+`ttir_scalar_load_nonzero_other_reject_b16`.
+
+`ttir_exact_math_no_policy_reject_b16` is retained only as reclassified
+evidence because its emitted TTIR is not structurally distinguishable from the
+accepted public `tl.exp` snapshot. Exact/default math rejection remains locked
+at the value/value-to-VC4Kernel boundary until TTIR carries structural
+target-profile policy input.

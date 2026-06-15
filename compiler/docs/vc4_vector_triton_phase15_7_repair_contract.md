@@ -8,6 +8,10 @@ VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED=YES
 TTIR_EXACT_VS_APPROX_REQUIRES_STRUCTURAL_TARGET_PROFILE_INPUT=YES
 NO_NAME_PATH_MANIFEST_SEMANTICS=YES
 READY_FOR_PHASE15_7R1_CONTROLLED_FIXTURE_REPAIR=YES
+PHASE15_CONTROLLED_FIXTURES_REPAIRED_AFTER_15_7_FAILURE=YES
+MIXED_ACCEPTED_SNAPSHOT_HAS_SCALAR_TT_LOAD=NO
+EXACT_DEFAULT_TTIR_NEGATIVE_RECLASSIFIED=YES
+READY_FOR_PHASE15_7R2_IMPORTER_STATIC_RELOCK=YES
 READY_FOR_TRITON=NO
 
 # Phase 15.7 Repair Contract
@@ -51,3 +55,18 @@ non-name semantic difference that the importer can inspect through MLIR APIs.
 Phase 15.7R1 must repair the controlled fixture set before Phase 15.7 is rerun.
 It must not broaden value memory support, implement scalar `memref.load`, or
 use names/paths/manifest entries for semantic classification.
+
+## Phase 15.7R1 Fixture Repair
+
+The accepted mixed fixture now uses a scalar kernel argument for scale instead
+of a scalar global-memory load. The accepted mixed TTIR snapshot must not
+contain scalar `tt.load`, scalar-mask `tt.load`, or nonzero-`other` scalar
+`tt.load`.
+
+`ttir_scalar_load_nonzero_other_reject_b16` is the staged scalar-load fixture.
+It preserves the observed scalar `tt.load` with scalar mask and `other=1.0` as
+negative evidence. It is not accepted/lowerable.
+
+`ttir_exact_math_no_policy_reject_b16` is reclassified as
+`RECLASSIFIED_NOT_STRUCTURAL_TTIR_NEGATIVE`; value exact/default math rejection
+remains required.

@@ -195,6 +195,28 @@ VALUE_MIXED_CLAIM_AUDIT=PASS
 READY_FOR_PHASE15_7_TTIR_IMPORTER_SFU_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
+## Phase 15.7R1 Controlled Fixture Repair
+
+PHASE15_CONTROLLED_FIXTURES_REPAIRED_AFTER_15_7_FAILURE=YES
+MIXED_ACCEPTED_SNAPSHOT_HAS_SCALAR_TT_LOAD=NO
+SCALAR_TT_LOAD_STAGED=YES
+SCALAR_TT_LOAD_NONZERO_OTHER_STAGED=YES
+EXACT_DEFAULT_TTIR_NEGATIVE_RECLASSIFIED=YES
+VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED=YES
+READY_FOR_PHASE15_7R2_IMPORTER_STATIC_RELOCK=YES
+READY_FOR_TRITON=NO
+
+The accepted mixed TTIR fixture now uses a scalar kernel argument for its scale
+value and no longer requires scalar global memory load. Scalar `tt.load` with a
+scalar mask and nonzero `other` is retained only as staged negative coverage in
+`ttir_scalar_load_nonzero_other_reject_b16`.
+
+The old exact/default TTIR no-policy fixture remains in source control but is
+not a structural TTIR importer negative, because the emitted TTIR is the same
+public `math.exp` form as the accepted `tl.exp` snapshot. Exact/default math
+rejection remains required at the value/value-to-VC4Kernel boundary until TTIR
+has structural target-profile policy input.
+
 ## Phase 15B.3 TTIR Natural Math Static Bridge
 
 The controlled TTIR snapshots now lock the public math semantics at the TTIR
