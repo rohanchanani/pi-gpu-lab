@@ -11,6 +11,7 @@ REQUIRED_FIXTURES = {
     "value_sfu_natural_exp_f32_b16_vc4value",
     "value_sfu_natural_log_f32_b16_vc4value",
     "value_sfu_sqrt_f32_b16_vc4value",
+    "value_sfu_rsqrt_f32_b16_vc4value",
     "value_softmax_stable_f32_b16_vc4value",
     "phase15b_static_guards",
 }
@@ -28,6 +29,9 @@ REQUIRED_CLAIMS = {
     "log_oracle_is_natural_log",
     "saw_value_math_sqrt",
     "saw_target_sfu_rsqrt_times_x",
+    "saw_value_math_rsqrt",
+    "saw_target_sfu_rsqrt",
+    "saw_not_sqrt_oracle",
     "saw_value_softmax_v0",
     "saw_softmax_uses_natural_exp",
     "softmax_oracle_is_natural_exp",
@@ -75,6 +79,9 @@ def validate_static_test(repo_root: Path, static_test: str) -> None:
     elif static_test == "approx-sfu-sqrt-f32-lowers-via-rsqrt-times-x.mlir":
         require_marker(text, "kind = #vc4kernel.sfu_kind<rsqrt>", static_test)
         require_marker(text, "vc4kernel.fragment_alu.mul", static_test)
+    elif static_test == "approx-sfu-rsqrt-f32-lowers.mlir":
+        require_marker(text, "math.rsqrt", static_test)
+        require_marker(text, "kind = #vc4kernel.sfu_kind<rsqrt>", static_test)
     elif static_test == "softmax-v0-composite-natural-exp-lowers.mlir":
         require_marker(text, "1.442695", static_test)
         require_marker(text, "kind = #vc4kernel.sfu_kind<exp>", static_test)
@@ -211,6 +218,7 @@ def main() -> None:
     print("VALUE_EXP_NATURAL_HARDWARE=PASS")
     print("VALUE_LOG_NATURAL_HARDWARE=PASS")
     print("VALUE_SQRT_HARDWARE=PASS")
+    print("VALUE_RSQRT_HARDWARE=PASS")
     print("VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS")
     print("EXP2_LOG2_TARGET_ONLY_CLAIMS_HONEST=YES")
     print("EXP_ORACLE_IS_NATURAL_EXP=YES")

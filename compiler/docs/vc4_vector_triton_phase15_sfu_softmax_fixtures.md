@@ -34,6 +34,7 @@ SOFTMAX_USES_NATURAL_EXP=YES
 VALUE_EXP_NATURAL_HARDWARE=PASS
 VALUE_LOG_NATURAL_HARDWARE=PASS
 VALUE_SQRT_HARDWARE=PASS
+VALUE_RSQRT_HARDWARE=PASS
 VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS
 EXP2_LOG2_TARGET_ONLY_CLAIMS_HONEST=YES
 VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
@@ -163,6 +164,8 @@ Phase 15B.2 adds and runs natural-math value hardware fixtures:
   the target `log2(x) * ln(2)` path.
 - `value_sfu_sqrt_f32_b16_vc4value` proves public `math.sqrt` for positive
   finite inputs through `x * rsqrt(x)`.
+- `value_sfu_rsqrt_f32_b16_vc4value` proves public `math.rsqrt` for positive
+  finite inputs through the target reciprocal-square-root SFU mode.
 - `value_softmax_stable_f32_b16_vc4value` is re-run with a natural
   `exp(logit - max)` oracle.
 

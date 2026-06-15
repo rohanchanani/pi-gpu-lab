@@ -34,6 +34,17 @@
       ]
     },
     {
+      "name": "value_sfu_rsqrt_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_sfu_rsqrt_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_math_rsqrt", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_math_rsqrt", "input_marker": "math.rsqrt %active : vector<16xf32>", "oracle_marker": "rsqrt_ref"},
+        {"claim": "saw_target_sfu_rsqrt", "kind": "CHECKED_AUDIT", "expected_field": "saw_target_sfu_rsqrt", "static_test": "approx-sfu-rsqrt-f32-lowers.mlir", "oracle_marker": "saw_target_sfu_rsqrt=1"},
+        {"claim": "saw_not_sqrt_oracle", "kind": "CHECKED_OUTPUT", "expected_field": "saw_not_sqrt_oracle", "oracle_marker": "sqrt_oracle"},
+        {"claim": "saw_positive_finite_domain", "kind": "CHECKED_AUDIT", "expected_field": "saw_positive_finite_domain", "input_marker": "vc4value.fp_domain = \"finite_positive\"", "oracle_marker": "saw_positive_finite_domain=1"},
+        {"claim": "saw_approx_math_policy", "kind": "CHECKED_AUDIT", "expected_field": "saw_approx_math_policy", "input_marker": "vc4value.math_policy = \"approx_sfu\"", "oracle_marker": "saw_approx_math_policy=1"}
+      ]
+    },
+    {
       "name": "value_softmax_stable_f32_b16_vc4value",
       "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_softmax_stable_f32_b16_vc4value",
       "claims": [

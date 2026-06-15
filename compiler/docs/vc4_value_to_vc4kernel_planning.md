@@ -55,6 +55,7 @@ PHASE15_5_EXP2_ORACLE_IF_PRESENT_REQUIRES_REPAIR=YES
 VALUE_NATURAL_EXP_STATIC=PASS
 VALUE_NATURAL_LOG_STATIC=PASS
 VALUE_SQRT_STATIC=PASS
+VALUE_RSQRT_HARDWARE=PASS
 SQRT_LOWERING=RSQRT_TIMES_X
 SOFTMAX_USES_NATURAL_EXP=YES
 VALUE_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
@@ -835,6 +836,7 @@ Phase 15B.2 hardware re-proves the corrected natural-math value path:
 VALUE_EXP_NATURAL_HARDWARE=PASS
 VALUE_LOG_NATURAL_HARDWARE=PASS
 VALUE_SQRT_HARDWARE=PASS
+VALUE_RSQRT_HARDWARE=PASS
 VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS
 NATURAL_EXP_LOWERING=EXP2_X_LOG2E
 NATURAL_LOG_LOWERING=LOG2_X_LN2
@@ -844,8 +846,9 @@ READY_FOR_PHASE15B_3_TTIR_NATURAL_MATH_STATIC_BRIDGE=YES
 READY_FOR_TRITON=NO
 
 The Phase 15B.2 fixtures keep `active_qpus=12`, strict sentinels, expected JSON
-checking, and natural exp/log/sqrt host oracles. The old Phase 15.5 target-mode
-exp2/log2 proof remains target-only and is not a public natural math proof.
+checking, and natural exp/log/sqrt/rsqrt host oracles. The old Phase 15.5
+target-mode exp2/log2 proof remains target-only and is not a public natural
+math proof.
 
 Phase 15.6 mixed value acceptance extends the cumulative VC4Value mixed suite
 with `mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value`. The mixed
