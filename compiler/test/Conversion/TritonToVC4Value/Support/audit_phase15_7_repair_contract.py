@@ -59,6 +59,11 @@ def main() -> int:
         repo_root / "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp"
     ).read_text(encoding="utf-8")
     require(importer, "tt.load nonzero other value", "TTIR nonzero-other staging")
+    for forbidden in ("std::regex", "raw_string_ostream", "op->print("):
+        if forbidden in importer:
+            fail(f"importer contains raw text/regex semantic hook: {forbidden}")
+    require(importer, "funcOp->walk", "structural operation walking")
+    require(importer, "classifyTTIRReduceCall", "structural TTIR reduction handling")
 
     top_half = (repo_root / "compiler/docs/vc4_top_half_robustness_lock.md").read_text(
         encoding="utf-8"
@@ -81,6 +86,27 @@ def main() -> int:
     manifest_path = repo_root / "examples/triton/phase15_sfu_softmax/manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     snapshots = {entry["name"]: entry for entry in manifest.get("snapshots", [])}
+    accepted_snapshots = [
+        entry
+        for entry in manifest.get("snapshots", [])
+        if entry.get("expected_classification") == "ACCEPTED_LOWERABLE"
+    ]
+    if not accepted_snapshots:
+        fail("no accepted Phase 15 snapshots in manifest")
+    for entry in accepted_snapshots:
+        ttir_path = repo_root / entry["generated_ttir"]
+        ttir_text = ttir_path.read_text(encoding="utf-8")
+        for line in ttir_text.splitlines():
+            if "tt.load" in line and ": !tt.ptr" in line:
+                fail(
+                    "accepted Phase 15 snapshot has scalar tt.load "
+                    f"({entry['name']}): {line.strip()}"
+                )
+            if "tt.load" in line and "1.000000e+00" in line:
+                fail(
+                    "accepted Phase 15 snapshot has nonzero-other tt.load "
+                    f"({entry['name']}): {line.strip()}"
+                )
     mixed = snapshots.get("mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16")
     if mixed is None:
         fail("missing mixed Phase 15 TTIR snapshot entry")
@@ -121,13 +147,30 @@ def main() -> int:
         fail("exact/default TTIR fixture must be reclassified")
     if exact.get("VALUE_EXACT_DEFAULT_MATH_REJECT_REMAINS_REQUIRED") != "YES":
         fail("value exact/default math reject must remain required")
+    value_exact_test = (
+        repo_root
+        / "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-exact-math-no-approx-policy.mlir"
+    ).read_text(encoding="utf-8")
+    require(
+        value_exact_test,
+        "exact/default math requires explicit approximate-SFU policy",
+        "value exact/default reject test",
+    )
 
     print("PHASE15_7_REPAIR_CONTRACT_AUDIT=PASS")
     print("PHASE15_7_FAILURE_CLASSIFICATION=FIXTURE_AND_CONTRACT_MISMATCH")
+    print("NO_NAME_PATH_MANIFEST_SPECIAL_CASES=YES")
+    print("NO_RAW_TTIR_TEXT_PARSING=YES")
+    print("NO_DIRECT_LOWER_HALF_OUTPUT=YES")
+    print("NO_SCALAR_TT_LOAD_IN_ACCEPTED_PHASE15_SNAPSHOTS=YES")
     print("SCALAR_TT_LOAD_STAGED=YES")
     print("SCALAR_TT_LOAD_NONZERO_OTHER_STAGED=YES")
     print("TTIR_EXACT_DEFAULT_NO_POLICY_REJECT_RECLASSIFIED=YES")
+    print("EXACT_DEFAULT_TTIR_NO_POLICY_RECLASSIFIED=YES")
+    print("VALUE_EXACT_DEFAULT_MATH_REJECT=PASS")
+    print("PRODUCT_OR_MATH_REDUCTION_LOWERING_STRUCTURAL=YES")
     print("NO_NAME_PATH_MANIFEST_SEMANTICS=YES")
+    print("FRONTEND_ROBUSTNESS_AUDIT=PASS")
     print("READY_FOR_TRITON=NO")
     return 0
 

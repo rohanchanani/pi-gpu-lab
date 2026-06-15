@@ -1049,3 +1049,27 @@ evidence because its emitted TTIR is not structurally distinguishable from the
 accepted public `tl.exp` snapshot. Exact/default math rejection remains locked
 at the value/value-to-VC4Kernel boundary until TTIR carries structural
 target-profile policy input.
+## 35. Phase 15.7R2 SFU/softmax importer relock
+
+PHASE15_7_RESULT=LOCKED
+PHASE15_7_REPAIRED_AFTER_SCALAR_LOAD_FIXTURE_MISMATCH=YES
+TTIR_APPROX_SFU_IMPORTER_STATIC=PASS
+TTIR_SOFTMAX_V0_IMPORTER_STATIC=PASS
+TTIR_TL_EXP_LOWERING=YES
+TTIR_APPROX_RECIP_DIV_LOWERING=YES
+TTIR_TL_MAX_LOWERING=YES
+TTIR_SOFTMAX_V0_LOWERING=YES
+TTIR_SCALAR_LOAD_STAGED=YES
+TTIR_SCALAR_LOAD_NONZERO_OTHER_STAGED=YES
+TTIR_EXACT_DEFAULT_MATH_REJECT=RECLASSIFIED_TO_VALUE_POLICY
+VALUE_EXACT_DEFAULT_MATH_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The controlled Phase 15 TTIR snapshots for `tl.exp`, approximate
+reciprocal/division, finite `tl.max`, stable one-block softmax, and the repaired
+mixed f16-storage softmax form are accepted only when they contain already
+locked memory/reduction/SFU features. Scalar `tt.load`, including nonzero
+`other`, remains staged. Exact/default public math without policy remains a
+value-policy reject until TTIR carries a structural target-profile marker.

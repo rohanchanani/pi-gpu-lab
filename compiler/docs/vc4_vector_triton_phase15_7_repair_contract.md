@@ -70,3 +70,27 @@ negative evidence. It is not accepted/lowerable.
 `ttir_exact_math_no_policy_reject_b16` is reclassified as
 `RECLASSIFIED_NOT_STRUCTURAL_TTIR_NEGATIVE`; value exact/default math rejection
 remains required.
+## Phase 15.7R2 Static Importer Relock
+
+PHASE15_7_RESULT=LOCKED
+PHASE15_7_REPAIRED_AFTER_SCALAR_LOAD_FIXTURE_MISMATCH=YES
+TTIR_APPROX_SFU_IMPORTER_STATIC=PASS
+TTIR_SOFTMAX_V0_IMPORTER_STATIC=PASS
+TTIR_TL_EXP_LOWERING=YES
+TTIR_APPROX_RECIP_DIV_LOWERING=YES
+TTIR_TL_MAX_LOWERING=YES
+TTIR_SOFTMAX_V0_LOWERING=YES
+TTIR_SCALAR_LOAD_STAGED=YES
+TTIR_SCALAR_LOAD_NONZERO_OTHER_STAGED=YES
+TTIR_EXACT_DEFAULT_MATH_REJECT=RECLASSIFIED_TO_VALUE_POLICY
+VALUE_EXACT_DEFAULT_MATH_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 15.7R2 relocks the intended Phase 15.7 importer outcome after the R1
+fixture repair. Accepted exp, reciprocal/division, max-reduction, softmax, and
+mixed softmax snapshots import structurally to value IR and pass the static
+pipeline to scheduled VC4. The staged scalar-load snapshot rejects through the
+generic `tt.load` staging diagnostic, and the exact/default TTIR no-policy
+fixture remains reclassified rather than used as a name/path-based negative.

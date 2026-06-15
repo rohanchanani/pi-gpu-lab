@@ -242,3 +242,27 @@ TTIR_TL_SQRT_STATIC=PASS
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE15B_4_STALE_DOCS_PLAN_CLEANUP=YES
 READY_FOR_TRITON=NO
+## Phase 15.7R2 TTIR Importer Static Relock
+
+PHASE15_7_RESULT=LOCKED
+PHASE15_7_REPAIRED_AFTER_SCALAR_LOAD_FIXTURE_MISMATCH=YES
+TTIR_APPROX_SFU_IMPORTER_STATIC=PASS
+TTIR_SOFTMAX_V0_IMPORTER_STATIC=PASS
+TTIR_TL_EXP_LOWERING=YES
+TTIR_APPROX_RECIP_DIV_LOWERING=YES
+TTIR_TL_MAX_LOWERING=YES
+TTIR_SOFTMAX_V0_LOWERING=YES
+TTIR_SCALAR_LOAD_STAGED=YES
+TTIR_SCALAR_LOAD_NONZERO_OTHER_STAGED=YES
+TTIR_EXACT_DEFAULT_MATH_REJECT=RECLASSIFIED_TO_VALUE_POLICY
+VALUE_EXACT_DEFAULT_MATH_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE15_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+The repaired controlled Phase 15 TTIR snapshots lower through the C++ importer
+to the standard value layer and then pass the full static pipeline to scheduled
+VC4. The accepted mixed snapshot uses a scalar kernel argument for scale and
+does not require scalar global load. Scalar `tt.load` remains staged, including
+the scalar-mask nonzero-`other` form. Exact/default math without policy remains
+tested and rejected at the value/value-to-VC4Kernel boundary.
