@@ -1,0 +1,60 @@
+# REQUIRES: vc4-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_f32_b16.ttir.mlir" -o %t/base.mlir
+# RUN: FileCheck %s --check-prefix=BASE --input-file=%t/base.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_scaled_f32_b16.ttir.mlir" -o %t/scaled.mlir
+# RUN: FileCheck %s --check-prefix=SCALED --input-file=%t/scaled.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.ttir.mlir" -o %t/mixed.mlir
+# RUN: FileCheck %s --check-prefix=MIXED --input-file=%t/mixed.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_nontransposed_v_reject_b16.ttir.mlir" -o %t/nontransposed.mlir
+# RUN: FileCheck %s --check-prefix=NONTRANSPOSED --input-file=%t/nontransposed.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_scalar_scale_load_reject_b16.ttir.mlir" -o %t/scalar_load.mlir
+# RUN: FileCheck %s --check-prefix=SCALARLOAD --input-file=%t/scalar_load.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_k_zero_reject_b16.ttir.mlir" -o %t/k_zero.mlir
+# RUN: FileCheck %s --check-prefix=KZERO --input-file=%t/k_zero.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_multiblock_reject_b16.ttir.mlir" -o %t/multiblock.mlir
+# RUN: FileCheck %s --check-prefix=MULTIBLOCK --input-file=%t/multiblock.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_tl_dot_reject_b16.ttir.mlir" -o %t/dot.mlir
+# RUN: FileCheck %s --check-prefix=DOT --input-file=%t/dot.mlir
+
+# BASE: tt.func public @ttir_attention_apply_v0_f32_b16_kernel
+# BASE: tt.get_program_id x
+# BASE: tt.get_program_id y
+# BASE: tt.load
+# BASE: math.exp
+# BASE: tt.store
+# BASE: "tt.reduce"
+# BASE-NOT: tt.dot
+# BASE-NOT: tt.make_block_ptr
+
+# SCALED: tt.func public @ttir_attention_apply_v0_scaled_f32_b16_kernel
+# SCALED-SAME: f32
+# SCALED: tt.splat %{{.*}} : f32 -> tensor<16xf32>
+# SCALED: arith.mulf
+# SCALED-NOT: tt.dot
+# SCALED-NOT: tt.make_block_ptr
+
+# MIXED: tt.func public @mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_kernel
+# MIXED-DAG: !tt.ptr<f16>
+# MIXED-DAG: tt.get_program_id z
+# MIXED-DAG: scf.if
+# MIXED-DAG: arith.extf
+# MIXED-DAG: math.exp
+
+# NONTRANSPOSED: tt.func public @ttir_attention_apply_nontransposed_v_reject_b16_kernel
+# NONTRANSPOSED: arith.muli
+# NONTRANSPOSED: tensor<16xi32>
+
+# SCALARLOAD: tt.func public @ttir_attention_apply_scalar_scale_load_reject_b16_kernel
+# SCALARLOAD: %{{.*}} = tt.load %{{.*}} : !tt.ptr<f32>
+
+# KZERO: tt.func public @ttir_attention_apply_k_zero_reject_b16_kernel
+# KZERO: arith.constant dense<0>
+
+# MULTIBLOCK: tt.func public @ttir_attention_apply_multiblock_reject_b16_kernel
+# MULTIBLOCK: scf.for
+# MULTIBLOCK: arith.addf
+
+# DOT: tt.func public @ttir_attention_apply_tl_dot_reject_b16_kernel
+# DOT: tt.dot

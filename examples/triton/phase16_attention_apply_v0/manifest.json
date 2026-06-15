@@ -1,0 +1,108 @@
+{
+  "PHASE": "16.2",
+  "FEATURE": "VALUE_AND_TTIR_ATTENTION_APPLY_V0",
+  "TRITON_TAG": "v3.7.0",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "READY_FOR_TRITON": "NO",
+  "natural_exp_softmax_policy_caveat": "tl.exp is public natural exp and must lower through the Phase15B base-2 SFU repair under explicit approximate-SFU finite policy.",
+  "approximate_sfu_tolerance_caveat": "Executable proofs must use the Phase 15 approximate-SFU tolerance policy; exact/default math remains rejected.",
+  "transposed_v_layout_required": true,
+  "precomputed_scores_only": true,
+  "snapshots": [
+    {
+      "name": "ttir_attention_apply_v0_f32_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_f32_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_f32_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_f32_b16.py --kernel-name ttir_attention_apply_v0_f32_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_v0_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "precomputed_scores",
+        "row_contiguous_scores",
+        "transposed_v_row_contiguous",
+        "stable_softmax",
+        "natural_exp",
+        "weighted_sum",
+        "scalar_store",
+        "active_count_1_to_16"
+      ]
+    },
+    {
+      "name": "ttir_attention_apply_v0_scaled_f32_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_scaled_f32_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_scaled_f32_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_scaled_f32_b16.py --kernel-name ttir_attention_apply_v0_scaled_f32_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_scaled_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_v0_scaled_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "precomputed_scores",
+        "scalar_f32_scale_arg",
+        "row_contiguous_scores",
+        "transposed_v_row_contiguous",
+        "stable_softmax",
+        "natural_exp",
+        "weighted_sum",
+        "scalar_store",
+        "active_count_1_to_16"
+      ]
+    },
+    {
+      "name": "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.py --kernel-name mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_kernel --signature '*fp16,*fp16,*fp32,*fp32,i32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "multi_axis_launch",
+        "mask",
+        "scalar_cf",
+        "f16_storage_f32_compute",
+        "scalar_f32_scale_arg",
+        "stable_softmax",
+        "natural_exp",
+        "weighted_sum",
+        "scalar_store",
+        "audit_scalar_store"
+      ]
+    },
+    {
+      "name": "ttir_attention_apply_nontransposed_v_reject_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_nontransposed_v_reject_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_nontransposed_v_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_nontransposed_v_reject_b16.py --kernel-name ttir_attention_apply_nontransposed_v_reject_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_nontransposed_v_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_nontransposed_v_reject_b16.json",
+      "expected_classification": "STAGED_LANE_VARYING_STRIDE",
+      "expected_feature_claims": ["nontransposed_v_gather_staged"]
+    },
+    {
+      "name": "ttir_attention_apply_scalar_scale_load_reject_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_scalar_scale_load_reject_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_scalar_scale_load_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_scalar_scale_load_reject_b16.py --kernel-name ttir_attention_apply_scalar_scale_load_reject_b16_kernel --signature '*fp32,*fp32,*fp32,*fp32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_scalar_scale_load_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_scalar_scale_load_reject_b16.json",
+      "expected_classification": "STAGED_SCALAR_TT_LOAD",
+      "expected_feature_claims": ["scalar_global_load_staged"]
+    },
+    {
+      "name": "ttir_attention_apply_k_zero_reject_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_k_zero_reject_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_k_zero_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_k_zero_reject_b16.py --kernel-name ttir_attention_apply_k_zero_reject_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_k_zero_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_k_zero_reject_b16.json",
+      "expected_classification": "STAGED_ZERO_ACTIVE_ATTENTION_APPLY",
+      "expected_feature_claims": ["zero_active_attention_apply_staged"]
+    },
+    {
+      "name": "ttir_attention_apply_multiblock_reject_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_multiblock_reject_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_multiblock_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_multiblock_reject_b16.py --kernel-name ttir_attention_apply_multiblock_reject_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,2,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_multiblock_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_multiblock_reject_b16.json",
+      "expected_classification": "STAGED_MULTIBLOCK_SOFTMAX",
+      "expected_feature_claims": ["multiblock_attention_apply_staged"]
+    },
+    {
+      "name": "ttir_attention_apply_tl_dot_reject_b16",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_tl_dot_reject_b16.py",
+      "generated_ttir": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_tl_dot_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_tl_dot_reject_b16.py --kernel-name ttir_attention_apply_tl_dot_reject_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_tl_dot_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase16_2_controlled_fixtures/metadata/ttir_attention_apply_tl_dot_reject_b16.json",
+      "expected_classification": "STAGED_TT_DOT",
+      "expected_feature_claims": ["tt_dot_staged"]
+    }
+  ]
+}
