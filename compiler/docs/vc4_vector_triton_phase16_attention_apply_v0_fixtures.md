@@ -1,6 +1,8 @@
 PHASE16_CONTROLLED_TRITON_ATTENTION_APPLY_FIXTURES=YES
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+VALUE_ATTENTION_APPLY_V0_STATIC=PASS
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 REAL_TRITON_ATTENTION_APPLY_V0_SOURCES=YES
 REAL_TTIR_ATTENTION_APPLY_V0_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -10,6 +12,7 @@ NONTRANSPOSED_V_GATHER_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
+READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE16_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
 
@@ -23,6 +26,13 @@ Phase 16.3 locks the matching value-surface contract. The accepted value form
 is the explicit standard-IR composite tagged with
 `vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"`;
 there is no new `vc4value` attention or softmax-apply operation.
+
+Phase 16.4 proves the accepted value composite statically through
+`value -> vc4kernel -> ssavc4 -> scheduled vc4` for f32, scaled f32, f16
+storage, and a mixed axes/mask/control-flow/f16-storage candidate. This proof
+composes already locked planners; it does not add QK score generation, dot,
+contract, scalar global load, non-transposed V gather, or executable hardware
+claims.
 
 Accepted attention-apply v0 is intentionally narrow:
 

@@ -14,6 +14,8 @@ FEATURE=VALUE_AND_TTIR_APPROX_MATH_SFU_SOFTMAX
 FEATURE=VALUE_AND_TTIR_ATTENTION_APPLY_V0
 VALUE_APPROX_MATH_SFU_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+VALUE_ATTENTION_APPLY_V0_STATIC=PASS
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_ATTENTION_APPLY_V0_STATIC_PLANNED=YES
 VALUE_ATTENTION_APPLY_V0_COMPOSITE_LOWERS_PLANNED=YES
 VALUE_ATTENTION_APPLY_V0_SCALED_STATIC_PLANNED=YES
@@ -45,6 +47,8 @@ VALUE_APPROX_SFU_RECIP_DIV_SURFACE=ACCEPTED
 VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
 VALUE_SOFTMAX_V0_COMPOSITE_SURFACE=ACCEPTED
 VALUE_ATTENTION_APPLY_V0_COMPOSITE_SURFACE=ACCEPTED
+VALUE_ATTENTION_APPLY_V0_STATIC=PASS
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_APPROX_SFU_STATIC=PASS
 VALUE_APPROX_SFU_EXP_STATIC=PASS
 VALUE_APPROX_SFU_RECIP_DIV_STATIC=PASS
@@ -138,6 +142,7 @@ READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE15_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
+READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -223,18 +228,25 @@ Executable value-lowering hardware proof requirements are recorded in
 
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+VALUE_ATTENTION_APPLY_V0_STATIC=PASS
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
+READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
-Phase 16.3 is a planning and verifier contract only. Phase 16.4 owns static
-value-to-VC4Kernel proof for the accepted forms below.
+Phase 16.3 is a planning and verifier contract only. Phase 16.4 proves static
+value-to-VC4Kernel lowering for the accepted forms below by composing the
+already locked Phase 11 row-slice memory planner, Phase 12 scalar-store and
+reduction planner, Phase 14 f16-storage planner, and Phase 15 natural-exp
+softmax/SFU planner. No first-class attention op or new dot/contract lowering
+is introduced.
 
-Planned accepted static coverage:
+Accepted static coverage:
 
 - attention-apply v0 composite lowers from standard value IR;
 - scaled-score variant lowers when scale is a scalar f32 argument or constexpr
@@ -247,7 +259,7 @@ Planned accepted static coverage:
   reductions lower through the Phase 15 softmax/SFU and Phase 12 reduction
   contracts.
 
-Planned staged/static negative coverage:
+Staged/static negative coverage:
 
 - scalar global loads remain staged, including scale loaded from memory;
 - non-transposed V gather/lane-varying stride remains staged;
