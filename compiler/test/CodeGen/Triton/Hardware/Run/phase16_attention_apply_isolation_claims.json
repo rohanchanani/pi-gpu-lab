@@ -1,0 +1,99 @@
+{
+  "phase": "phase16_ttir_attention_apply_hardware_isolation",
+  "fixtures": [
+    {
+      "name": "ttir_attention_apply_v0_f32_b16_vc4triton",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_f32_b16.py",
+      "snapshot": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.reduce", "math.exp", "arith.divf", "tt.store"],
+      "expected_result_fields": [
+        "block_x",
+        "saw_ttir_attention_apply_v0",
+        "saw_ttir_precomputed_scores",
+        "saw_ttir_transposed_v_layout",
+        "saw_ttir_softmax_v0",
+        "saw_ttir_weighted_sum_reduction",
+        "saw_ttir_scalar_result_store",
+        "saw_softmax_uses_natural_exp",
+        "saw_no_scalar_global_load",
+        "saw_no_nontransposed_v_gather",
+        "saw_no_qk_score_generation",
+        "saw_no_full_attention"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "attention_apply_v0", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "precomputed_scores", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "transposed_v_layout", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "natural_exp_softmax", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "weighted_sum_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "staged_scalar_load", "claim_kind": "PHASE_GUARD"},
+        {"claim": "staged_nontransposed_v", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_qk_dot_full_attention", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    },
+    {
+      "name": "ttir_attention_apply_v0_scaled_f32_b16_vc4triton",
+      "source": "examples/triton/phase16_attention_apply_v0/sources/ttir_attention_apply_v0_scaled_f32_b16.py",
+      "snapshot": "examples/triton/phase16_attention_apply_v0/generated/ttir_attention_apply_v0_scaled_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.reduce", "math.exp", "arith.divf", "tt.store"],
+      "expected_result_fields": [
+        "block_x",
+        "saw_ttir_attention_apply_v0",
+        "saw_ttir_attention_apply_scaled_scores",
+        "saw_scalar_scale_arg",
+        "saw_ttir_precomputed_scores",
+        "saw_ttir_transposed_v_layout",
+        "saw_ttir_softmax_v0",
+        "saw_ttir_weighted_sum_reduction",
+        "saw_ttir_scalar_result_store",
+        "saw_softmax_uses_natural_exp",
+        "saw_no_scalar_global_load",
+        "saw_no_nontransposed_v_gather",
+        "saw_no_qk_score_generation",
+        "saw_no_full_attention"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "attention_apply_v0", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_scale_arg", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "precomputed_scores", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "transposed_v_layout", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "natural_exp_softmax", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "weighted_sum_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "staged_scalar_load", "claim_kind": "PHASE_GUARD"},
+        {"claim": "staged_nontransposed_v", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_qk_dot_full_attention", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "CHECKED_AUDIT"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-nontransposed-v-gather.mlir",
+      "diagnostic": "lane-varying stride/gather pointer expression staged"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-scalar-load.mlir",
+      "diagnostic": "tt.load result type"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-k-zero.mlir",
+      "diagnostic": "sparse or unknown tt.load memory mask"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-multiblock-softmax.mlir",
+      "diagnostic": "multi-block K accumulation is staged"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-tt-dot.mlir",
+      "diagnostic": "tt.dot / contract"
+    }
+  ],
+  "READY_FOR_TRITON": "NO"
+}

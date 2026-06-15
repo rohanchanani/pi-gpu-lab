@@ -1,0 +1,37 @@
+{
+  "name": "ttir_attention_apply_v0_scaled_f32_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 270,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "block_x": 16,
+    "max_q_rows": 7,
+    "max_out_dims": 5,
+    "max_k": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_attention_apply_v0": 1,
+    "saw_ttir_attention_apply_scaled_scores": 1,
+    "saw_scalar_scale_arg": 1,
+    "saw_ttir_precomputed_scores": 1,
+    "saw_ttir_transposed_v_layout": 1,
+    "saw_ttir_softmax_v0": 1,
+    "saw_ttir_weighted_sum_reduction": 1,
+    "saw_ttir_scalar_result_store": 1,
+    "saw_softmax_uses_natural_exp": 1,
+    "saw_no_scalar_global_load": 1,
+    "saw_no_nontransposed_v_gather": 1,
+    "saw_no_qk_score_generation": 1,
+    "saw_no_full_attention": 1,
+    "runtime_launches": 270
+  },
+  "float_max": {
+    "max_abs_diff": 0.012,
+    "max_rel_diff": 0.016
+  }
+}

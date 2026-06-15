@@ -142,3 +142,24 @@ The staged snapshots remain rejected structurally: non-transposed V uses a
 lane-varying stride/gather pointer expression, scalar scale memory uses scalar
 `tt.load`, K=0 uses a non-canonical memory mask, multiblock softmax uses staged
 K accumulation, and `tl.dot` emits staged `tt.dot`/contract form.
+
+## Phase 16.8 TTIR Hardware Isolation Lock
+
+TTIR_ATTENTION_APPLY_V0_HARDWARE_ISOLATION=PASS
+TTIR_ATTENTION_APPLY_V0_F32_HARDWARE=PASS
+TTIR_ATTENTION_APPLY_V0_SCALED_HARDWARE=PASS
+TTIR_ATTENTION_APPLY_V0_TTIR_HARNESS_BLOCK_X=16
+READY_FOR_PHASE16_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO
+
+Phase 16.8 proves the accepted controlled TTIR attention-apply v0 snapshots on
+real VC4 hardware through the full TTIR importer path. The f32 and scaled-f32
+fixtures use exact source-controlled TTIR snapshot copies as hardware inputs,
+lower through the C++ importer, and run with `active_qpus=12`, `lanes=16`, and
+TTIR harness `block.x=16`. Each fixture covers q_rows 1/2/7, out_dims 1/2/5,
+K 1/2/7/15/16, score strides 16/17/23, transposed-V strides 16/19, padded
+output strides with sentinels, strict natural-exp CPU oracle checks, and
+nonzero output hashes.
+
+The staged scalar-load, non-transposed V, K=0, multiblock, and dot snapshots
+remain static rejects and were not run on hardware.
