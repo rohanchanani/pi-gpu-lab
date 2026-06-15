@@ -42,6 +42,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_reduction_axes_mask_cf_strided_b16_vc4triton",
     "mixed_ttir_gemv_row_dot_axes_mask_cf_strided_reduction_b16_vc4triton",
     "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+    "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -96,10 +97,24 @@ REQUIRED_FEATURES = {
     "ttir_f16_storage_load",
     "ttir_f16_storage_store",
     "ttir_f32_compute_after_f16_load",
+    "value_f16_storage",
     "f16_storage_finite_policy",
     "no_native_f16_arithmetic",
     "no_bf16_fp8",
     "no_softmax_sfu",
+    "ttir_approx_sfu_exp",
+    "ttir_approx_sfu_recip_div",
+    "ttir_finite_f32_max_reduction",
+    "ttir_softmax_v0",
+    "value_approx_sfu",
+    "value_softmax_v0",
+    "scalar_to_vector_f32_broadcast",
+    "approx_math_policy",
+    "softmax_natural_exp",
+    "no_exact_default_math",
+    "no_multiblock_softmax",
+    "no_full_attention",
+    "no_gemm",
     "output_padding_sentinels",
     "f32_alu",
     "f32_cmp_select",
@@ -273,7 +288,10 @@ def validate_fixture(repo_root, fixture, lock_mode):
             r"arith\.muli %[A-Za-z0-9_]+, %LDA", ttir_text
         )
         has_phase14_static_stride = (
-            name == "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+            name in {
+                "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
+                "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+            }
             and re.search(r"arith\.muli %row, %[A-Za-z0-9_]+", ttir_text)
             and "!tt.ptr<f16>" in ttir_text
         )
@@ -329,6 +347,22 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims no_bf16_fp8 but TTIR contains bf16/fp8 marker")
     if "no_softmax_sfu" in tags and any(marker in ttir_text.lower() for marker in ("softmax", "exp", "log", "sqrt", "rsqrt", "sin", "cos")):
         fail(f"{name} claims no_softmax_sfu but TTIR contains softmax/SFU marker")
+    if "ttir_approx_sfu_exp" in tags and "math.exp" not in ttir_text:
+        fail(f"{name} claims ttir_approx_sfu_exp but TTIR lacks math.exp")
+    if "ttir_approx_sfu_recip_div" in tags and "arith.divf" not in ttir_text:
+        fail(f"{name} claims ttir_approx_sfu_recip_div but TTIR lacks arith.divf")
+    if "ttir_finite_f32_max_reduction" in tags and "arith.maxnumf" not in ttir_text:
+        fail(f"{name} claims ttir_finite_f32_max_reduction but TTIR lacks arith.maxnumf")
+    if "ttir_softmax_v0" in tags:
+        for marker in ("arith.maxnumf", "math.exp", "arith.addf", "arith.divf", "tt.store"):
+            if marker not in ttir_text:
+                fail(f"{name} claims ttir_softmax_v0 but TTIR lacks {marker}")
+    if "no_full_attention" in tags and any(marker in ttir_text.lower() for marker in ("attention", "flashattention", "flash_attention")):
+        fail(f"{name} claims no_full_attention but TTIR contains attention marker")
+    if "no_multiblock_softmax" in tags and "atomic" in ttir_text.lower():
+        fail(f"{name} claims no_multiblock_softmax but TTIR contains atomic marker")
+    if "no_gemm" in tags and any(marker in ttir_text.lower() for marker in ("gemm", "matmul", "tt.dot")):
+        fail(f"{name} claims no_gemm but TTIR contains GEMM marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):
@@ -340,7 +374,10 @@ def validate_manifest(repo_root, manifest, lock_mode):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4_triton_phase7_mixed_acceptance":
+    if manifest.get("suite_name") not in {
+        "vc4_triton_phase7_mixed_acceptance",
+        "vc4_triton_phase15_mixed_acceptance",
+    }:
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]

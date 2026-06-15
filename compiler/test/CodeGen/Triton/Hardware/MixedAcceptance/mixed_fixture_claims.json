@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4_triton_phase7_mixed_acceptance_claims",
+  "suite_name": "vc4_triton_phase15_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
@@ -1826,6 +1826,349 @@
           "claim_kind": "CHECKED_OUTPUT",
           "evidence": {
             "checked_output": "harness verifies inactive f32/f16 output guard and padding regions remain sentinels."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+      "source_paths": [
+        "examples/triton/phase15_sfu_softmax/sources/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.py",
+        "examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton/input.ttir.mlir",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton/candidate/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_real_ttir_snapshot",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "snapshot provenance audit requires fixture input.ttir.mlir to match examples/triton/phase15_sfu_softmax/generated/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16.ttir.mlir byte-for-byte."
+          }
+        },
+        {
+          "claim": "saw_cpp_ttir_importer",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_CPP_TTIR_IMPORTER only after input TTIR imports through vc4-triton-opt --convert-triton-to-vc4-value; expected.json requires the printed field to be 1."
+          }
+        },
+        {
+          "claim": "saw_value_surface_verification",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_to_vc4kernel",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_scf_cf",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_program_id_axis0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_program_id_axis0=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_arange_make_range_16",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_arange_make_range_16=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_masked_load_other_zero",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_masked_load_other_zero=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_masked_store_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_masked_store_tail=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_tmu_load=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_vdw_preserve_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_vdw_preserve_store=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_tail_mask_clamp_overlaunch",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_tail_mask_clamp_overlaunch=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_elementwise=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_control_flow=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_multi_axis=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_program_id_axis1",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_program_id_axis1=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_mask_tail=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_row_strided_memory=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_reduction_f32_finite_add=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_scalar_reduction_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_scalar_reduction_store=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_f16_storage_load=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_f32_compute_after_f16_load=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_ttir_approx_sfu_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_approx_sfu_exp=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_approx_sfu_recip_div",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_approx_sfu_recip_div=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_finite_f32_max_reduction",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_finite_f32_max_reduction=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_ttir_softmax_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_ttir_softmax_v0=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu_exp",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_approx_sfu_recip_div",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_finite_f32_max_reduction",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_value_softmax_v0",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_scalar_to_vector_f32_broadcast",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_approx_math_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "runner_audit: the TTIR candidate runner imports to value IR, verifies the value surface, converts SCF to CF, lowers through value-to-VC4Kernel, and preserves explicit approximate-SFU policy before lower-half codegen."
+          }
+        },
+        {
+          "claim": "saw_softmax_uses_natural_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_softmax_uses_natural_exp=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_no_exact_default_math",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Phase 15 value/TTIR static negative tests reject exact/default math without explicit approximate policy; the accepted mixed snapshot contains no exact/default target-profile input."
+          }
+        },
+        {
+          "claim": "saw_no_multiblock_softmax",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Phase 15 accepts only one-block softmax v0 and staged docs/tests reject multiblock softmax."
+          }
+        },
+        {
+          "claim": "saw_no_full_attention",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Phase 15 staged feature audits keep full attention and FlashAttention out of scope."
+          }
+        },
+        {
+          "claim": "saw_no_tl_dot_tt_dot",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Phase 13/15 staged feature tests keep tl.dot/tt.dot out of scope for this fixture."
+          }
+        },
+        {
+          "claim": "saw_no_vector_contract",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Value/TTIR staged feature tests keep vector.contract out of scope for this fixture."
+          }
+        },
+        {
+          "claim": "saw_no_gemm",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel",
+              "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax",
+              "compiler/docs/vc4_vector_triton_phase15_sfu_softmax_fixtures.md"
+            ],
+            "phase_guard": "Phase 15 fixture scope and staged feature audit keep GEMM out of scope."
+          }
+        },
+        {
+          "claim": "saw_row_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_row_padding_sentinels=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
+          }
+        },
+        {
+          "claim": "saw_output_padding_sentinels",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "hardware harness prints saw_output_padding_sentinels=1 only after the checked natural softmax oracle, reduction audit store, and sentinel checks complete with zero mismatches."
           }
         }
       ]

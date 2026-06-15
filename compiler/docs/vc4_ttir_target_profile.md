@@ -1073,3 +1073,34 @@ mixed f16-storage softmax form are accepted only when they contain already
 locked memory/reduction/SFU features. Scalar `tt.load`, including nonzero
 `other`, remains staged. Exact/default public math without policy remains a
 value-policy reject until TTIR carries a structural target-profile marker.
+
+## 36. Phase 15 final SFU/softmax TTIR lock
+
+PHASE15_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_APPROX_MATH_SFU_SOFTMAX
+REAL_TRITON_SFU_SOFTMAX_SOURCES=YES
+REAL_TTIR_SFU_SOFTMAX_SNAPSHOTS=YES
+TTIR_APPROX_SFU_IMPORTER_STATIC=PASS
+TTIR_SOFTMAX_V0_IMPORTER_STATIC=PASS
+TTIR_APPROX_SFU_SOFTMAX_HARDWARE_ISOLATION=PASS
+TTIR_APPROX_SFU_SOFTMAX_MIXED_ACCEPTANCE=PASS
+TTIR_TL_EXP_LOWERING=YES
+TTIR_APPROX_RECIP_DIV_LOWERING=YES
+TTIR_TL_MAX_LOWERING=YES
+TTIR_SOFTMAX_V0_LOWERING=YES
+APPROX_MATH_POLICY=EXPLICIT
+EXACT_DEFAULT_MATH_REJECTED=YES
+MULTIBLOCK_SOFTMAX_STAGED=YES
+FULL_ATTENTION_STAGED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE16_ATTENTION_SCORE_SOFTMAX_APPLY=YES
+READY_FOR_TRITON=NO
+
+Phase 15 final-locks controlled TTIR approximate-SFU and softmax lowering. The
+accepted TTIR path remains TTIR to standard value, then value to VC4Kernel,
+SSAVC4, scheduled VC4, and hardware. The final TTIR mixed fixture proves the
+repaired f16-storage softmax snapshot through the C++ importer with natural-exp
+softmax semantics, strict sentinels, and `active_qpus=12`.

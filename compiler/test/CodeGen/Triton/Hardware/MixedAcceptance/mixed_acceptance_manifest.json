@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4_triton_phase7_mixed_acceptance",
+  "suite_name": "vc4_triton_phase15_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
@@ -778,6 +778,125 @@
         "f16_storage_store",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 15 TTIR mixed fixture combining 2D launch identity, control flow, tail masks, row-strided f16 input storage, finite f32 reductions, natural-exp softmax v0, reciprocal/division, and scalar reduction audit store through the C++ TTIR importer to hardware",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "program_id_axis1",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "ttir_elementwise",
+        "ttir_control_flow",
+        "ttir_multi_axis",
+        "ttir_mask_tail",
+        "ttir_row_strided_memory",
+        "ttir_reduction_f32_finite_add",
+        "ttir_scalar_reduction_store",
+        "ttir_f16_storage_load",
+        "ttir_f32_compute_after_f16_load",
+        "value_f16_storage",
+        "ttir_approx_sfu_exp",
+        "ttir_approx_sfu_recip_div",
+        "ttir_finite_f32_max_reduction",
+        "ttir_softmax_v0",
+        "value_approx_sfu",
+        "value_softmax_v0",
+        "scalar_to_vector_f32_broadcast",
+        "approx_math_policy",
+        "softmax_natural_exp",
+        "no_exact_default_math",
+        "no_multiblock_softmax",
+        "no_full_attention",
+        "no_tl_dot_tt_dot",
+        "no_vector_contract",
+        "no_gemm",
+        "sentinel_preserve",
+        "active_qpus_12",
+        "row_padding_sentinels",
+        "output_padding_sentinels",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_program_id_axis0",
+        "saw_arange_make_range_16",
+        "saw_masked_load_other_zero",
+        "saw_masked_store_tail",
+        "saw_tmu_load",
+        "saw_vdw_preserve_store",
+        "saw_tail_mask_clamp_overlaunch",
+        "saw_ttir_elementwise",
+        "saw_ttir_control_flow",
+        "saw_ttir_multi_axis",
+        "saw_ttir_program_id_axis1",
+        "saw_ttir_mask_tail",
+        "saw_ttir_row_strided_memory",
+        "saw_ttir_reduction_f32_finite_add",
+        "saw_ttir_scalar_reduction_store",
+        "saw_ttir_f16_storage_load",
+        "saw_ttir_f32_compute_after_f16_load",
+        "saw_value_f16_storage",
+        "saw_ttir_approx_sfu_exp",
+        "saw_ttir_approx_sfu_recip_div",
+        "saw_ttir_finite_f32_max_reduction",
+        "saw_ttir_softmax_v0",
+        "saw_value_approx_sfu",
+        "saw_value_approx_sfu_exp",
+        "saw_value_approx_sfu_recip_div",
+        "saw_value_finite_f32_max_reduction",
+        "saw_value_softmax_v0",
+        "saw_scalar_to_vector_f32_broadcast",
+        "saw_approx_math_policy",
+        "saw_softmax_uses_natural_exp",
+        "saw_no_exact_default_math",
+        "saw_no_multiblock_softmax",
+        "saw_no_full_attention",
+        "saw_no_tl_dot_tt_dot",
+        "saw_no_vector_contract",
+        "saw_no_gemm",
+        "saw_row_padding_sentinels",
+        "saw_output_padding_sentinels"
+      ],
+      "expected_cases_summary": "15 row/ncols/stride/scale cases over rows=1,2,7 and ncols=1,2,7,15,16; active_qpus=12; strict natural-exp CPU softmax oracle, denom audit store, row/output padding sentinels, and no exact/default or attention claims checked.",
+      "triage_feature_bands": [
+        "ttir_import",
+        "phase8_control_flow",
+        "phase9_multi_axis",
+        "phase10_mask_memory",
+        "phase11_strided_memory",
+        "phase12_reductions",
+        "phase14_f16_storage_numeric",
+        "phase15_approx_sfu_softmax",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -1373,6 +1492,118 @@
       "verification_kind": "checked_output",
       "covered_by": [
         "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_f16_storage",
+      "verification_kind": "value f16 storage path appears in Phase 15 mixed TTIR fixture through f16 input storage converted to f32 compute",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_approx_sfu_exp",
+      "verification_kind": "real TTIR tl.exp/math.exp natural-exp form is imported and hardware checked in the mixed softmax fixture",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_approx_sfu_recip_div",
+      "verification_kind": "real TTIR reciprocal/division form is imported and hardware checked in the mixed softmax fixture",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_finite_f32_max_reduction",
+      "verification_kind": "real TTIR finite f32 max reduction is imported and hardware checked in the mixed softmax fixture",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_softmax_v0",
+      "verification_kind": "stable one-block softmax v0 composite is imported and hardware checked in the mixed TTIR fixture",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_approx_sfu",
+      "verification_kind": "imported TTIR lowers through the value approximate-SFU policy path before hardware",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_softmax_v0",
+      "verification_kind": "imported TTIR softmax lowers through value softmax-v0 composite forms before hardware",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "scalar_to_vector_f32_broadcast",
+      "verification_kind": "softmax scalar reductions are broadcast/splatted back to vector f32 fragments in the value pipeline",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "approx_math_policy",
+      "verification_kind": "explicit approximate-SFU policy is required and audited for Phase 15 math lowering",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "softmax_natural_exp",
+      "verification_kind": "softmax oracle and lowering use public natural exp semantics over target exp2 hardware scaling",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_exact_default_math",
+      "verification_kind": "Phase 15 mixed acceptance does not claim exact/default math support",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_multiblock_softmax",
+      "verification_kind": "Phase 15 mixed acceptance keeps multiblock softmax staged",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_full_attention",
+      "verification_kind": "Phase 15 mixed acceptance keeps full attention and FlashAttention staged",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_gemm",
+      "verification_kind": "Phase 15 mixed acceptance keeps GEMM staged",
+      "covered_by": [
+        "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton"
       ],
       "required": true
     }
