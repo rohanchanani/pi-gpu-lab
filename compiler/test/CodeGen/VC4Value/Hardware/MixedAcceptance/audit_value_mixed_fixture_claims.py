@@ -92,14 +92,25 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             fail("saw_value_f32_cmp_select harness missing finite threshold oracle")
 
     if "saw_value_mixed_i32_f32" in claim_names:
-        for marker in ("memref<?xi32", "memref<?xf32", "arith.cmpi", "arith.mulf", "arith.addf", "arith.select"):
+        has_flat_mixed = "memref<?xi32" in mlir and "memref<?xf32" in mlir
+        has_rank2_mixed = "memref<?x?xi32" in mlir and "memref<?x?xf32" in mlir
+        if not has_flat_mixed and not has_rank2_mixed:
+            fail("saw_value_mixed_i32_f32 input lacks i32/f32 global memrefs")
+        for marker in ("arith.cmpi", "arith.mulf", "arith.addf", "arith.select"):
             require_marker(mlir, marker, "saw_value_mixed_i32_f32 input")
-        for marker in ("xi_values[index] > THRESHOLD_I", "candidate", "yf_values[index]"):
-            require_marker(harness, marker, "saw_value_mixed_i32_f32 harness")
+        if "gate_value" in harness:
+            for marker in ("gate_value(case_id, d, j) > 0", "residual_value", "effective"):
+                require_marker(harness, marker, "saw_value_mixed_i32_f32 harness")
+        else:
+            for marker in ("xi_values[index] > THRESHOLD_I", "candidate", "yf_values[index]"):
+                require_marker(harness, marker, "saw_value_mixed_i32_f32 harness")
 
     if "saw_value_i32_cmp" in claim_names:
         require_marker(mlir, "arith.cmpi sgt", "saw_value_i32_cmp input")
-        require_marker(harness, "xi_values[index] > THRESHOLD_I", "saw_value_i32_cmp harness")
+        if "gate_value" in harness:
+            require_marker(harness, "gate_value(case_id, d, j) > 0", "saw_value_i32_cmp harness")
+        else:
+            require_marker(harness, "xi_values[index] > THRESHOLD_I", "saw_value_i32_cmp harness")
 
     if "saw_value_f32_alu" in claim_names:
         for marker in ("arith.mulf", "arith.addf"):
@@ -108,6 +119,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "a * xf_values[index] + yf_values[index]" not in harness
             and "factor * xf_values[index] + yf_values[index]" not in harness
             and "factor * yf_values[index] + xf_values[index]" not in harness
+            and "v + res * tc->scale" not in harness
         ):
             fail("saw_value_f32_alu harness missing checked f32 arithmetic oracle")
 
@@ -144,12 +156,21 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, marker, "saw_value_multi_axis_launch harness")
 
     if "saw_value_multi_axis" in claim_names:
-        for marker in (
-            "vc4value.grid_rank = 2",
-            "vc4value.program_id {axis = 0",
-            "vc4value.program_id {axis = 1",
-        ):
-            require_marker(mlir, marker, "saw_value_multi_axis input")
+        if "vc4value.grid_rank = 3" in mlir:
+            for marker in (
+                "vc4value.grid_rank = 3",
+                "vc4value.program_id {axis = 0",
+                "vc4value.program_id {axis = 1",
+                "vc4value.program_id {axis = 2",
+            ):
+                require_marker(mlir, marker, "saw_value_multi_axis input")
+        else:
+            for marker in (
+                "vc4value.grid_rank = 2",
+                "vc4value.program_id {axis = 0",
+                "vc4value.program_id {axis = 1",
+            ):
+                require_marker(mlir, marker, "saw_value_multi_axis input")
         has_flattened_grid = (
             "vc4value.num_programs {axis = 0" in mlir
             and "%row_base = arith.muli %pid1, %num0" in mlir
@@ -159,7 +180,12 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "%block = vc4value.program_id {axis = 0" in mlir
             and "%row = vc4value.program_id {axis = 1" in mlir
         )
-        if not has_flattened_grid and not has_row_block_grid:
+        has_direct_3d_grid = (
+            "%q = vc4value.program_id {axis = 0" in mlir
+            and "%d = vc4value.program_id {axis = 1" in mlir
+            and "%group = vc4value.program_id {axis = 2" in mlir
+        )
+        if not has_flattened_grid and not has_row_block_grid and not has_direct_3d_grid:
             fail("saw_value_multi_axis input lacks accepted flattened or row/block grid shape")
         has_phase10_grid_oracle = all(
             marker in harness
@@ -173,7 +199,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             marker in harness
             for marker in ("vc4_m2_dim3(1u, tc->rows, 1u)", "active_qpus=%d")
         )
-        if not has_phase10_grid_oracle and not has_phase11_grid_oracle and not has_phase15_grid_oracle:
+        has_phase16_grid_oracle = all(
+            marker in harness
+            for marker in ("vc4_m2_dim3(tc->q_rows, tc->out_dims, GROUPS)", "active_qpus=%d")
+        )
+        if not has_phase10_grid_oracle and not has_phase11_grid_oracle and not has_phase15_grid_oracle and not has_phase16_grid_oracle:
             fail("saw_value_multi_axis harness missing checked grid coordinate oracle")
 
     if "saw_value_program_id_axis1" in claim_names:
@@ -251,10 +281,14 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         else:
             if "cf.cond_br %inside" in mlir:
                 require_marker(mlir, "cf.cond_br %use_i32", "saw_value_control_flow input")
+            elif "cf.cond_br %is_group0" in mlir:
+                require_marker(mlir, "cf.cond_br %is_group0", "saw_value_control_flow input")
             else:
                 require_marker(mlir, "cf.cond_br %is_first", "saw_value_control_flow input")
         if "MIXED_VALUE_SFU_SOFTMAX_AXIS_MASK_CF_F16_CASE" in harness:
             require_marker(harness, "MIXED_VALUE_SFU_SOFTMAX_AXIS_MASK_CF_F16_CASE", "saw_value_control_flow harness")
+        elif "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" in harness:
+            require_marker(harness, "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE", "saw_value_control_flow harness")
         else:
             for marker in ("trip", "use_i32_path"):
                 require_marker(harness, marker, "saw_value_control_flow harness")
@@ -264,6 +298,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             and "MIXED_VALUE_GEMV_ROW_DOT_AXIS_MASK_CF_CASE" not in harness
             and "MIXED_VALUE_F16_STORAGE_GEMV_AXIS_MASK_CF_CASE" not in harness
             and "MIXED_VALUE_SFU_SOFTMAX_AXIS_MASK_CF_F16_CASE" not in harness
+            and "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" not in harness
         ):
             fail("saw_value_control_flow harness missing mixed case result marker")
 
@@ -281,24 +316,34 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_value_mask_tail" in claim_names:
         if "%mask = vector.create_mask %remaining" not in mlir:
-            require_marker(mlir, "%mask = vector.create_mask %cols", "saw_value_mask_tail input")
-        if "vector.transfer_write %store_i" not in mlir:
-            require_marker(mlir, "vector.transfer_write %outh", "saw_value_mask_tail input")
-        if (
-            "vector.transfer_write %store_f" not in mlir
-            and "vector.transfer_write %store_h" not in mlir
-            and "vector.transfer_write %outh" not in mlir
-        ):
-            fail("saw_value_mask_tail input missing checked f32/f16 tail transfer_write")
+            if "%mask = vector.create_mask %cols" not in mlir:
+                require_marker(mlir, "%mask = vector.create_mask %k", "saw_value_mask_tail input")
+        if "saw_value_attention_apply_v0" not in claim_names:
+            if "vector.transfer_write %store_i" not in mlir:
+                require_marker(mlir, "vector.transfer_write %outh", "saw_value_mask_tail input")
+            if (
+                "vector.transfer_write %store_f" not in mlir
+                and "vector.transfer_write %store_h" not in mlir
+                and "vector.transfer_write %outh" not in mlir
+            ):
+                fail("saw_value_mask_tail input missing checked f32/f16 tail transfer_write")
         for marker in ("verify_tail_results", "verify_sentinels", "sentinel_mismatches"):
+            if marker == "verify_tail_results" and "verify_outputs" in harness:
+                continue
             require_marker(harness, marker, "saw_value_mask_tail harness")
 
     if "saw_value_compute_mask_select" in claim_names:
-        for marker in ("arith.cmpi sgt", "arith.cmpf olt", "arith.select"):
-            require_marker(mlir, marker, "saw_value_compute_mask_select input")
-        for marker in ("cfg->use_i32_path", "cond ? candidate"):
-            require_marker(harness, marker, "saw_value_compute_mask_select harness")
-        if "expected_tail_f" not in harness and "expected_rank_out_f" not in harness:
+        require_marker(mlir, "arith.select", "saw_value_compute_mask_select input")
+        if "saw_value_attention_apply_v0" in claim_names:
+            require_marker(mlir, "arith.cmpi sgt", "saw_value_compute_mask_select input")
+            for marker in ("gate_value", "? (v + res * tc->scale) : (v - res)"):
+                require_marker(harness, marker, "saw_value_compute_mask_select harness")
+        else:
+            for marker in ("arith.cmpi sgt", "arith.cmpf olt"):
+                require_marker(mlir, marker, "saw_value_compute_mask_select input")
+            for marker in ("cfg->use_i32_path", "cond ? candidate"):
+                require_marker(harness, marker, "saw_value_compute_mask_select harness")
+        if "expected_tail_f" not in harness and "expected_rank_out_f" not in harness and "expected_attention" not in harness:
             fail("saw_value_compute_mask_select harness missing checked f32 oracle array")
 
     if "saw_value_load_inactive_zero" in claim_names:
@@ -386,12 +431,16 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             and (
                 "vector.transfer_read %rank_f16[%pid1, %col]" in mlir
                 or "vector.transfer_read %x[%row, %col]" in mlir
+                or "vector.transfer_read %scores[%q, %c0]" in mlir
+                or "vector.transfer_read %vt[%d, %c0]" in mlir
             )
         )
         if not has_i32_row and not has_f32_row and not has_f16_row:
             fail("saw_value_row_strided_memory input lacks accepted row-strided value read")
         if "r * cfg->lda + c" in harness:
             row_markers = ("r * cfg->lda + c", "rank_i_value", "rank_f_value", "row padding")
+        elif "score_half" in harness:
+            row_markers = ("q * tc->lds + j", "d * tc->ldv + j", "verify_sentinels")
         else:
             row_markers = ("r * tc->stride + c", "logit_value", "row padding")
         for marker in row_markers:
@@ -409,15 +458,17 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "vector.reduction <add>, %reduce_f : vector<16xf32> into f32" not in mlir
             and "vector.reduction <add>, %prod : vector<16xf32> into f32" not in mlir
             and "vector.reduction <add>, %active_e : vector<16xf32> into f32" not in mlir
+            and "vector.reduction <add>, %weighted : vector<16xf32> into f32" not in mlir
         ):
             fail("saw_value_reduction_f32_finite_add input lacks accepted f32 add reduction")
         if (
             "row_sum_f += expected_tail_f[index]" not in harness
             and "partial_dot += prod" not in harness
             and "row_sum += got" not in harness
+            and "acc += prob * effective" not in harness
         ):
             fail("saw_value_reduction_f32_finite_add harness missing checked f32 sum oracle")
-        if "EPSILON" not in harness:
+        if "EPSILON" not in harness and "MIXED_ABS_TOL" not in harness:
             require_marker(harness, "SOFTMAX_ABS_TOL", "saw_value_reduction_f32_finite_add harness")
         require_marker(harness, "max_abs_diff", "saw_value_reduction_f32_finite_add harness")
 
@@ -427,13 +478,17 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             and "memref.store %row_sum_f, %row_out_f[%pid1]" in mlir
         )
         has_dot_store = "memref.store %dot, %partial_out_f[%partial_index]" in mlir
-        if not has_row_store and not has_dot_store:
+        has_attention_store = "memref.store %acc, %out[%oidx]" in mlir
+        if not has_row_store and not has_dot_store and not has_attention_store:
             fail("saw_value_scalar_reduction_store input lacks accepted scalar reduction store")
         if has_row_store:
             for marker in ("row_out_i", "row_out_f", "verify_row_reductions", "verify_sentinels"):
                 require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
-        else:
+        elif has_dot_store:
             for marker in ("partial_out_f", "verify_partials", "verify_sentinels"):
+                require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
+        else:
+            for marker in ("out_values[index]", "verify_outputs", "verify_sentinels"):
                 require_marker(harness, marker, "saw_value_scalar_reduction_store harness")
 
     if "saw_value_gemv_f32_row_dot" in claim_names:
@@ -503,10 +558,16 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             and "vector.transfer_read %x_f16[%col]" in mlir
         )
         has_softmax_f16_load = "vector.transfer_read %x[%row, %col]" in mlir
-        if not has_gemv_f16_load and not has_softmax_f16_load:
+        has_attention_f16_load = (
+            "vector.transfer_read %scores[%q, %c0]" in mlir
+            and "vector.transfer_read %vt[%d, %c0]" in mlir
+        )
+        if not has_gemv_f16_load and not has_softmax_f16_load and not has_attention_f16_load:
             fail("saw_value_f16_storage_load input lacks accepted f16 transfer_read")
         if "rank_f16_values" in harness:
             harness_markers = ("rank_f16_values", "x_f16_values", "f16_to_f32")
+        elif "score_half" in harness:
+            harness_markers = ("score_half", "vt_half", "f16_to_f32")
         else:
             harness_markers = ("x_values", "logit_value", "f16_to_f32")
         for marker in harness_markers:
@@ -531,6 +592,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(mlir, marker, "saw_value_f32_compute_after_f16_load input")
         if "partial_dot += prod" in harness:
             harness_markers = ("rank_f_value", "x_value", "partial_dot += prod")
+        elif "expected_attention" in harness:
+            harness_markers = ("score_value", "vt_value", "acc += prob * effective")
         else:
             harness_markers = ("logit_value", "expected_softmax", "natural_exp_ref")
         for marker in harness_markers:
@@ -538,7 +601,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_f16_storage_finite_policy" in claim_names:
         require_marker(mlir, 'vc4value.f16_storage_policy = "finite"', "saw_f16_storage_finite_policy input")
-        if "EPSILON" not in harness:
+        if "EPSILON" not in harness and "MIXED_ABS_TOL" not in harness:
             require_marker(harness, "SOFTMAX_ABS_TOL", "saw_f16_storage_finite_policy harness")
 
     if "saw_no_native_f16_arithmetic" in claim_names:
@@ -582,11 +645,18 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "math.exp",
             "vector.reduction <add>",
             "arith.divf",
-            "vector.transfer_write",
         ):
             require_marker(mlir, marker, "saw_value_softmax_v0 input")
-        for marker in ("expected_softmax", "ROW_SUM_TOL", "saw_value_softmax_v0=1"):
-            require_marker(harness, marker, "saw_value_softmax_v0 harness")
+        if "saw_value_attention_apply_v0" in claim_names:
+            require_marker(mlir, "memref.store %acc, %out[%oidx]", "saw_value_softmax_v0 input")
+        else:
+            require_marker(mlir, "vector.transfer_write", "saw_value_softmax_v0 input")
+        if "expected_attention" in harness:
+            for marker in ("expected_denom", "natural_exp_ref", "saw_value_softmax_v0=1"):
+                require_marker(harness, marker, "saw_value_softmax_v0 harness")
+        else:
+            for marker in ("expected_softmax", "ROW_SUM_TOL", "saw_value_softmax_v0=1"):
+                require_marker(harness, marker, "saw_value_softmax_v0 harness")
 
     if "saw_scalar_to_vector_f32_broadcast" in claim_names:
         for marker in ("vector.broadcast %max", "vector.broadcast %inv"):
@@ -612,14 +682,64 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         for marker in ("atomic", "memref.load %y", "cross_program"):
             if marker in mlir:
                 fail(f"saw_no_multiblock_softmax input uses forbidden marker {marker}")
-        for marker in ("vc4_m2_dim3(1u, tc->rows, 1u)", "saw_no_multiblock_softmax=1"):
-            require_marker(harness, marker, "saw_no_multiblock_softmax harness")
+        if "saw_value_attention_apply_v0" in claim_names:
+            for marker in ("vc4_m2_dim3(tc->q_rows, tc->out_dims, GROUPS)", "saw_no_full_attention=1"):
+                require_marker(harness, marker, "saw_no_multiblock_softmax harness")
+        else:
+            for marker in ("vc4_m2_dim3(1u, tc->rows, 1u)", "saw_no_multiblock_softmax=1"):
+                require_marker(harness, marker, "saw_no_multiblock_softmax harness")
 
     if "saw_no_full_attention" in claim_names:
-        for marker in ("attention", "flashattention", "vector.contract", "tt.dot", "tl.dot"):
+        for marker in ("flashattention", "vector.contract", "tt.dot", "tl.dot", "qk_score", "score_generation"):
             if marker in mlir.lower():
                 fail(f"saw_no_full_attention input uses forbidden marker {marker}")
         require_marker(harness, "saw_no_full_attention=1", "saw_no_full_attention harness")
+
+    if "saw_value_attention_apply_v0" in claim_names:
+        for marker in (
+            'vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"',
+            "%probs = arith.mulf %active_e, %invv",
+            "%weighted = arith.mulf %probs, %effective_v",
+            "memref.store %acc, %out[%oidx]",
+        ):
+            require_marker(mlir, marker, "saw_value_attention_apply_v0 input")
+        for marker in ("expected_attention", "saw_value_attention_apply_v0=1"):
+            require_marker(harness, marker, "saw_value_attention_apply_v0 harness")
+
+    if "saw_value_transposed_v_layout" in claim_names:
+        require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_value_transposed_v_layout input")
+        for marker in ("vt_value(case_id, d, j)", "saw_value_transposed_v_layout=1"):
+            require_marker(harness, marker, "saw_value_transposed_v_layout harness")
+
+    if "saw_value_weighted_sum_reduction" in claim_names:
+        for marker in ("%weighted = arith.mulf %probs", "vector.reduction <add>, %weighted"):
+            require_marker(mlir, marker, "saw_value_weighted_sum_reduction input")
+        for marker in ("acc += prob * effective", "saw_value_weighted_sum_reduction=1"):
+            require_marker(harness, marker, "saw_value_weighted_sum_reduction harness")
+
+    if "saw_value_scalar_result_store" in claim_names:
+        for marker in ("memref.store %acc, %out[%oidx]", "memref.store %denom, %audit[%oidx]"):
+            require_marker(mlir, marker, "saw_value_scalar_result_store input")
+        for marker in ("out_values[index]", "audit_values[index]", "saw_value_scalar_result_store=1"):
+            require_marker(harness, marker, "saw_value_scalar_result_store harness")
+
+    if "saw_no_scalar_global_load" in claim_names:
+        if "memref.load" in mlir:
+            fail("saw_no_scalar_global_load input uses memref.load")
+        require_marker(harness, "saw_no_scalar_global_load=1", "saw_no_scalar_global_load harness")
+
+    if "saw_no_nontransposed_v_gather" in claim_names:
+        for marker in ("vector.gather", "vector.scatter", "strided<[?, ?]", "offs *"):
+            if marker in mlir:
+                fail(f"saw_no_nontransposed_v_gather input uses forbidden marker {marker}")
+        require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_no_nontransposed_v_gather input")
+        require_marker(harness, "saw_no_nontransposed_v_gather=1", "saw_no_nontransposed_v_gather harness")
+
+    if "saw_no_qk_score_generation" in claim_names:
+        for marker in ("qk_score", "score_generation", "query_key", "vector.contract", "tt.dot", "tl.dot"):
+            if marker in mlir.lower():
+                fail(f"saw_no_qk_score_generation input uses forbidden marker {marker}")
+        require_marker(harness, "saw_no_qk_score_generation=1", "saw_no_qk_score_generation harness")
 
     if "saw_no_dot_gemv" in claim_names:
         lowered = mlir.lower()

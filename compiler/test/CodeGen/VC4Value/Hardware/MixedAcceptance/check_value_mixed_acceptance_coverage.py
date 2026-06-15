@@ -54,6 +54,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_gemv_row_dot_axes_mask_cf_strided_reduction_vc4value",
     "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
     "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
+    "mixed_value_attention_apply_v0_axes_mask_cf_f16_storage_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -124,6 +125,13 @@ REQUIRED_FEATURES = {
     "value_no_exact_default_math",
     "value_no_multiblock_softmax",
     "value_no_full_attention",
+    "value_attention_apply_v0",
+    "value_transposed_v_layout",
+    "value_weighted_sum_reduction",
+    "value_scalar_result_store",
+    "value_no_scalar_global_load",
+    "value_no_nontransposed_v_gather",
+    "value_no_qk_score_generation",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -267,6 +275,10 @@ def validate_fixture(repo_root, fixture):
         "value_softmax_v0": "vc4value.softmax_v0 = \"one_block_active_1_to_16\"",
         "value_approx_math_policy": "vc4value.math_policy = \"approx_sfu\"",
         "value_softmax_uses_natural_exp": "math.exp",
+        "value_attention_apply_v0": "vc4value.attention_apply_v0 = \"precomputed_transposed_v_active_1_to_16\"",
+        "value_transposed_v_layout": "vector.transfer_read %vt[%d, %c0]",
+        "value_weighted_sum_reduction": "%weighted = arith.mulf %probs",
+        "value_scalar_result_store": "memref.store %acc, %out[%oidx]",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -288,7 +300,13 @@ def validate_fixture(repo_root, fixture):
             and "vc4value.program_id {axis = 2" in mlir
             and "vc4value.num_programs {axis = 1" in mlir
         )
-        if not has_rank2_flatten and not has_rank2_row_block and not has_rank3_flatten:
+        has_rank3_direct = (
+            "vc4value.grid_rank = 3" in mlir
+            and "vc4value.program_id {axis = 0" in mlir
+            and "vc4value.program_id {axis = 1" in mlir
+            and "vc4value.program_id {axis = 2" in mlir
+        )
+        if not has_rank2_flatten and not has_rank2_row_block and not has_rank3_flatten and not has_rank3_direct:
             fail(f"{name} claims value_multi_axis_launch_identity without rank-2 or rank-3 flattening")
     if "value_f32_finite_cmp_select" in tags and 'vc4value.fp_domain = "finite"' not in mlir:
         fail(f"{name} uses f32 cmp/select without finite domain policy")
@@ -339,9 +357,24 @@ def validate_fixture(repo_root, fixture):
             if marker in mlir:
                 fail(f"{name} claims no multiblock softmax but input uses {marker}")
     if "value_no_full_attention" in tags:
-        for marker in ("attention", "flashattention", "vector.contract", "tt.dot", "tl.dot"):
+        forbidden = ("flashattention", "vector.contract", "tt.dot", "tl.dot", "qk_score", "qk")
+        for marker in forbidden:
             if marker in mlir.lower():
                 fail(f"{name} claims no full attention but input uses {marker}")
+        if "attention" in mlir.lower() and "vc4value.attention_apply_v0" not in mlir:
+            fail(f"{name} mentions attention without the locked attention_apply_v0 attribute")
+    if "value_no_scalar_global_load" in tags and "memref.load" in mlir:
+        fail(f"{name} claims no scalar global load but input uses memref.load")
+    if "value_no_nontransposed_v_gather" in tags:
+        for marker in ("vector.gather", "vector.scatter", "offs *", "strided<[?, ?]"):
+            if marker in mlir:
+                fail(f"{name} claims no non-transposed gather but input uses {marker}")
+        if "vector.transfer_read %vt[%d, %c0]" not in mlir:
+            fail(f"{name} claims transposed V/no gather without row-contiguous Vt load")
+    if "value_no_qk_score_generation" in tags:
+        for marker in ("qk_score", "score_generation", "query_key", "vector.contract", "tt.dot", "tl.dot"):
+            if marker in mlir.lower():
+                fail(f"{name} claims no QK score generation but input uses {marker}")
 
 
 def validate_manifest(repo_root, manifest):
@@ -353,7 +386,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase15_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase16_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -425,7 +458,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14", "phase15"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14", "phase15", "phase16"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

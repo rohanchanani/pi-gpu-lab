@@ -1644,3 +1644,25 @@ reduction, scalar output stores, scalar f32 scale argument, repeat launches,
 and f16 score/Vt storage with f32 compute. Scalar global loads, non-transposed
 V gather, K=0, QK score generation, dot/contract, multiblock softmax, full
 attention, and FlashAttention remain staged.
+
+## 38. Phase 16.6 attention-apply value mixed acceptance
+
+VALUE_ATTENTION_APPLY_V0_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+READY_FOR_PHASE16_7_TTIR_IMPORTER_ATTENTION_APPLY_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 16.6 adds the cumulative mixed fixture
+`mixed_value_attention_apply_v0_axes_mask_cf_f16_storage_vc4value`. The fixture
+combines Phase 16 attention-apply v0 with multi-axis launch, scalar control
+flow, tail masks, row-strided memory, f16 storage loads, i32/f32 elementwise
+interaction, natural-exp softmax, f32 weighted reduction, scalar stores, and
+active_qpus=12 repeated launches. The full VC4Value mixed hardware suite
+passes, and the mixed claim audit covers the new attention-apply claims without
+claiming QK score generation, dot/contract, scalar global loads,
+non-transposed V gather, full attention, or FlashAttention.
