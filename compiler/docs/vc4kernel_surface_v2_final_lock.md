@@ -80,6 +80,18 @@ VDW selector semantics are separately proved and are not inferred from VDR symme
 
 The final proof graph covers dynamic row, dynamic word-X, dynamic subword selector, VDR destination fields, VDW source fields, combined VDR/VPM/VDW roundtrip, runtime pitch/stride selector cases, double-buffered/ping-pong tiles, and spill-pressure cases.
 
+## Phase 15B SFU Base Semantics Note
+
+The locked VC4Kernel SFU surface names target modes. Target `exp` is exp2,
+target `log` is log2, target `rsqrt` is reciprocal square root, and target
+`recip` is reciprocal. Public value/TTIR `math.exp`/`tl.exp` and
+`math.log`/`tl.log` are natural functions and must reach these target modes
+only through explicit approximate-policy scaling (`EXP2_X_LOG2E` and
+`LOG2_X_LN2`). Public `math.sqrt`/`tl.sqrt` lowers through `RSQRT_TIMES_X`
+under positive finite policy. Phase 15B.2 records hardware reproof for natural
+exp, natural log, sqrt, and natural-exp softmax; exact/default math remains
+rejected.
+
 ## Final Mixed Suite
 
 The final mixed hardware suite is the routine P13 and producer-layer gate:

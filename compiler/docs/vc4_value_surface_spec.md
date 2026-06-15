@@ -529,10 +529,13 @@ implements them:
 - Phase 4 ABI;
 - Phase 5 elementwise value lowering;
 - Phase 8 control;
-- Phase 9 masks/memory legality;
-- Phase 11 reductions;
-- Phase 13 math;
-- Phase 15 subword/f16 storage;
+- Phase 9 multi-axis launch identity;
+- Phase 10 masks/memory legality;
+- Phase 11 strided/ranked memory skeletons;
+- Phase 12 reductions;
+- Phase 13 GEMV / row-wise dot;
+- Phase 14 f16 storage and numeric conversion policy;
+- Phase 15 base-2 SFU-backed natural math and one-block softmax;
 - Phase 17 shuffle/rotate/broadcast;
 - Phase 18 tile planner;
 - Phase 19 contract.

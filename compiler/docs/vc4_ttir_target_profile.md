@@ -593,7 +593,8 @@ or against normal compute-kernel value lowering.
 
 ## 19. Staged TTIR acceptance sequence
 
-The staged TTIR sequence is:
+The active staged TTIR sequence follows the feature-driven ladder after the
+Phase 15B base-2 SFU natural-math repair:
 
 - Phase 6 inventory/importer skeleton;
 - Phase 7 elementwise smoke;
@@ -601,13 +602,25 @@ The staged TTIR sequence is:
 - Phase 9.5 mask/memory-legality bridge/support/reject lock;
 - Phase 10.5 gather/strided memory bridge;
 - Phase 12 reductions smoke;
-- Phase 14 math smoke;
-- Phase 16 subword smoke;
-- Phase 20 dot smoke;
-- Phase 24 block pointers;
-- Phase 25 broader memory;
+- Phase 13 GEMV / row-wise dot;
+- Phase 14 f16 storage and numeric conversion policy;
+- Phase 15 base-2 SFU-backed natural math and one-block softmax;
+- Phase 16 softmax-apply / attention-apply v0 over precomputed scores;
+- Phase 17 online / multi-block softmax state;
+- Phase 18 vector.contract / tl.dot / tt.dot;
+- Phase 19 GEMM/GEMV shape expansion;
+- Phase 20 attention score generation;
+- Phase 21 block pointers and tensor descriptors;
+- Phase 22 broader memory/layout profile;
+- Phase 23 cooperative/VPM tile planning;
+- Phase 24 VPM pipelining/double buffering;
+- Phase 25 fused attention / FlashAttention v0;
 - Phase 26 ML-relevant corpus;
-- Phase 28 profile closure.
+- Phase 27 source-to-hardware driver / UX lock;
+- Phase 28 profile closure;
+- Phase 29 final value/TTIR mixed acceptance lock;
+- Phase 30 optimization and broadening;
+- Phase 31 global Triton readiness gate.
 
 Each stage must enter through the standard value surface. `READY_FOR_TRITON`
 remains `NO` until the relevant importer and handwritten value path are proven.

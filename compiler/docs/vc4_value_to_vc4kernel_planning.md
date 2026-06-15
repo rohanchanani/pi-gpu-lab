@@ -1009,9 +1009,13 @@ Future implementation hooks:
 - later gather/strided: gather-load and affine strided memory planning;
 - Phase 12 reductions: i32 add reduction, f32 finite-tree add reduction, tail
   inactive-zero reduction, and scalar reduction-output stores;
-- Phase 13 math: explicit approximate SFU and exact/default diagnostics;
-- Phase 15 subword/f16: exact mode-table subword paths and f16 storage
-  conversion plus f32 compute;
+- Phase 13 GEMV / row-wise dot: elementwise multiply, finite-tree reduction,
+  scalar stores, and partial K-block staging;
+- Phase 14 f16 storage/numeric policy: f16 storage conversion plus f32 compute,
+  explicit finite f16 store policy, and staged fp-to-int/quantized forms;
+- Phase 15 base-2 SFU-backed natural math and softmax: explicit approximate
+  policy, natural exp/log scaling, sqrt through rsqrt, finite max reduction,
+  reciprocal/division, and one-block softmax v0;
 - Phase 17 shuffle/broadcast: rotate, lane broadcast composite, and direct
   arbitrary permutation rejects;
 - Phase 18 VPM tile: VPM allocation, VDR, VDW, dynamic coordinates/selectors,

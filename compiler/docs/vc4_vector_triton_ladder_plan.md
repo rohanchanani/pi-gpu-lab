@@ -1,6 +1,8 @@
 ROADMAP_PHASE9_MULTI_AXIS_ALIGNMENT=YES
 PHASE9_FEATURE=VALUE_AND_TTIR_MULTI_AXIS_LAUNCH_IDENTITY
 PHASE10_FEATURE=MASK_CLASSIFIER_AND_MEMORY_LEGALITY
+CURRENT_LADDER_PLAN_UPDATED_AFTER_PHASE15B=YES
+PHASE15_BASE2_SFU_NATURAL_MATH_REPAIR_RECORDED=YES
 PREVIOUS_PHASE9_MASK_DOCS_SUPERSEDED_BY_FEATURE_LADDER=YES
 PHASE9_RESULT=LOCKED
 READY_FOR_PHASE10_MASK_CLASSIFIER_AND_MEMORY_LEGALITY=YES
@@ -33,6 +35,26 @@ Phase 9.0  Rebaseline and roadmap alignment
 Phase 9    VALUE_AND_TTIR_MULTI_AXIS_LAUNCH_IDENTITY
 Phase 10   MASK_CLASSIFIER_AND_MEMORY_LEGALITY
 Phase 11   VALUE_AND_TTIR_STRIDED_RANKED_MEMORY_SKELETONS
+Phase 12   VALUE_AND_TTIR_REDUCTIONS
+Phase 13   VALUE_AND_TTIR_GEMV_ROWWISE_DOT
+Phase 14   VALUE_AND_TTIR_ML_STORAGE_NUMERIC_CONVERSION_POLICY
+Phase 15   BASE2_SFU_BACKED_APPROX_NATURAL_MATH_AND_SOFTMAX
+Phase 16   SOFTMAX_APPLY_AND_ATTENTION_APPLY_V0_PRECOMPUTED_SCORES
+Phase 17   ONLINE_AND_MULTIBLOCK_SOFTMAX_STATE
+Phase 18   VECTOR_CONTRACT_TL_DOT_TT_DOT
+Phase 19   GEMM_GEMV_SHAPE_EXPANSION
+Phase 20   ATTENTION_SCORE_GENERATION
+Phase 21   BLOCK_POINTERS_AND_TENSOR_DESCRIPTORS
+Phase 22   BROADER_MEMORY_LAYOUT_PROFILE
+Phase 23   COOPERATIVE_VPM_TILE_PLANNING
+Phase 24   VPM_PIPELINING_DOUBLE_BUFFERING
+Phase 25   FUSED_ATTENTION_FLASHATTENTION_V0
+Phase 26   FRONTIER_STYLE_TRITON_KERNEL_CORPUS
+Phase 27   SOURCE_TO_HARDWARE_DRIVER_UX_LOCK
+Phase 28   TTIR_OPERATION_PROFILE_CLOSURE
+Phase 29   FINAL_VALUE_TTIR_MIXED_ACCEPTANCE_LOCK
+Phase 30   OPTIMIZATION_AND_BROADENING
+Phase 31   GLOBAL_READY_FOR_TRITON_YES_GATE
 ```
 
 Phase 9 must not implement the mask classifier, rank-2 memory planning,
@@ -231,3 +253,55 @@ Phase 15 may now start approximate math/SFU/softmax policy. Phase 14 does not
 unlock global Triton readiness and does not claim native f16 arithmetic,
 bf16/fp8, quantized int storage, fp-to-int casts, exact/unpolicy numeric casts,
 `tt.dot`, `vector.contract`, or GEMM.
+
+## Phase 15B Base-2 SFU Natural Math Repair
+
+Phase 15 locks base-2 SFU-backed approximate natural math and one-block
+softmax. The corrected post-Phase15B contract is:
+
+```text
+PHASE15_BASE2_SFU_NATURAL_MATH_REPAIR_RECORDED=YES
+VALUE_EXP_NATURAL_HARDWARE=PASS
+VALUE_LOG_NATURAL_HARDWARE=PASS
+VALUE_SQRT_HARDWARE=PASS
+VALUE_SOFTMAX_NATURAL_EXP_REPROOF=PASS
+TTIR_TL_EXP_NATURAL_STATIC=PASS
+TTIR_TL_EXP_NATURAL_LOWERING=EXP2_X_LOG2E
+TTIR_SOFTMAX_USES_NATURAL_EXP=YES
+TTIR_TL_LOG_NATURAL_STATIC=PASS
+TTIR_TL_SQRT_STATIC=PASS
+READY_FOR_PHASE15B_4_STALE_DOCS_PLAN_CLEANUP=YES
+READY_FOR_TRITON=NO
+```
+
+Target VC4 SFU exp/log modes are base-2 exp2/log2. Public value
+`math.exp`/TTIR `tl.exp` are natural exp and lower through
+`exp2(x * log2(e))`. Public value `math.log`/TTIR `tl.log` are natural log and
+lower through `log2(x) * ln(2)`. Public value `math.sqrt`/TTIR `tl.sqrt` lower
+through `x * rsqrt(x)` under positive finite approximate policy. Exact/default
+math remains rejected, and global `READY_FOR_TRITON=NO` remains locked.
+
+## Active Future Ladder After Phase 15B
+
+```text
+Phase 16 = softmax-apply / attention-apply v0 over precomputed scores
+Phase 17 = online / multi-block softmax state
+Phase 18 = vector.contract / tl.dot / tt.dot
+Phase 19 = GEMM/GEMV shape expansion
+Phase 20 = attention score generation
+Phase 21 = block pointers and tensor descriptors
+Phase 22 = broader memory/layout profile
+Phase 23 = cooperative/VPM tile planning
+Phase 24 = VPM pipelining/double buffering
+Phase 25 = fused attention / FlashAttention v0
+Phase 26 = frontier-style Triton kernel corpus
+Phase 27 = source-to-hardware driver / UX lock
+Phase 28 = TTIR operation/profile closure
+Phase 29 = final value/TTIR mixed acceptance lock
+Phase 30 = optimization and broadening
+Phase 31 = global Triton readiness gate
+```
+
+CURRENT_LADDER_PLAN_UPDATED_AFTER_PHASE15B=YES
+PHASE15_BASE2_SFU_NATURAL_MATH_REPAIR_RECORDED=YES
+READY_FOR_TRITON=NO

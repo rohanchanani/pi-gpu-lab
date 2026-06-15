@@ -7,18 +7,20 @@
 //===----------------------------------------------------------------------===//
 //
 // Phase 5 lowered the first executable standard value-layer slice into the
-// locked VC4Kernel target-kernel planning dialect.  Phase 8 extends that slice
-// with standard cf.br/cf.cond_br multi-block control flow, and Phase 9 extends
-// logical launch identity to grid ranks 1/2/3 while preserving a
-// crisp boundary between:
+// locked VC4Kernel target-kernel planning dialect. Later locked phases extend
+// that slice with scalar control flow, multi-axis launch identity, masks and
+// memory legality, row-strided memory, reductions, GEMV row dots, f16 storage
+// conversion, and explicit-policy approximate SFU/softmax math while
+// preserving a crisp boundary between:
 //
 //   * the broad value-surface contract, which is allowed to contain staged
 //     fixed vectors, subword storage, reductions, contracts, scf/cf, and future
 //     TTIR-importable patterns; and
-//   * the executable subset, which is vector<16> i32/f32 elementwise code over
-//     rank-1 contiguous/scalar-computed #vc4value.global memrefs plus Phase 11
-//     rank-2 row-slice memory skeletons, Phase 8 V1 cf control flow, and
-//     multi-axis program_id/num_programs identity.
+//   * the executable subset, which remains a layered set of vector<16> value
+//     idioms over #vc4value.global memrefs and lowers only through VC4Kernel,
+//     SSAVC4, and scheduled VC4. Public math.exp/log/sqrt are natural value
+//     semantics and reach target base-2/rsqrt SFU modes only through explicit
+//     approximate-policy composites.
 //
 // Staged value-surface features are not rejected by the value-surface verifier;
 // they are rejected here with precise diagnostics until the corresponding

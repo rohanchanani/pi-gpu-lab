@@ -17,11 +17,12 @@
 //   * The output is only the VC4 standard value layer:
 //       func + vc4value + vector + memref + arith/math/scf/cf.
 //   * No vc4kernel/ssavc4/scheduled-vc4 operations are emitted here.
-//   * Unsupported TTIR forms are classified as staged Phase 8.5 limitations
-//     unless the target profile has a permanent reject proof.
+//   * Unsupported TTIR forms are staged against the current VC4 TTIR target
+//     profile unless the profile has a permanent reject proof.
 //
-// The initial executable subset is intentionally the Phase 7 elementwise V1
-// subset that is already hardware-proven through the old importer:
+// The importer started as the Phase 7 elementwise V1 subset and now grows
+// through the locked vertical feature ladder. It still emits only standard
+// value-layer IR; later layers lower value IR to VC4Kernel and below.
 //
 //   tt.get_program_id axis 0
 //   tt.make_range 0..16
@@ -32,8 +33,8 @@
 //   straight-line i32/f32 add/sub/mul/cmp/select compute DAGs
 //
 // Future phases should extend the semantic planners below
-// (launch/range/pointer/ mask/memory/compute/reduction/dot) instead of adding
-// kernel-name templates.
+// (launch/range/pointer/mask/memory/compute/reduction/math/dot) instead of
+// adding kernel-name templates.
 //
 //===----------------------------------------------------------------------===//
 
@@ -137,7 +138,8 @@ static bool hasName(Operation *op, StringRef name) {
 
 static LogicalResult emitStagedDiagnostic(Operation *op, const Twine &detail) {
   return op->emitOpError()
-         << detail << " is not Phase 8.5 C++ TTIR-to-VC4Value lowerable; "
+         << detail
+         << " is not currently lowerable by the VC4 TTIR target profile; "
          << "staged TTIR target-profile feature. READY_FOR_TRITON remains NO";
 }
 
@@ -3010,9 +3012,9 @@ static LogicalResult validateInputModuleAttrs(ModuleOp inputModule) {
 
   InFlightDiagnostic diag =
       inputModule.emitError()
-      << "TTIR module attributes are not Phase 7.5 C++ TTIR-to-VC4Value "
-         "lowerable; unknown module attrs are staged until a value-safe module "
-         "attribute policy is implemented. READY_FOR_TRITON remains NO";
+      << "TTIR module attributes are not currently lowerable by the VC4 TTIR "
+         "target profile; unknown module attrs are staged until a value-safe "
+         "module attribute policy is implemented. READY_FOR_TRITON remains NO";
   for (NamedAttribute attr : inputModule->getAttrs())
     diag << "\n  attr: " << attr.getName();
   return failure();
@@ -3186,7 +3188,7 @@ struct ConvertTritonToVC4ValuePass
   StringRef getArgument() const final { return "convert-triton-to-vc4-value"; }
 
   StringRef getDescription() const final {
-    return "Lower the Phase 7.5 real TTIR elementwise subset to the VC4 value "
+    return "Lower the locked real TTIR target-profile subset to the VC4 value "
            "surface";
   }
 
@@ -3230,14 +3232,15 @@ struct ConvertTritonToVC4ValuePass
     if (ttFuncs.empty() || publicTTFuncs.empty()) {
       inputModule.emitError(
           "expected at least one public tt.func; C++ TTIR-to-VC4Value "
-          "lowering remains Phase 7.5 elementwise V1 only. "
+          "lowering requires the locked VC4 TTIR target-profile subset. "
           "READY_FOR_TRITON remains NO");
       signalPassFailure();
       return;
     }
     if (!illegalTopLevelOps.empty()) {
       illegalTopLevelOps.front()->emitOpError()
-          << "top-level operation beside tt.func is not Phase 7.5 lowerable; "
+          << "top-level operation beside tt.func is not currently lowerable "
+          << "by the VC4 TTIR target profile; "
           << "READY_FOR_TRITON remains NO";
       signalPassFailure();
       return;
@@ -3267,8 +3270,9 @@ struct ConvertTritonToVC4ValuePass
         if (!valueFunctionNames.insert(valueName).second) {
           ttFunc->emitOpError()
               << "duplicate value output symbol '" << valueName
-              << "' after TTIR function name sanitization is not Phase 7.5 "
-                 "lowerable; READY_FOR_TRITON remains NO";
+              << "' after TTIR function name sanitization is not currently "
+                 "lowerable by the VC4 TTIR target profile; "
+                 "READY_FOR_TRITON remains NO";
           signalPassFailure();
           return;
         }
