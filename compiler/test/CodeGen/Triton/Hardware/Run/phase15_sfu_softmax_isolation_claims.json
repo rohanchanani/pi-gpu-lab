@@ -1,0 +1,119 @@
+{
+  "phase": "phase15_ttir_sfu_softmax_hardware_isolation",
+  "fixtures": [
+    {
+      "name": "ttir_sfu_exp_f32_b16_vc4triton",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_exp_f32_b16.py",
+      "snapshot": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_exp_f32_b16.ttir.mlir",
+      "expected_ops": ["math.exp", "tt.load", "tt.store"],
+      "expected_result_fields": [
+        "saw_ttir_approx_sfu_exp",
+        "saw_value_approx_sfu_exp",
+        "saw_ttir_tl_exp_natural",
+        "saw_target_sfu_exp2_scale_log2e",
+        "saw_not_raw_exp2_oracle"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "tl_exp", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "natural_exp_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "approx_policy", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_exact_default_math", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_sfu_recip_div_f32_b16_vc4triton",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_sfu_recip_div_f32_b16.py",
+      "snapshot": "examples/triton/phase15_sfu_softmax/generated/ttir_sfu_recip_div_f32_b16.ttir.mlir",
+      "expected_ops": ["arith.divf", "tt.load", "tt.store"],
+      "expected_result_fields": [
+        "saw_ttir_approx_sfu_recip_div",
+        "saw_value_approx_sfu_recip_div"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "reciprocal_division", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "approx_policy", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_exact_default_math", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_reduce_max_f32_b16_vc4triton",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_reduce_max_f32_b16.py",
+      "snapshot": "examples/triton/phase15_sfu_softmax/generated/ttir_reduce_max_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.reduce", "arith.maxnumf", "tt.store"],
+      "expected_result_fields": [
+        "saw_ttir_finite_f32_max_reduction",
+        "saw_value_finite_f32_max_reduction",
+        "saw_f32_finite_max_policy"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "tl_max", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "finite_max_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_exact_default_math", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_softmax_stable_f32_b16_vc4triton",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_softmax_stable_f32_b16.py",
+      "snapshot": "examples/triton/phase15_sfu_softmax/generated/ttir_softmax_stable_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.reduce", "math.exp", "arith.divf", "tt.store"],
+      "expected_result_fields": [
+        "saw_ttir_softmax_v0",
+        "saw_value_softmax_v0",
+        "saw_ttir_finite_f32_max_reduction",
+        "saw_ttir_approx_sfu_exp",
+        "saw_ttir_approx_sfu_recip_div",
+        "saw_softmax_uses_natural_exp",
+        "saw_target_sfu_exp2_scale_log2e"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "softmax_v0", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "natural_exp_softmax_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "approx_policy", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_exact_default_math", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_full_attention", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_sfu_softmax_repeat_b16_vc4triton",
+      "source": "examples/triton/phase15_sfu_softmax/sources/ttir_softmax_stable_f32_b16.py",
+      "snapshot": "examples/triton/phase15_sfu_softmax/generated/ttir_softmax_stable_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.reduce", "math.exp", "arith.divf", "tt.store"],
+      "expected_result_fields": [
+        "saw_ttir_softmax_v0",
+        "saw_ttir_approx_sfu_exp",
+        "saw_ttir_approx_sfu_recip_div",
+        "saw_repeat_invocation"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "softmax_v0", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "no_exact_default_math", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "path": "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-exact-math-no-approx-policy.mlir",
+      "diagnostic": "exact/default math requires explicit approximate-SFU policy"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax/invalid-ttir-scalar-load-nonzero-other-staged.mlir",
+      "diagnostic": "tt.load nonzero other value"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/SFUSoftmax/invalid-ttir-tt-dot-still-staged.mlir",
+      "diagnostic": "tt.dot / contract staged"
+    }
+  ],
+  "READY_FOR_TRITON": "NO"
+}

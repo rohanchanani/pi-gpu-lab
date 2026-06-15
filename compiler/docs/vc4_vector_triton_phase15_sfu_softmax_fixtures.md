@@ -266,3 +266,27 @@ VC4. The accepted mixed snapshot uses a scalar kernel argument for scale and
 does not require scalar global load. Scalar `tt.load` remains staged, including
 the scalar-mask nonzero-`other` form. Exact/default math without policy remains
 tested and rejected at the value/value-to-VC4Kernel boundary.
+
+## Phase 15.8 TTIR Hardware Isolation
+
+Phase 15.8 proves the accepted controlled TTIR approximate-SFU and softmax
+snapshots on real hardware through the C++ importer and the standard
+value-to-VC4Kernel path. The hardware fixtures use source-controlled TTIR
+snapshots for natural `tl.exp`, reciprocal/division, finite `tl.max`, stable
+one-block softmax v0, and repeated softmax launches. All full fixtures require
+`active_qpus=12`, strict CPU oracles, nonzero output hashes, zero output
+mismatches, zero sentinel mismatches, and zero launch failures.
+
+The TTIR reduce-max fixture checks every scalar result written by the 12 active
+programs. The TTIR softmax fixtures verify every launched row under the
+12-QPU launch and preserve padding sentinels outside active columns. No TTIR was
+regenerated for this phase.
+
+TTIR_APPROX_SFU_SOFTMAX_HARDWARE_ISOLATION=PASS
+TTIR_APPROX_SFU_EXP_HARDWARE=PASS
+TTIR_APPROX_SFU_RECIP_DIV_HARDWARE=PASS
+TTIR_FINITE_F32_MAX_REDUCTION_HARDWARE=PASS
+TTIR_SOFTMAX_V0_HARDWARE=PASS
+TTIR_SFU_SOFTMAX_CLAIM_AUDIT=PASS
+READY_FOR_PHASE15_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO

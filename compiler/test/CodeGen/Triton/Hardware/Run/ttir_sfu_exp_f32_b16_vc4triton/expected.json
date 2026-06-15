@@ -1,0 +1,30 @@
+{
+  "name": "ttir_sfu_exp_f32_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 10,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "wave_boundary_n": 192,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_approx_sfu": 1,
+    "saw_value_approx_sfu": 1,
+    "saw_ttir_approx_sfu_exp": 1,
+    "saw_value_approx_sfu_exp": 1,
+    "saw_ttir_tl_exp_natural": 1,
+    "saw_value_math_exp_natural": 1,
+    "saw_target_sfu_exp2_scale_log2e": 1,
+    "saw_not_raw_exp2_oracle": 1,
+    "saw_approx_math_policy": 1,
+    "saw_no_exact_default_math": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.008,
+    "max_rel_diff": 0.012
+  }
+}

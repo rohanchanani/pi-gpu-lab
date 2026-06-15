@@ -1,0 +1,39 @@
+{
+  "name": "ttir_sfu_softmax_repeat_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 15,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_ncols": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_approx_sfu": 1,
+    "saw_value_approx_sfu": 1,
+    "saw_ttir_softmax_v0": 1,
+    "saw_value_softmax_v0": 1,
+    "saw_ttir_finite_f32_max_reduction": 1,
+    "saw_value_finite_f32_max_reduction": 1,
+    "saw_ttir_approx_sfu_exp": 1,
+    "saw_value_approx_sfu_exp": 1,
+    "saw_ttir_approx_sfu_recip_div": 1,
+    "saw_value_approx_sfu_recip_div": 1,
+    "saw_scalar_to_vector_f32_broadcast": 1,
+    "saw_approx_math_policy": 1,
+    "saw_no_exact_default_math": 1,
+    "saw_zero_active_softmax_staged": 1,
+    "saw_softmax_uses_natural_exp": 1,
+    "saw_target_sfu_exp2_scale_log2e": 1,
+    "saw_repeat_invocation": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.004,
+    "max_rel_diff": 0.006,
+    "max_row_sum_diff": 0.006
+  }
+}
