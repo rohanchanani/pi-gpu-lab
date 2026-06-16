@@ -1,14 +1,19 @@
 PHASE17_CONTROLLED_TRITON_ONLINE_SOFTMAX_FIXTURES=YES
+PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
 REAL_TRITON_ONLINE_SOFTMAX_SOURCES=YES
 REAL_TTIR_ONLINE_SOFTMAX_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
+VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
+VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
+K_ZERO_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ONLINE_SOFTMAX_STAGED=YES
 READY_FOR_PHASE17_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 17 Online Softmax State Fixtures
@@ -17,6 +22,12 @@ Phase 17.2 locks source-controlled real Triton sources and generated TTIR
 snapshots for online/multiblock softmax state over K blocks of 16. These
 fixtures define the Phase 17 TTIR acceptance contract. They are controlled
 fixtures, not exploratory probes.
+
+Phase 17.3 locks the matching value-surface contract. Online softmax state is
+accepted as a structural standard value IR composite with loop-carried scalar
+f32 `m/l/acc` state; no `vc4value.online_softmax` or `vc4value.attention`
+operation is introduced. No Phase 17 metadata attribute is introduced.
+Executable lowering and static proof are deferred to Phase 17.4.
 
 Accepted Phase 17 scope is intentionally narrow:
 

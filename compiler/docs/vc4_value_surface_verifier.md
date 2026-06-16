@@ -7,7 +7,10 @@ PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
+VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_I32_SURFACE=ACCEPTED
 VALUE_VECTOR_REDUCTION_ADD_F32_FINITE_SURFACE=ACCEPTED
 VALUE_FINITE_F32_MAX_REDUCTION_SURFACE=ACCEPTED
@@ -28,6 +31,8 @@ EXACT_DEFAULT_MATH_REJECTED=YES
 ZERO_ACTIVE_SOFTMAX_STATUS=STAGED_OR_EXPLICIT_NOOP_GUARD_REQUIRED
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
+K_RANGE_ACCEPTED=1_TO_64
+K_ZERO_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
@@ -48,6 +53,7 @@ READY_FOR_PHASE13_4_VALUE_GEMV_STATIC=YES
 READY_FOR_PHASE14_4_VALUE_STORAGE_NUMERIC_STATIC=YES
 READY_FOR_PHASE15_4_VALUE_SFU_SOFTMAX_STATIC=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
+READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
 ## 1. Purpose
@@ -666,6 +672,96 @@ Still staged:
 - online or multiblock softmax;
 - `tl.dot`, `tt.dot`, and `vector.contract`;
 - block pointers and tensor descriptors;
+- full attention and FlashAttention.
+
+## 14.5 Phase 17 online / multiblock softmax state contract
+
+PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
+VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
+VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+K_RANGE_ACCEPTED=1_TO_64
+K_ZERO_STAGED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 17 admits online softmax state as a standard value IR composite. It does
+not add a `vc4value.online_softmax`, `vc4value.attention`, dot, contract, full
+attention, or FlashAttention operation. Phase 17.3 is a surface contract and
+test lock only; executable lowering and static proof belong to later phases.
+
+No Phase 17 metadata attribute is introduced. If a later phase adds one for
+diagnostics, it must remain verifier-only, must not be used as a lowering
+discriminator, and must not be counted as executable support. The accepted
+contract is structural standard IR, not magic metadata.
+
+The accepted online softmax state composite is:
+
+```text
+for start in 0..K step 16 iter_args(m, l, acc):
+  scores = vector.transfer_read scores[row_base + start] : vector<16xf32>
+  optional scaled_scores = scores * vector.broadcast(scalar_f32_scale)
+  active_scores = arith.select(mask, scaled_scores_or_scores, finite_low)
+  block_m = vector.reduction maxnumf/maximumf(active_scores)
+  m_new = scalar finite max(m, block_m)
+  alpha = math.exp(m - m_new)
+  beta = math.exp(block_m - m_new)
+  shifted = active_scores - vector.broadcast(block_m)
+  e = math.exp(shifted)
+  active_e = arith.select(mask, e, zero)
+  block_l = vector.reduction add(active_e)
+  v = vector.transfer_read transposed_v[d, start + lane] : vector<16xf32>
+  block_acc = vector.reduction add(active_e * v)
+  l = l * alpha + block_l * beta
+  acc = acc * alpha + block_acc * beta
+  m = m_new
+out = acc / l
+memref.store out, O[q * LDO + d]
+```
+
+The same composite may read f16 score/Vt storage when each f16 vector load is
+immediately promoted to f32 compute under the Phase 14 finite f16 storage
+policy. Native f16 arithmetic remains staged.
+
+Memory requirements:
+
+- scores and Vt use rank-1 flattened memory or the Phase 11 row-strided
+  row-slice memory form;
+- V is transposed so lanes are contiguous over K, `VT[d, start + lane]`;
+- output uses the Phase 12 scalar f32 `memref.store` form,
+  `O[q * LDO + d]`;
+- scalar global loads are staged, including scalar memory loads for scale;
+- non-transposed V gather/lane-varying stride forms such as
+  `V + offs * D + d` are staged.
+
+Domain and scale requirements:
+
+- accepted K range for Phase 17 hardware fixtures is `1..64`;
+- scores and V values are finite and bounded;
+- initial `m` is a finite low value such as `-80.0`;
+- denominator `l` is positive by construction for K > 0;
+- K=0 is staged unless a later phase implements and hardware-proves an
+  explicit finite no-op guard;
+- natural `math.exp` and reciprocal/division require explicit
+  `vc4value.math_policy = "approx_sfu"` and finite domain policy;
+- approximate output tolerance is inherited from the Phase 15 natural-exp
+  softmax policy and may only be expanded if the online recurrence proof
+  justifies it;
+- scale is an optional scalar f32 kernel argument or constexpr splat, not a
+  scalar global load.
+
+Still staged:
+
+- K=0 without an explicit guard;
+- QK score generation;
+- non-transposed V layout/gather;
+- scalar global load;
+- online over block pointers or tensor descriptors;
+- `tl.dot`, `tt.dot`, and `vector.contract`;
+- cooperative/VPM tiling;
 - full attention and FlashAttention.
 
 ## 15. Shuffle, rotate, and lane broadcast boundary

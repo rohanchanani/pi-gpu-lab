@@ -7,6 +7,7 @@ PHASE13_VALUE_GEMV_ROWWISE_DOT_CONTRACT=LOCKED
 PHASE14_VALUE_ML_STORAGE_NUMERIC_CONTRACT=LOCKED
 PHASE15_VALUE_APPROX_MATH_SFU_SOFTMAX_CONTRACT=LOCKED
 PHASE16_VALUE_ATTENTION_APPLY_V0_CONTRACT=LOCKED
+PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_METADATA_POLICY=PASS
 PHASE14_RESULT=LOCKED
 PHASE15_RESULT=LOCKED
@@ -15,6 +16,8 @@ FEATURE=VALUE_AND_TTIR_APPROX_MATH_SFU_SOFTMAX
 FEATURE=VALUE_AND_TTIR_ATTENTION_APPLY_V0
 VALUE_APPROX_MATH_SFU_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
+VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
+VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_ATTENTION_APPLY_V0_STATIC_PLANNED=YES
@@ -114,6 +117,8 @@ APPROX_MATH_POLICY=EXPLICIT
 EXACT_DEFAULT_MATH_REJECTED=YES
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
+K_RANGE_ACCEPTED=1_TO_64
+K_ZERO_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 K_ZERO_ATTENTION_APPLY_STAGED_OR_GUARD_REQUIRED=YES
@@ -148,6 +153,7 @@ READY_FOR_PHASE15_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -273,6 +279,52 @@ Staged/static negative coverage:
 - exact/default math remains rejected without explicit approximate-SFU policy;
 - QK score generation, `tl.dot`, `tt.dot`, `vector.contract`, block pointers,
   full attention, and FlashAttention remain out of scope.
+
+## 1.2 Phase 17 online softmax state planned coverage
+
+PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
+VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
+VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
+PRECOMPUTED_SCORES_ONLY=YES
+TRANSPOSED_V_LAYOUT_REQUIRED=YES
+K_RANGE_ACCEPTED=1_TO_64
+K_ZERO_STAGED=YES
+SCALAR_GLOBAL_LOAD_STAGED=YES
+NONTRANSPOSED_V_GATHER_STAGED=YES
+READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 17.3 is a planning and verifier contract only. Phase 17.4 must prove
+static value-to-VC4Kernel lowering for the accepted structural value forms
+below by composing already locked control-flow, row-slice memory, scalar-store,
+reduction, f16-storage, and natural-exp SFU planning.
+
+Accepted planned coverage:
+
+- online softmax state is a standard value IR composite with `scf.for` or
+  canonical `cf` loop-carried scalar f32 `m`, `l`, and `acc`;
+- each loop iteration processes at most one `vector<16xf32>` block;
+- score loads are precomputed-score `vector.transfer_read` operations;
+- optional score scale is a scalar f32 kernel argument or constexpr splat;
+- inactive scores are selected to a finite low value before block max;
+- block max uses finite f32 max reduction and scalar finite max for `m_new`;
+- `alpha`, `beta`, shifted-score exponentials, and final division use explicit
+  approximate-SFU policy inherited from Phase 15;
+- V loads require transposed V layout so lanes are contiguous over K,
+  `VT[d, start + lane]`;
+- output is a scalar f32 store to `O[q * LDO + d]`;
+- f16 score/Vt storage may be used only through Phase 14 f16-to-f32 compute.
+
+Staged/static negative coverage:
+
+- K=0 remains staged unless a later phase proves an explicit finite no-op
+  guard;
+- scalar global loads remain staged, including scale loaded from memory;
+- non-transposed V gather/lane-varying stride remains staged;
+- QK score generation remains outside Phase 17 accepted scope;
+- `tl.dot`, `tt.dot`, `vector.contract`, block pointers, tensor descriptors,
+  cooperative/VPM tiling, full attention, and FlashAttention remain out of
+  scope.
 
 ## 2. Planning boundary
 
