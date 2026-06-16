@@ -542,6 +542,56 @@ static bool isTTIRLoopCarriedF32ReduceAccumulation(Operation *op) {
           isTTIRAddF32ReduceCallValue(lhs));
 }
 
+static bool isTTIRLoadLikeVectorValue(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!def)
+    return false;
+  if (hasName(def, kTTLoadOpName))
+    return true;
+  if ((hasName(def, "arith.extf") || hasName(def, "arith.truncf")) &&
+      def->getNumOperands() == 1)
+    return isTTIRLoadLikeVectorValue(def->getOperand(0));
+  return false;
+}
+
+static bool valueTransitivelyFeedsMathExp(Value value,
+                                          DenseSet<Value> &visiting) {
+  if (!visiting.insert(value).second)
+    return false;
+  for (Operation *user : value.getUsers()) {
+    if (llvm::isa<math::ExpOp>(user))
+      return true;
+    if (user->getNumResults() == 0)
+      continue;
+    if (hasName(user, "arith.addf") || hasName(user, "arith.subf") ||
+        hasName(user, "arith.mulf") || hasName(user, "arith.divf") ||
+        hasName(user, "arith.maxnumf") ||
+        hasName(user, "arith.maximumf") || hasName(user, kTTSplatOpName)) {
+      for (Value result : user->getResults())
+        if (valueTransitivelyFeedsMathExp(result, visiting))
+          return true;
+    }
+  }
+  return false;
+}
+
+static bool isTTIRGeneratedScoreReductionCall(Operation *callOp) {
+  if (!hasName(callOp, kTTCallOpName) || callOp->getNumResults() != 1)
+    return false;
+  TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(callOp);
+  if (reduceInfo.classification != TTIRReduceClassification::AddF32 ||
+      callOp->getNumOperands() != 1)
+    return false;
+  Operation *product = callOp->getOperand(0).getDefiningOp();
+  if (!hasName(product, "arith.mulf") || product->getNumOperands() != 2)
+    return false;
+  if (!isTTIRLoadLikeVectorValue(product->getOperand(0)) ||
+      !isTTIRLoadLikeVectorValue(product->getOperand(1)))
+    return false;
+  DenseSet<Value> visiting;
+  return valueTransitivelyFeedsMathExp(callOp->getResult(0), visiting);
+}
+
 enum class TTIRScalarElementKind { I1, I32, F16, F32, Unsupported };
 
 struct TTIRPointerTypeInfo {
@@ -1290,17 +1340,17 @@ private:
     // shape diagnostics.  This keeps future dot/reduction tests from being
     // masked by their rank-2 operands or helper constants.
     Operation *stagedBodyFeature = nullptr;
-    Operation *stagedMultiblockKAccumulation = nullptr;
+    Operation *stagedQKScoreGeneration = nullptr;
     TTIRReduceClassification stagedReduceClassification =
         TTIRReduceClassification::NotReduceCall;
     funcOp->walk([&](Operation *op) {
-      if (stagedBodyFeature || stagedMultiblockKAccumulation)
+      if (stagedBodyFeature || stagedQKScoreGeneration)
         return WalkResult::interrupt();
-      if (isTTIRLoopCarriedF32ReduceAccumulation(op)) {
-        stagedMultiblockKAccumulation = op;
-        return WalkResult::interrupt();
-      }
       if (hasName(op, kTTCallOpName)) {
+        if (isTTIRGeneratedScoreReductionCall(op)) {
+          stagedQKScoreGeneration = op;
+          return WalkResult::interrupt();
+        }
         TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
         if (reduceInfo.classification ==
                 TTIRReduceClassification::RankGreaterThanOne ||
@@ -1320,12 +1370,15 @@ private:
         stagedBodyFeature = op;
         return WalkResult::interrupt();
       }
+      if (isTTIRLoopCarriedF32ReduceAccumulation(op)) {
+        stagedBodyFeature = op;
+        return WalkResult::interrupt();
+      }
       return WalkResult::advance();
     });
-    if (stagedMultiblockKAccumulation)
-      return stagedMultiblockKAccumulation->emitOpError()
-             << "multi-block K accumulation is staged; "
-             << "READY_FOR_TRITON remains NO";
+    if (stagedQKScoreGeneration)
+      return stagedQKScoreGeneration->emitOpError()
+             << "QK score generation is staged; READY_FOR_TRITON remains NO";
     if (stagedBodyFeature) {
       if (hasName(stagedBodyFeature, kTTCallOpName)) {
         if (stagedReduceClassification ==
@@ -1348,6 +1401,10 @@ private:
       if (hasName(stagedBodyFeature, kTTReduceOpName) ||
           hasName(stagedBodyFeature, kTTReduceReturnOpName))
         return emitStagedBodyFeatureDiagnostic(stagedBodyFeature, "tt.reduce");
+      if (isTTIRLoopCarriedF32ReduceAccumulation(stagedBodyFeature))
+        return stagedBodyFeature->emitOpError()
+               << "multi-block K accumulation is staged by body feature, not "
+                  "unsupported control flow; READY_FOR_TRITON remains NO";
       return emitStagedBodyFeatureDiagnostic(stagedBodyFeature,
                                              "block-pointer TTIR op");
     }
@@ -2132,12 +2189,19 @@ private:
   bool functionNeedsFiniteMaxPolicy() const {
     bool needs = false;
     planner.getEntryBlock().walk([&](Operation *op) {
-      if (needs || !hasName(op, kTTCallOpName))
-        return WalkResult::advance();
-      TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
-      if (reduceInfo.classification == TTIRReduceClassification::MaxF32) {
+      if (needs)
+        return WalkResult::interrupt();
+      if ((hasName(op, "arith.maxnumf") || hasName(op, "arith.maximumf")) &&
+          op->getNumResults() == 1 && op->getResult(0).getType().isF32()) {
         needs = true;
         return WalkResult::interrupt();
+      }
+      if (hasName(op, kTTCallOpName)) {
+        TTIRReduceCallInfo reduceInfo = classifyTTIRReduceCall(op);
+        if (reduceInfo.classification == TTIRReduceClassification::MaxF32) {
+          needs = true;
+          return WalkResult::interrupt();
+        }
       }
       return WalkResult::advance();
     });
@@ -2410,6 +2474,13 @@ private:
     if (!scalar)
       return emitStagedDiagnostic(op,
                                   "tt.splat source not available in value IR");
+    if (scalar.getType().isIndex()) {
+      auto vectorType = llvm::dyn_cast<VectorType>(resultType);
+      if (!vectorType || !vectorType.getElementType().isSignlessInteger(32))
+        return emitStagedDiagnostic(op, "tt.splat source/result type");
+      scalar = builder.create<arith::IndexCastOp>(
+          op->getLoc(), builder.getI32Type(), scalar);
+    }
     bindValue(op->getResult(0),
               createVectorBroadcast(builder, op->getLoc(), scalar, resultType));
     return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
@@ -2450,7 +2521,7 @@ private:
         op->getResult(0).getType(), builder);
     auto vectorType = llvm::dyn_cast_or_null<VectorType>(resultType);
     if (!vectorType)
-      return emitStagedDiagnostic(op, "tt.load result type");
+      return emitStagedDiagnostic(op, "scalar tt.load");
     Value memref = pointerValues[ptr->sourcePointerArg].valueMemref;
     Value pad = createZeroPadding(op->getLoc(), vectorType.getElementType());
     FailureOr<Value> transferIndex = ensureTransferIndex(ptr->offsetValue, op);
@@ -2595,7 +2666,15 @@ private:
       if (!mapped)
         return emitStagedDiagnostic(op, "arith.bitcast operand not available");
       Type resultType = convertResultType(op->getResult(0).getType());
-      if (!resultType || resultType != mapped.getType())
+      if (!resultType)
+        return emitStagedDiagnostic(op, "arith.bitcast changing value type");
+      if (resultType != mapped.getType()) {
+        if (!(op->getOperand(0).getType().isSignlessInteger(32) &&
+              op->getResult(0).getType().isSignlessInteger(32) &&
+              mapped.getType().isIndex()))
+          return emitStagedDiagnostic(op, "arith.bitcast changing value type");
+      }
+      if (resultType != mapped.getType() && !mapped.getType().isIndex())
         return emitStagedDiagnostic(op, "arith.bitcast changing value type");
       bindValue(op->getResult(0), mapped);
       return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
@@ -2619,7 +2698,8 @@ private:
     static constexpr StringRef supportedArithOps[] = {
         "arith.addf",  "arith.subf", "arith.mulf",  "arith.divf",  "arith.extf",
         "arith.truncf", "arith.addi", "arith.subi",  "arith.muli",
-        "arith.cmpf",  "arith.cmpi", "arith.select"};
+        "arith.cmpf",  "arith.cmpi", "arith.select", "arith.maxnumf",
+        "arith.maximumf"};
     if (!hasAnyName(op, supportedArithOps))
       return emitStagedDiagnostic(op, op->getName().getStringRef());
 
@@ -2654,6 +2734,21 @@ private:
         return emitStagedDiagnostic(op, "arith result type");
       resultTypes.push_back(mapped);
     }
+    if (op->getNumResults() == 1 &&
+        hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli"}) &&
+        (resultTypes[0].isIndex() || resultTypes[0].isSignlessInteger(32))) {
+      for (Value &operand : operands) {
+        Type operandType = operand.getType();
+        if (operandType == resultTypes[0])
+          continue;
+        if (!((operandType.isIndex() || operandType.isSignlessInteger(32)) &&
+              (resultTypes[0].isIndex() ||
+               resultTypes[0].isSignlessInteger(32))))
+          continue;
+        operand = builder.create<arith::IndexCastOp>(op->getLoc(),
+                                                     resultTypes[0], operand);
+      }
+    }
 
     OperationState state(op->getLoc(), op->getName().getStringRef());
     state.addOperands(operands);
@@ -2665,6 +2760,12 @@ private:
                          builder.getStringAttr("approx_sfu"));
       state.addAttribute(kVC4ValueFPDomainAttr,
                          builder.getStringAttr("finite"));
+    }
+    if (hasName(op, "arith.maxnumf") || hasName(op, "arith.maximumf")) {
+      state.addAttribute(kVC4ValueFPDomainAttr, builder.getStringAttr("finite"));
+      state.addAttribute(kVC4ValueMaxPolicyAttr, builder.getStringAttr("finite"));
+      valueFunc->setAttr(kVC4ValueFPDomainAttr, builder.getStringAttr("finite"));
+      valueFunc->setAttr(kVC4ValueMaxPolicyAttr, builder.getStringAttr("finite"));
     }
     Operation *created = builder.create(state);
     for (auto [oldResult, newResult] :
@@ -2760,7 +2861,11 @@ private:
       dest.push_back(destBlock);
       blockMap[&sourceBlock] = destBlock;
       for (BlockArgument arg : sourceBlock.getArguments()) {
-        Type converted = convertRegionValueType(arg.getType());
+        auto override = regionArgTypeOverrides.find(arg);
+        Type converted =
+            override == regionArgTypeOverrides.end()
+                ? convertRegionValueType(arg.getType())
+                : override->second;
         if (!converted)
           return emitStagedDiagnostic(source.getParentOp(),
                                       "unsupported region block argument type");
@@ -2803,12 +2908,15 @@ private:
       return emitPermanentReject(op, "vector/per-lane branch condition as CFG");
 
     SmallVector<Value, 8> operands;
-    for (Value operand : op->getOperands()) {
-      Value mapped = lookup(operand);
-      if (!mapped)
-        return emitStagedDiagnostic(op,
-                                    "SCF operand not available in value map");
-      operands.push_back(mapped);
+    operands.reserve(op->getNumOperands());
+    for (auto [index, operand] : llvm::enumerate(op->getOperands())) {
+      FailureOr<Value> mapped =
+          hasName(op, "scf.for") && index < 3
+              ? ensureIndexValue(operand, op, "SCF operand not available in value map")
+              : lookupValue(operand, op, "SCF operand not available in value map");
+      if (failed(mapped))
+        return failure();
+      operands.push_back(*mapped);
     }
 
     SmallVector<Type, 4> resultTypes;
@@ -2831,10 +2939,32 @@ private:
          llvm::zip(op->getResults(), created->getResults()))
       bindValue(oldResult, newResult);
 
+    SmallVector<std::pair<BlockArgument, Type>, 1> savedOverrides;
+    if (hasName(op, "scf.for") && op->getNumRegions() == 1 &&
+        !op->getRegion(0).empty() &&
+        op->getRegion(0).front().getNumArguments() >= 1) {
+      BlockArgument sourceIv = op->getRegion(0).front().getArgument(0);
+      savedOverrides.push_back({sourceIv, regionArgTypeOverrides[sourceIv]});
+      regionArgTypeOverrides[sourceIv] = builder.getIndexType();
+    }
     for (auto [sourceRegion, destRegion] :
-         llvm::zip(op->getRegions(), created->getRegions()))
-      if (failed(lowerRegion(sourceRegion, destRegion)))
+         llvm::zip(op->getRegions(), created->getRegions())) {
+      if (failed(lowerRegion(sourceRegion, destRegion))) {
+        for (auto [arg, oldType] : savedOverrides) {
+          if (oldType)
+            regionArgTypeOverrides[arg] = oldType;
+          else
+            regionArgTypeOverrides.erase(arg);
+        }
         return failure();
+      }
+    }
+    for (auto [arg, oldType] : savedOverrides) {
+      if (oldType)
+        regionArgTypeOverrides[arg] = oldType;
+      else
+        regionArgTypeOverrides.erase(arg);
+    }
     builder.setInsertionPointAfter(created);
     return finishLowering(op, op->getNumResults() == 0
                                   ? LoweringOutcome::LoweredZeroResult
@@ -2921,6 +3051,29 @@ private:
     return transferIndex;
   }
 
+  FailureOr<Value> lookupValue(Value source, Operation *user,
+                               StringRef diagnostic) {
+    Value mapped = lookup(source);
+    if (!mapped)
+      return emitStagedDiagnostic(user, diagnostic);
+    return mapped;
+  }
+
+  FailureOr<Value> ensureIndexValue(Value source, Operation *user,
+                                    StringRef diagnostic) {
+    FailureOr<Value> mapped = lookupValue(source, user, diagnostic);
+    if (failed(mapped))
+      return failure();
+    if ((*mapped).getType().isIndex())
+      return *mapped;
+    if ((*mapped).getType().isSignlessInteger(32))
+      return builder
+          .create<arith::IndexCastOp>(user->getLoc(), builder.getIndexType(),
+                                      *mapped)
+          .getResult();
+    return emitStagedDiagnostic(user, "SCF loop bound is not i32/index");
+  }
+
   FailureOr<Value> ensureTailMask(Value mask, Operation *user,
                                   StringRef sparseDiagnostic) {
     if (mask != planner.getCommonPlan().tailMaskValue)
@@ -2985,6 +3138,7 @@ private:
   SmallVector<SmallVector<ScopedPointerBinding, 16>, 4> pointerScopes;
   DenseMap<Block *, Block *> blockMap;
   DenseMap<Value, PointerExpr> pointerValues;
+  DenseMap<BlockArgument, Type> regionArgTypeOverrides;
   DenseMap<Operation *, LoweringOutcome> loweringOutcomes;
 };
 

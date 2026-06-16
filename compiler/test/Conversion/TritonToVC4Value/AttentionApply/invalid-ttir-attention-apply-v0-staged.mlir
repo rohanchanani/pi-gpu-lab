@@ -9,7 +9,7 @@
 // NONTRANSPOSED: lane-varying stride/gather pointer expression staged
 // NONTRANSPOSED: READY_FOR_TRITON remains NO
 
-// SCALARLOAD: tt.load result type
+// SCALARLOAD: scalar tt.load
 // SCALARLOAD: READY_FOR_TRITON remains NO
 
 // KZERO: sparse or unknown tt.load memory mask

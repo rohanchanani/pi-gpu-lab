@@ -1160,3 +1160,29 @@ snapshots for precomputed-score attention apply with transposed V, stable
 natural-exp softmax, weighted sum, and scalar output store. The final TTIR
 mixed fixture proves this profile through the C++ importer and hardware with
 `active_qpus=12` and TTIR harness `block.x=16`.
+
+## 39. Phase 17.7 online softmax importer static lock
+
+TTIR_ONLINE_SOFTMAX_IMPORTER_STATIC=PASS
+TTIR_ONLINE_ATTENTION_APPLY_IMPORTER_STATIC=PASS
+TTIR_ONLINE_SOFTMAX_LOOP_STATE_LOWERING=YES
+TTIR_ONLINE_ATTENTION_PRECOMPUTED_SCORES=YES
+TTIR_ONLINE_ATTENTION_TRANSPOSED_V_LAYOUT=YES
+TTIR_ONLINE_ATTENTION_NATURAL_EXP_RECURRENT_SOFTMAX=YES
+TTIR_ONLINE_ATTENTION_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+TTIR_QK_SCORE_GENERATION_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE17_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 17.7 accepts controlled real TTIR snapshots for online/multiblock
+softmax state over K blocks of 16. The accepted profile is precomputed-score
+only, requires transposed V layout for lane-contiguous value loads, lowers
+`tl.range` / `scf.for` loop-carried scalar f32 `m/l/acc` state to standard
+value IR, preserves natural `math.exp` under explicit approximate-SFU policy,
+and emits scalar result stores. Scalar global loads, non-transposed V gather,
+K=0 without a guard, QK score generation, dot/contract, full attention,
+FlashAttention, block pointers, and cooperative/VPM tiling remain outside the
+accepted TTIR target profile.

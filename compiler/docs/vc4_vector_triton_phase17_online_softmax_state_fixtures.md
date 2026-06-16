@@ -70,6 +70,16 @@ CPU oracles, sentinels, nonzero output hashes, and checked claims. Scalar
 global loads, non-transposed V gather, K=0, QK score generation, dot/contract,
 full attention, and FlashAttention remain staged.
 
+Phase 17.7 statically locks the controlled real TTIR online softmax importer
+path. The C++ importer lowers the accepted `tl.range` / `scf.for` snapshots to
+standard value IR with loop-carried scalar f32 `m/l` or `m/l/acc` state,
+precomputed score row-slice loads, transposed V row-slice loads, finite scalar
+max, natural-exp recurrent softmax, weighted add reductions, optional scalar
+f32 scale arguments, and scalar output stores. The accepted snapshots then pass
+the full static pipeline through value verification, `vc4kernel`, `ssavc4`, and
+scheduled `vc4`. Scalar `tt.load`, non-transposed V gather/lane-varying stride,
+K=0 without guard, QK score generation, and `tt.dot` remain staged.
+
 Accepted Phase 17 scope is intentionally narrow:
 
 - real `@triton.jit` sources;
@@ -153,5 +163,19 @@ outputs while preserving a strict absolute bound; the hardware proof observed
 not mask wrong reductions or an incorrect exp base because the result checker
 still requires zero mismatches, zero sentinel mismatches, nonzero output hashes,
 natural-exp oracle agreement, and checked staged-feature guards.
+
+TTIR_ONLINE_SOFTMAX_IMPORTER_STATIC=PASS
+TTIR_ONLINE_ATTENTION_APPLY_IMPORTER_STATIC=PASS
+TTIR_ONLINE_SOFTMAX_LOOP_STATE_LOWERING=YES
+TTIR_ONLINE_ATTENTION_PRECOMPUTED_SCORES=YES
+TTIR_ONLINE_ATTENTION_TRANSPOSED_V_LAYOUT=YES
+TTIR_ONLINE_ATTENTION_NATURAL_EXP_RECURRENT_SOFTMAX=YES
+TTIR_ONLINE_ATTENTION_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+TTIR_QK_SCORE_GENERATION_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE17_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
 
 `READY_FOR_TRITON` remains `NO`.

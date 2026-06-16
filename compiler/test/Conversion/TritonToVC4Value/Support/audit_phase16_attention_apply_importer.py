@@ -58,9 +58,9 @@ def main() -> int:
     require(source, "kTTDotOpName", "tt.dot staging")
     require(source, "lane-varying stride/gather pointer expression staged",
             "non-transposed V gather reject")
-    require(source, "tt.load result type", "scalar tt.load reject")
-    require(source, "multi-block K accumulation is staged",
-            "multiblock accumulation reject")
+    require(source, "scalar tt.load", "scalar tt.load reject")
+    require(source, "isTTIRGeneratedScoreReductionCall",
+            "generated QK score structural reject")
     require(source, "tt.dot / contract", "dot/contract reject")
     require(source, "Argument names are metadata only",
             "argument-name non-semantic policy")

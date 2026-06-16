@@ -80,7 +80,7 @@
     },
     {
       "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-scalar-load.mlir",
-      "diagnostic": "tt.load result type"
+      "diagnostic": "scalar tt.load"
     },
     {
       "path": "compiler/test/Conversion/TritonToVC4Value/AttentionApply/invalid-ttir-attention-apply-k-zero.mlir",

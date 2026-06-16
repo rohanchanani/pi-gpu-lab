@@ -231,3 +231,29 @@ TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE16_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
+
+## Phase 17.7 Online Softmax Importer Audit Extension
+
+The Phase 17.7 importer audit locks controlled TTIR online/multiblock softmax
+state lowering as structural C++ importer support for `tl.range` / `scf.for`
+loop-carried scalar f32 state, row-contiguous precomputed score loads,
+row-contiguous transposed V loads, finite max/add reductions, natural-exp
+recurrent softmax, optional scalar argument splats, weighted sums, and scalar
+stores. It does not parse raw TTIR text, use regex or substring semantic
+classification, special-case fixture names, infer source path semantics, emit
+lower-half IR directly, accept scalar `tt.load`, accept non-transposed V gather,
+or accept QK score generation.
+
+TTIR_ONLINE_SOFTMAX_IMPORTER_STATIC=PASS
+TTIR_ONLINE_ATTENTION_APPLY_IMPORTER_STATIC=PASS
+TTIR_ONLINE_SOFTMAX_LOOP_STATE_LOWERING=YES
+TTIR_ONLINE_ATTENTION_PRECOMPUTED_SCORES=YES
+TTIR_ONLINE_ATTENTION_TRANSPOSED_V_LAYOUT=YES
+TTIR_ONLINE_ATTENTION_NATURAL_EXP_RECURRENT_SOFTMAX=YES
+TTIR_ONLINE_ATTENTION_WEIGHTED_SUM=YES
+TTIR_NONTRANSPOSED_V_GATHER_REJECT=PASS
+TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
+TTIR_QK_SCORE_GENERATION_REJECT=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE17_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
