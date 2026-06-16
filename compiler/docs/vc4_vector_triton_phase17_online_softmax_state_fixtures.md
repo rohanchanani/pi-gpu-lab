@@ -9,6 +9,12 @@ VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
 VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
 VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
 LOOP_CARRIED_F32_STATE_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_STATE_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
+VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -19,6 +25,7 @@ K_ZERO_ONLINE_SOFTMAX_STAGED=YES
 READY_FOR_PHASE17_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 17 Online Softmax State Fixtures
@@ -39,6 +46,15 @@ control-flow, dynamic row-slice memory, scalar-store, reduction, f16-storage,
 and natural-exp SFU planners, with a narrow finite scalar f32 max helper for
 the online recurrence. It does not run hardware and does not broaden the
 accepted TTIR scope.
+
+Phase 17.5 proves the accepted value online softmax state and online
+attention-apply composites on real VC4 hardware with targeted isolation
+fixtures. The fixtures run with `active_qpus=12`, strict sentinels, nonzero
+output hashes, host CPU oracles, and checked expected JSON. The proof covers
+normalizer `m/l` state, attention `m/l/acc` state, K values greater than one
+block, precomputed scores, transposed V layout, scalar result stores, scalar
+f32 scale arguments, and repeat launches. The f16-storage variant remains not
+required for the Phase 17 core hardware-isolation proof.
 
 Accepted Phase 17 scope is intentionally narrow:
 
@@ -112,5 +128,16 @@ approximate-SFU finite tolerance policy. Future hardware acceptance for these
 fixtures must use the appropriate approximate-SFU tolerance caveat. Exact or
 default math remains rejected unless a later phase explicitly changes that
 policy.
+
+Phase 17.5 locks the online softmax tolerance policy for these isolation
+fixtures. The normalizer denominator fixture uses the Phase15 natural-exp SFU
+policy with absolute/relative caps `0.12/0.025`; the hardware proof observed
+`max_abs_diff=0.001731` and `max_rel_diff=0.000093`. The attention fixtures use
+absolute cap `0.012` and relative cap `0.08` to account for near-zero weighted
+outputs while preserving a strict absolute bound; the hardware proof observed
+`max_abs_diff <= 0.000071` across f32 and scaled attention. This tolerance does
+not mask wrong reductions or an incorrect exp base because the result checker
+still requires zero mismatches, zero sentinel mismatches, nonzero output hashes,
+natural-exp oracle agreement, and checked staged-feature guards.
 
 `READY_FOR_TRITON` remains `NO`.

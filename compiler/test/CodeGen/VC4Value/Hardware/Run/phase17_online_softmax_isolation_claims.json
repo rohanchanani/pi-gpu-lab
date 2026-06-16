@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase17_online_softmax_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_online_softmax_normalizer_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_online_softmax_normalizer_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_online_softmax_state", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_online_softmax_state", "input_marker": "scf.for %start = %c0 to %k step %c16", "oracle_marker": "expected_denom"},
+        {"claim": "saw_value_loop_carried_m_l_state", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_loop_carried_m_l_state", "input_marker": "iter_args(%m_iter = %m0, %l_iter = %l0, %acc_iter = %acc0)", "oracle_marker": "denom +="},
+        {"claim": "saw_value_k_gt_16", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_k_gt_16", "input_marker": "%remaining = arith.subi %k, %start", "oracle_marker": "64u"},
+        {"claim": "saw_softmax_uses_natural_exp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_softmax_uses_natural_exp", "input_marker": "math.exp %shifted", "oracle_marker": "natural_exp_ref"},
+        {"claim": "saw_no_scalar_global_load", "kind": "CHECKED_AUDIT", "expected_field": "saw_no_scalar_global_load", "forbidden_input_marker": "memref.load"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_online_attention_apply_v0_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_online_attention_apply_v0_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_value_online_attention_apply", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_online_attention_apply", "input_marker": "func.func @value_online_attention_apply_v0_f32_b16_vc4value", "oracle_marker": "expected_attention"},
+        {"claim": "saw_value_precomputed_scores", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_precomputed_scores", "input_marker": "%scores: memref<?xf32", "oracle_marker": "score_value"},
+        {"claim": "saw_value_transposed_v_layout", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_transposed_v_layout", "input_marker": "%vrow = arith.muli %d, %ldv", "oracle_marker": "vt_values[GUARD + d * ldv + j]"},
+        {"claim": "saw_value_loop_carried_m_l_acc_state", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_loop_carried_m_l_acc_state", "input_marker": "iter_args(%m_iter = %m0, %l_iter = %l0, %acc_iter = %acc0)", "oracle_marker": "acc +="},
+        {"claim": "saw_value_k_gt_16", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_k_gt_16", "input_marker": "%vidx = arith.addi %vrow, %start", "oracle_marker": "64u"},
+        {"claim": "saw_value_weighted_sum_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_weighted_sum_reduction", "input_marker": "%block_acc = vector.reduction <add>, %weighted", "oracle_marker": "prob * vt_values"},
+        {"claim": "saw_value_scalar_result_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_result_store", "input_marker": "memref.store %outv, %out[%oidx]", "oracle_marker": "out_values[index]"},
+        {"claim": "saw_softmax_uses_natural_exp", "kind": "CHECKED_OUTPUT", "expected_field": "saw_softmax_uses_natural_exp", "input_marker": "math.exp %shifted", "oracle_marker": "natural_exp_ref"},
+        {"claim": "saw_no_scalar_global_load", "kind": "CHECKED_AUDIT", "expected_field": "saw_no_scalar_global_load", "forbidden_input_marker": "memref.load"},
+        {"claim": "saw_no_nontransposed_v_gather", "kind": "CHECKED_AUDIT", "expected_field": "saw_no_nontransposed_v_gather", "input_marker": "%vrow = arith.muli %d, %ldv", "forbidden_input_marker": "vector.gather"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_online_attention_apply_v0_scaled_f32_b16_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_online_attention_apply_v0_scaled_f32_b16_vc4value",
+      "claims": [
+        {"claim": "saw_scalar_scale_arg", "kind": "CHECKED_OUTPUT", "expected_field": "saw_scalar_scale_arg", "input_marker": "%scale: f32", "oracle_marker": "scale_value"},
+        {"claim": "saw_value_attention_apply_scaled_scores", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_attention_apply_scaled_scores", "input_marker": "%scores_v = arith.mulf %scores_raw, %scale_v", "oracle_marker": "scale_value"},
+        {"claim": "saw_value_online_attention_apply", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_online_attention_apply", "input_marker": "func.func @value_online_attention_apply_v0_scaled_f32_b16_vc4value", "oracle_marker": "expected_attention"},
+        {"claim": "scaled_no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_online_attention_apply_repeat_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_online_attention_apply_repeat_vc4value",
+      "claims": [
+        {"claim": "saw_repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "func.func @value_online_attention_apply_repeat_vc4value", "oracle_marker": "struct repeat_case"},
+        {"claim": "saw_k1_attention_apply", "kind": "CHECKED_OUTPUT", "expected_field": "saw_k1_attention_apply", "input_marker": "vector.create_mask %remaining", "oracle_marker": "{1u, 1u, 1u"},
+        {"claim": "saw_k17_attention_apply", "kind": "CHECKED_OUTPUT", "expected_field": "saw_k17_attention_apply", "input_marker": "scf.for %start = %c0 to %k step %c16", "oracle_marker": "17u"},
+        {"claim": "saw_k64_attention_apply", "kind": "CHECKED_OUTPUT", "expected_field": "saw_k64_attention_apply", "input_marker": "scf.for %start = %c0 to %k step %c16", "oracle_marker": "64u"},
+        {"claim": "repeat_no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "phase17_static_staged_guards",
+      "claims": [
+        {"claim": "staged_nontransposed_v_gather", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-attention-nontransposed-v-gather.mlir"]},
+        {"claim": "staged_scalar_global_load", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-attention-scalar-global-load.mlir"]},
+        {"claim": "staged_k_zero_online_softmax", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-softmax-k-zero-without-guard.mlir"]},
+        {"claim": "staged_qk_score_generation", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-attention-qk-dot-staged.mlir"]},
+        {"claim": "staged_dot_contract", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-attention-qk-dot-staged.mlir"]},
+        {"claim": "staged_full_attention_flashattention", "kind": "PHASE_GUARD", "doc_markers": ["full attention", "FlashAttention"]},
+        {"claim": "exact_default_math_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-online-attention-exact-math-no-policy.mlir"]}
+      ]
+    }
+  ]
+}

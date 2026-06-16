@@ -22,6 +22,12 @@ VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
 VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
 VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
 LOOP_CARRIED_F32_STATE_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_STATE_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
+VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_ATTENTION_APPLY_V0_STATIC_PLANNED=YES
@@ -159,6 +165,7 @@ READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -294,6 +301,12 @@ VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
 VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
 VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
 LOOP_CARRIED_F32_STATE_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_STATE_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_HARDWARE_ISOLATION=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
+VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
+VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -302,6 +315,7 @@ SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_TRITON=NO
 
 Phase 17.3 was a planning and verifier contract only. Phase 17.4 proves static
@@ -349,6 +363,29 @@ Phase 17.4 static proof covers:
   static CodeGen/VC4Value candidates.
 
 No hardware is run in Phase 17.4. Hardware isolation is Phase 17.5.
+
+Phase 17.5 hardware isolation proves the online/multiblock softmax value
+composites on real VC4 hardware. The isolation fixtures run with
+`active_qpus=12`, strict sentinels, host CPU oracles, nonzero output hashes,
+and expected JSON checks. Coverage includes:
+
+- online softmax normalizer f32 over K blocks with loop-carried `m/l` state;
+- precomputed-score online attention-apply f32 with transposed V and
+  loop-carried `m/l/acc` state;
+- scalar f32 scale argument attention-apply;
+- repeat launches with K=1, K=17, and K=64 to check invocation isolation.
+
+The Phase 17.5 tolerance policy remains tied to the Phase15 natural-exp
+approximate-SFU policy. The normalizer denominator fixture uses
+absolute/relative caps `0.12/0.025`, with observed hardware
+`max_abs_diff=0.001731` and `max_rel_diff=0.000093`. Attention fixtures use
+absolute cap `0.012` and relative cap `0.08` because near-zero weighted outputs
+can have high relative error while the absolute error remains small; observed
+hardware `max_abs_diff` is at most `0.000071`. The checker still requires zero
+mismatches, zero sentinel mismatches, nonzero output hashes, and structural
+claim audits, so the tolerance does not hide wrong reductions or wrong exp
+base. K=0, scalar global loads, non-transposed V gather, QK score generation,
+dot/contract, full attention, and FlashAttention remain staged.
 
 ## 2. Planning boundary
 

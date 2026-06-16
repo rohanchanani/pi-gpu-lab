@@ -1,0 +1,31 @@
+{
+  "name": "value_online_attention_apply_repeat_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 12,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 12,
+    "saw_value_online_attention_apply": 1,
+    "saw_repeat_invocation": 1,
+    "saw_k1_attention_apply": 1,
+    "saw_k17_attention_apply": 1,
+    "saw_k64_attention_apply": 1,
+    "saw_value_precomputed_scores": 1,
+    "saw_value_transposed_v_layout": 1,
+    "saw_value_loop_carried_m_l_acc_state": 1,
+    "saw_value_k_gt_16": 1,
+    "saw_value_weighted_sum_reduction": 1,
+    "saw_value_scalar_result_store": 1,
+    "saw_softmax_uses_natural_exp": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.012,
+    "max_rel_diff": 0.016
+  }
+}
