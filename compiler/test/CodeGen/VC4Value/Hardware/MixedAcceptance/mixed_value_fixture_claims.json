@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase16_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase17_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -1205,6 +1205,197 @@
               "ttir_attention_apply_multiblock_reject_b16.ttir.mlir"
             ],
             "guard": "fixture covers only precomputed-score attention apply v0 and excludes full attention, FlashAttention, QK generation, dot, and multiblock softmax."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value/candidate/mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses a 2D vc4value grid over q and d axes; the harness launches grid=(q_rows,out_dims,1) and expected.json requires saw_value_multi_axis=1."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir contains an scf.for online loop over K blocks which the runner lowers through the scf-to-cf boundary; the harness varies K over one and multiple blocks."
+          }
+        },
+        {
+          "claim": "saw_value_loop_carried_f32_state",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir carries scalar f32 m/l/acc iter_args through the scf.for loop; output and audit values depend on the final carried state."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask %remaining on every K block; the harness varies tail K values and verifies padding sentinels for all input and output buffers."
+          }
+        },
+        {
+          "claim": "saw_value_row_strided_memory",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses rank-2 row-strided scores, Vt, residual, and gate memrefs; the harness varies score and Vt row strides and checks row padding sentinels."
+          }
+        },
+        {
+          "claim": "saw_value_reduction_f32_finite_add",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reduces active_e and weighted values with vector.reduction <add>; the harness oracle accumulates denominator and acc += prob * effective."
+          }
+        },
+        {
+          "claim": "saw_value_f16_storage_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "scores and Vt are f16 row-strided inputs loaded with vector.transfer_read and extended to f32; the harness stores half values and converts with f16_to_f32 in the oracle."
+          }
+        },
+        {
+          "claim": "saw_value_softmax_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir implements stable softmax over precomputed scores using block max, natural exp, denominator reduction, and weighted recurrence; expected output depends on the softmax probabilities."
+          }
+        },
+        {
+          "claim": "saw_value_attention_apply_v0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir computes precomputed-score softmax probabilities times an effective transposed-V vector and stores one scalar per (q,d); expected.json requires saw_value_attention_apply_v0=1."
+          }
+        },
+        {
+          "claim": "saw_value_online_softmax_state",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir implements the online m/l recurrence across scf.for K blocks; the harness includes K=17,31,32,33,47,64 and checks the final denominator audit."
+          }
+        },
+        {
+          "claim": "saw_value_online_attention_apply",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir carries m/l/acc through the online attention-apply loop; the harness checks direct stable softmax weighted sums over all K."
+          }
+        },
+        {
+          "claim": "saw_value_k_gt_16",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the harness case table includes K values greater than one block, including 17, 31, 32, 33, 47, and 64; expected.json requires saw_value_k_gt_16=1."
+          }
+        },
+        {
+          "claim": "saw_value_transposed_v_layout",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir loads Vt as %vt[%d, %start] so lanes are contiguous over K; the harness oracle uses vt_value(case,d,j)."
+          }
+        },
+        {
+          "claim": "saw_value_weighted_sum_reduction",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir multiplies active exponentials by the effective V vector and reduces with vector.reduction <add>; the harness checks acc += prob * effective."
+          }
+        },
+        {
+          "claim": "saw_value_scalar_result_store",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores scalar outv and denominator audit values with memref.store; output and audit buffers are checked against CPU oracles and sentinels."
+          }
+        },
+        {
+          "claim": "saw_softmax_uses_natural_exp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the harness oracle calls natural_exp_ref on scaled score deltas and expected.json requires saw_softmax_uses_natural_exp=1."
+          }
+        },
+        {
+          "claim": "saw_value_mixed_i32_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir combines i32 gate reads with f32 residual arithmetic inside the effective value vector; output depends on both gate_value and residual_value."
+          }
+        },
+        {
+          "claim": "saw_value_i32_cmp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses arith.cmpi sgt over gate vector lanes; the harness oracle uses gate_value(case,d,j) > 0."
+          }
+        },
+        {
+          "claim": "saw_value_f32_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses f32 multiply/add/sub/select on residual and Vt values; the harness checks v + residual * scale or v - residual per gate lane."
+          }
+        },
+        {
+          "claim": "saw_value_f32_compute_after_f16_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir extends f16 score/Vt loads to f32 before softmax and weighted reduction; the oracle computes in f32 from f16_to_f32 inputs."
+          }
+        },
+        {
+          "claim": "saw_f16_storage_finite_policy",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir carries vc4value.f16_storage_policy = \"finite\" and the harness uses finite half input sets plus finite tolerance checks."
+          }
+        },
+        {
+          "claim": "saw_no_scalar_global_load",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir has no memref.load; scale is a scalar kernel argument and expected.json requires saw_no_scalar_global_load=1."
+          }
+        },
+        {
+          "claim": "saw_no_nontransposed_v_gather",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir uses Vt row-contiguous %vt[%d,%start] transfer reads and contains no vector.gather/scatter or lane-varying stride form."
+          }
+        },
+        {
+          "claim": "saw_no_qk_score_generation",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "invalid-online-attention-qk-dot-staged.mlir"
+            ],
+            "guard": "scores are precomputed input storage; no QK score generation, tt.dot, tl.dot, or vector.contract is used."
+          }
+        },
+        {
+          "claim": "saw_no_full_attention",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "invalid-online-attention-qk-dot-staged.mlir"
+            ],
+            "guard": "fixture covers only precomputed-score online attention apply and excludes full attention, FlashAttention, QK generation, dot, block pointers, and cooperative tiling."
           }
         }
       ]

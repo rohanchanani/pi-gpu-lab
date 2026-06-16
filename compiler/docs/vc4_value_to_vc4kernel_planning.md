@@ -28,6 +28,8 @@ VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
 VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
+VALUE_ONLINE_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_ATTENTION_APPLY_V0_STATIC_PLANNED=YES
@@ -307,6 +309,8 @@ VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
 VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
+VALUE_ONLINE_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -316,6 +320,7 @@ NONTRANSPOSED_V_GATHER_STAGED=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_PHASE17_7_TTIR_IMPORTER_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
 Phase 17.3 was a planning and verifier contract only. Phase 17.4 proves static
@@ -1792,6 +1797,24 @@ active_qpus=12 repeated launches. The full VC4Value mixed hardware suite
 passes, and the mixed claim audit covers the new attention-apply claims without
 claiming QK score generation, dot/contract, scalar global loads,
 non-transposed V gather, full attention, or FlashAttention.
+
+## 38.1 Phase 17.6 online-softmax value mixed acceptance
+
+VALUE_ONLINE_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE17_7_TTIR_IMPORTER_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 17.6 adds the cumulative mixed fixture
+`mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value`. The
+fixture combines online `m/l/acc` attention state with multi-axis launch,
+masks, control flow, finite reductions, row-strided f16 storage, i32/f32 value
+interaction, natural-exp softmax, transposed V layout, weighted reductions,
+scalar result stores, K values greater than 16, repeated launches, and
+`active_qpus=12`. The full VC4Value mixed hardware suite passes, and the
+claim audit checks Phase 17 online softmax claims without claiming scalar
+global loads, non-transposed V gather, QK score generation, dot/contract,
+full attention, or FlashAttention.
 
 ## 39. Phase 16 final attention-apply v0 lock
 

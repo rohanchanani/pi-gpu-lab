@@ -180,12 +180,16 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "%block = vc4value.program_id {axis = 0" in mlir
             and "%row = vc4value.program_id {axis = 1" in mlir
         )
+        has_direct_2d_grid = (
+            "%q = vc4value.program_id {axis = 0" in mlir
+            and "%d = vc4value.program_id {axis = 1" in mlir
+        )
         has_direct_3d_grid = (
             "%q = vc4value.program_id {axis = 0" in mlir
             and "%d = vc4value.program_id {axis = 1" in mlir
             and "%group = vc4value.program_id {axis = 2" in mlir
         )
-        if not has_flattened_grid and not has_row_block_grid and not has_direct_3d_grid:
+        if not has_flattened_grid and not has_row_block_grid and not has_direct_2d_grid and not has_direct_3d_grid:
             fail("saw_value_multi_axis input lacks accepted flattened or row/block grid shape")
         has_phase10_grid_oracle = all(
             marker in harness
@@ -203,7 +207,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             marker in harness
             for marker in ("vc4_m2_dim3(tc->q_rows, tc->out_dims, GROUPS)", "active_qpus=%d")
         )
-        if not has_phase10_grid_oracle and not has_phase11_grid_oracle and not has_phase15_grid_oracle and not has_phase16_grid_oracle:
+        has_phase17_grid_oracle = all(
+            marker in harness
+            for marker in ("vc4_m2_dim3(tc->q_rows, tc->out_dims, 1u)", "active_qpus=%d")
+        )
+        if not has_phase10_grid_oracle and not has_phase11_grid_oracle and not has_phase15_grid_oracle and not has_phase16_grid_oracle and not has_phase17_grid_oracle:
             fail("saw_value_multi_axis harness missing checked grid coordinate oracle")
 
     if "saw_value_program_id_axis1" in claim_names:
@@ -273,11 +281,14 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(runner, "after-scf-to-cf", "saw_scf_to_cf_boundary runner")
 
     if "saw_value_control_flow" in claim_names:
-        require_marker(mlir, "cf.cond_br", "saw_value_control_flow input")
-        if "arith.cmpi ult" not in mlir and "arith.cmpi eq" not in mlir:
+        if "cf.cond_br" not in mlir:
+            require_marker(mlir, "scf.for", "saw_value_control_flow input")
+        if "arith.cmpi ult" not in mlir and "arith.cmpi eq" not in mlir and "scf.for" not in mlir:
             fail("saw_value_control_flow input lacks checked scalar branch predicate")
         if "cf.br ^loop" in mlir:
             require_marker(mlir, "cf.br ^loop", "saw_value_control_flow input")
+        elif "scf.for" in mlir:
+            require_marker(mlir, "iter_args", "saw_value_control_flow input")
         else:
             if "cf.cond_br %inside" in mlir:
                 require_marker(mlir, "cf.cond_br %use_i32", "saw_value_control_flow input")
@@ -289,6 +300,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, "MIXED_VALUE_SFU_SOFTMAX_AXIS_MASK_CF_F16_CASE", "saw_value_control_flow harness")
         elif "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" in harness:
             require_marker(harness, "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE", "saw_value_control_flow harness")
+        elif "MIXED_VALUE_ONLINE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" in harness:
+            require_marker(harness, "MIXED_VALUE_ONLINE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE", "saw_value_control_flow harness")
         else:
             for marker in ("trip", "use_i32_path"):
                 require_marker(harness, marker, "saw_value_control_flow harness")
@@ -299,6 +312,7 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             and "MIXED_VALUE_F16_STORAGE_GEMV_AXIS_MASK_CF_CASE" not in harness
             and "MIXED_VALUE_SFU_SOFTMAX_AXIS_MASK_CF_F16_CASE" not in harness
             and "MIXED_VALUE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" not in harness
+            and "MIXED_VALUE_ONLINE_ATTENTION_APPLY_AXIS_MASK_CF_F16_CASE" not in harness
         ):
             fail("saw_value_control_flow harness missing mixed case result marker")
 
@@ -433,6 +447,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
                 or "vector.transfer_read %x[%row, %col]" in mlir
                 or "vector.transfer_read %scores[%q, %c0]" in mlir
                 or "vector.transfer_read %vt[%d, %c0]" in mlir
+                or "vector.transfer_read %scores[%q, %start]" in mlir
+                or "vector.transfer_read %vt[%d, %start]" in mlir
             )
         )
         if not has_i32_row and not has_f32_row and not has_f16_row:
@@ -559,8 +575,14 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         )
         has_softmax_f16_load = "vector.transfer_read %x[%row, %col]" in mlir
         has_attention_f16_load = (
-            "vector.transfer_read %scores[%q, %c0]" in mlir
-            and "vector.transfer_read %vt[%d, %c0]" in mlir
+            (
+                "vector.transfer_read %scores[%q, %c0]" in mlir
+                or "vector.transfer_read %scores[%q, %start]" in mlir
+            )
+            and (
+                "vector.transfer_read %vt[%d, %c0]" in mlir
+                or "vector.transfer_read %vt[%d, %start]" in mlir
+            )
         )
         if not has_gemv_f16_load and not has_softmax_f16_load and not has_attention_f16_load:
             fail("saw_value_f16_storage_load input lacks accepted f16 transfer_read")
@@ -623,32 +645,42 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_value_approx_sfu_exp" in claim_names:
         for marker in ('vc4value.math_policy = "approx_sfu"', "math.exp"):
             require_marker(mlir, marker, "saw_value_approx_sfu_exp input")
-        for marker in ("natural_exp_ref", "expected_softmax", "saw_softmax_uses_natural_exp=1"):
+        if "expected_attention" in harness:
+            harness_markers = ("natural_exp_ref", "expected_attention", "saw_softmax_uses_natural_exp=1")
+        else:
+            harness_markers = ("natural_exp_ref", "expected_softmax", "saw_softmax_uses_natural_exp=1")
+        for marker in harness_markers:
             require_marker(harness, marker, "saw_value_approx_sfu_exp harness")
 
     if "saw_value_approx_sfu_recip_div" in claim_names:
-        for marker in ("%inv = arith.divf %one, %denom", "vector.broadcast %inv"):
-            require_marker(mlir, marker, "saw_value_approx_sfu_recip_div input")
-        for marker in ("row_sum", "expected_softmax", "saw_value_approx_sfu_recip_div=1"):
+        if "%inv = arith.divf %one, %denom" in mlir:
+            for marker in ("%inv = arith.divf %one, %denom", "vector.broadcast %inv"):
+                require_marker(mlir, marker, "saw_value_approx_sfu_recip_div input")
+        else:
+            require_marker(mlir, "%outv = arith.divf %state#2, %state#1", "saw_value_approx_sfu_recip_div input")
+        if "expected_attention" in harness:
+            harness_markers = ("expected_attention", "saw_value_approx_sfu_recip_div=1")
+        else:
+            harness_markers = ("row_sum", "expected_softmax", "saw_value_approx_sfu_recip_div=1")
+        for marker in harness_markers:
             require_marker(harness, marker, "saw_value_approx_sfu_recip_div harness")
 
     if "saw_value_finite_f32_max_reduction" in claim_names:
         for marker in ('vc4value.max_policy = "finite"', "vector.reduction <maxnumf>"):
             require_marker(mlir, marker, "saw_value_finite_f32_max_reduction input")
-        for marker in ("maxv", "logit_value", "saw_value_finite_f32_max_reduction=1"):
+        if "score_value" in harness:
+            harness_markers = ("maxv", "score_value", "saw_value_finite_f32_max_reduction=1")
+        else:
+            harness_markers = ("maxv", "logit_value", "saw_value_finite_f32_max_reduction=1")
+        for marker in harness_markers:
             require_marker(harness, marker, "saw_value_finite_f32_max_reduction harness")
 
     if "saw_value_softmax_v0" in claim_names:
-        for marker in (
-            'vc4value.softmax_v0 = "one_block_active_1_to_16"',
-            "vector.reduction <maxnumf>",
-            "math.exp",
-            "vector.reduction <add>",
-            "arith.divf",
-        ):
+        for marker in ("vector.reduction <maxnumf>", "math.exp", "vector.reduction <add>", "arith.divf"):
             require_marker(mlir, marker, "saw_value_softmax_v0 input")
         if "saw_value_attention_apply_v0" in claim_names:
-            require_marker(mlir, "memref.store %acc, %out[%oidx]", "saw_value_softmax_v0 input")
+            if "memref.store %acc, %out[%oidx]" not in mlir:
+                require_marker(mlir, "memref.store %outv, %out[%oidx]", "saw_value_softmax_v0 input")
         else:
             require_marker(mlir, "vector.transfer_write", "saw_value_softmax_v0 input")
         if "expected_attention" in harness:
@@ -659,7 +691,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
                 require_marker(harness, marker, "saw_value_softmax_v0 harness")
 
     if "saw_scalar_to_vector_f32_broadcast" in claim_names:
-        for marker in ("vector.broadcast %max", "vector.broadcast %inv"):
+        if "vector.broadcast %max" in mlir:
+            markers = ("vector.broadcast %max", "vector.broadcast %inv")
+        else:
+            markers = ("vector.broadcast %scale", "vector.broadcast %block_m")
+        for marker in markers:
             require_marker(mlir, marker, "saw_scalar_to_vector_f32_broadcast input")
         require_marker(harness, "saw_scalar_to_vector_f32_broadcast=1", "saw_scalar_to_vector_f32_broadcast harness")
 
@@ -677,6 +713,29 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_no_exact_default_math" in claim_names:
         require_marker(mlir, 'vc4value.math_policy = "approx_sfu"', "saw_no_exact_default_math input")
         require_marker(harness, "saw_no_exact_default_math=1", "saw_no_exact_default_math harness")
+
+    if "saw_value_loop_carried_f32_state" in claim_names:
+        for marker in ("scf.for %start = %c0 to %k step %c16", "iter_args(%m_iter = %m0, %l_iter = %l0, %acc_iter = %acc0)", "scf.yield %m_new, %l_next, %acc_next"):
+            require_marker(mlir, marker, "saw_value_loop_carried_f32_state input")
+        for marker in ("expected_attention", "expected_denom"):
+            require_marker(harness, marker, "saw_value_loop_carried_f32_state harness")
+
+    if "saw_value_online_softmax_state" in claim_names:
+        for marker in ("arith.maxnumf %m_iter", "%alpha = math.exp", "%beta = math.exp", "%l_next = arith.addf"):
+            require_marker(mlir, marker, "saw_value_online_softmax_state input")
+        for marker in ("expected_denom", "64u"):
+            require_marker(harness, marker, "saw_value_online_softmax_state harness")
+
+    if "saw_value_online_attention_apply" in claim_names:
+        for marker in ("scf.for %start = %c0 to %k step %c16", "%acc_next = arith.addf", "%outv = arith.divf %state#2, %state#1"):
+            require_marker(mlir, marker, "saw_value_online_attention_apply input")
+        for marker in ("expected_attention", "acc += prob * effective"):
+            require_marker(harness, marker, "saw_value_online_attention_apply harness")
+
+    if "saw_value_k_gt_16" in claim_names:
+        require_marker(mlir, "scf.for %start = %c0 to %k step %c16", "saw_value_k_gt_16 input")
+        for marker in ("17u", "64u"):
+            require_marker(harness, marker, "saw_value_k_gt_16 harness")
 
     if "saw_no_multiblock_softmax" in claim_names:
         for marker in ("atomic", "memref.load %y", "cross_program"):
@@ -696,29 +755,49 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(harness, "saw_no_full_attention=1", "saw_no_full_attention harness")
 
     if "saw_value_attention_apply_v0" in claim_names:
-        for marker in (
-            'vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"',
-            "%probs = arith.mulf %active_e, %invv",
-            "%weighted = arith.mulf %probs, %effective_v",
-            "memref.store %acc, %out[%oidx]",
-        ):
+        if 'vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"' in mlir:
+            markers = (
+                'vc4value.attention_apply_v0 = "precomputed_transposed_v_active_1_to_16"',
+                "%probs = arith.mulf %active_e, %invv",
+                "%weighted = arith.mulf %probs, %effective_v",
+                "memref.store %acc, %out[%oidx]",
+            )
+        else:
+            markers = (
+                "vector.transfer_read %scores[%q,",
+                "vector.transfer_read %vt[%d,",
+                "%weighted = arith.mulf %active_e, %effective_v",
+                "memref.store %outv, %out[%oidx]",
+            )
+        for marker in markers:
             require_marker(mlir, marker, "saw_value_attention_apply_v0 input")
         for marker in ("expected_attention", "saw_value_attention_apply_v0=1"):
             require_marker(harness, marker, "saw_value_attention_apply_v0 harness")
 
     if "saw_value_transposed_v_layout" in claim_names:
-        require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_value_transposed_v_layout input")
+        if "vector.transfer_read %vt[%d, %c0]" not in mlir:
+            require_marker(mlir, "vector.transfer_read %vt[%d, %start]", "saw_value_transposed_v_layout input")
+        else:
+            require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_value_transposed_v_layout input")
         for marker in ("vt_value(case_id, d, j)", "saw_value_transposed_v_layout=1"):
             require_marker(harness, marker, "saw_value_transposed_v_layout harness")
 
     if "saw_value_weighted_sum_reduction" in claim_names:
-        for marker in ("%weighted = arith.mulf %probs", "vector.reduction <add>, %weighted"):
+        if "%weighted = arith.mulf %probs" in mlir:
+            weighted_marker = "%weighted = arith.mulf %probs"
+        else:
+            weighted_marker = "%weighted = arith.mulf %active_e"
+        for marker in (weighted_marker, "vector.reduction <add>, %weighted"):
             require_marker(mlir, marker, "saw_value_weighted_sum_reduction input")
         for marker in ("acc += prob * effective", "saw_value_weighted_sum_reduction=1"):
             require_marker(harness, marker, "saw_value_weighted_sum_reduction harness")
 
     if "saw_value_scalar_result_store" in claim_names:
-        for marker in ("memref.store %acc, %out[%oidx]", "memref.store %denom, %audit[%oidx]"):
+        if "memref.store %acc, %out[%oidx]" in mlir:
+            markers = ("memref.store %acc, %out[%oidx]", "memref.store %denom, %audit[%oidx]")
+        else:
+            markers = ("memref.store %outv, %out[%oidx]", "memref.store %state#1, %audit[%oidx]")
+        for marker in markers:
             require_marker(mlir, marker, "saw_value_scalar_result_store input")
         for marker in ("out_values[index]", "audit_values[index]", "saw_value_scalar_result_store=1"):
             require_marker(harness, marker, "saw_value_scalar_result_store harness")
@@ -732,7 +811,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         for marker in ("vector.gather", "vector.scatter", "strided<[?, ?]", "offs *"):
             if marker in mlir:
                 fail(f"saw_no_nontransposed_v_gather input uses forbidden marker {marker}")
-        require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_no_nontransposed_v_gather input")
+        if "vector.transfer_read %vt[%d, %c0]" not in mlir:
+            require_marker(mlir, "vector.transfer_read %vt[%d, %start]", "saw_no_nontransposed_v_gather input")
+        else:
+            require_marker(mlir, "vector.transfer_read %vt[%d, %c0]", "saw_no_nontransposed_v_gather input")
         require_marker(harness, "saw_no_nontransposed_v_gather=1", "saw_no_nontransposed_v_gather harness")
 
     if "saw_no_qk_score_generation" in claim_names:

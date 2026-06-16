@@ -15,6 +15,8 @@ VALUE_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
 VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
 VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
+VALUE_ONLINE_SOFTMAX_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -26,6 +28,7 @@ READY_FOR_PHASE17_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_PHASE17_7_TTIR_IMPORTER_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 17 Online Softmax State Fixtures
@@ -55,6 +58,17 @@ normalizer `m/l` state, attention `m/l/acc` state, K values greater than one
 block, precomputed scores, transposed V layout, scalar result stores, scalar
 f32 scale arguments, and repeat launches. The f16-storage variant remains not
 required for the Phase 17 core hardware-isolation proof.
+
+Phase 17.6 adds the cumulative value mixed fixture
+`mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value`. The
+fixture combines multi-axis launch, control flow, masks, row-strided f16
+storage, i32/f32 value interaction, finite reductions, natural-exp softmax,
+online `m/l/acc` attention state over K blocks greater than 16, transposed V
+layout, weighted reduction, scalar result stores, repeated launches, and
+`active_qpus=12`. The full VC4Value mixed hardware suite passes with strict
+CPU oracles, sentinels, nonzero output hashes, and checked claims. Scalar
+global loads, non-transposed V gather, K=0, QK score generation, dot/contract,
+full attention, and FlashAttention remain staged.
 
 Accepted Phase 17 scope is intentionally narrow:
 

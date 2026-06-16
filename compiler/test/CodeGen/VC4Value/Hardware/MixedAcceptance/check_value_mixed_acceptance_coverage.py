@@ -55,6 +55,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_f16_storage_gemv_axes_mask_cf_reduction_vc4value",
     "mixed_value_sfu_softmax_axes_mask_cf_f16_storage_vc4value",
     "mixed_value_attention_apply_v0_axes_mask_cf_f16_storage_vc4value",
+    "mixed_value_online_attention_apply_axes_mask_cf_f16_storage_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -132,6 +133,10 @@ REQUIRED_FEATURES = {
     "value_no_scalar_global_load",
     "value_no_nontransposed_v_gather",
     "value_no_qk_score_generation",
+    "value_loop_carried_f32_state",
+    "value_online_softmax_state",
+    "value_online_attention_apply",
+    "value_k_gt_16",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -272,13 +277,17 @@ def validate_fixture(repo_root, fixture):
         "value_approx_sfu_exp": "math.exp",
         "value_approx_sfu_recip_div": "arith.divf",
         "value_scalar_to_vector_f32_broadcast": "vector.broadcast",
-        "value_softmax_v0": "vc4value.softmax_v0 = \"one_block_active_1_to_16\"",
+        "value_softmax_v0": "math.exp",
         "value_approx_math_policy": "vc4value.math_policy = \"approx_sfu\"",
         "value_softmax_uses_natural_exp": "math.exp",
-        "value_attention_apply_v0": "vc4value.attention_apply_v0 = \"precomputed_transposed_v_active_1_to_16\"",
-        "value_transposed_v_layout": "vector.transfer_read %vt[%d, %c0]",
-        "value_weighted_sum_reduction": "%weighted = arith.mulf %probs",
-        "value_scalar_result_store": "memref.store %acc, %out[%oidx]",
+        "value_attention_apply_v0": "vector.transfer_read %vt[%d,",
+        "value_transposed_v_layout": "vector.transfer_read %vt[%d,",
+        "value_weighted_sum_reduction": "%weighted = arith.mulf",
+        "value_scalar_result_store": "memref.store",
+        "value_loop_carried_f32_state": "iter_args(%m_iter = %m0, %l_iter = %l0, %acc_iter = %acc0)",
+        "value_online_softmax_state": "arith.maxnumf %m_iter",
+        "value_online_attention_apply": "scf.for %start = %c0 to %k step %c16",
+        "value_k_gt_16": "scf.for %start = %c0 to %k step %c16",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -361,7 +370,11 @@ def validate_fixture(repo_root, fixture):
         for marker in forbidden:
             if marker in mlir.lower():
                 fail(f"{name} claims no full attention but input uses {marker}")
-        if "attention" in mlir.lower() and "vc4value.attention_apply_v0" not in mlir:
+        if (
+            "attention" in mlir.lower()
+            and "vc4value.attention_apply_v0" not in mlir
+            and "online_attention" not in mlir.lower()
+        ):
             fail(f"{name} mentions attention without the locked attention_apply_v0 attribute")
     if "value_no_scalar_global_load" in tags and "memref.load" in mlir:
         fail(f"{name} claims no scalar global load but input uses memref.load")
@@ -369,7 +382,7 @@ def validate_fixture(repo_root, fixture):
         for marker in ("vector.gather", "vector.scatter", "offs *", "strided<[?, ?]"):
             if marker in mlir:
                 fail(f"{name} claims no non-transposed gather but input uses {marker}")
-        if "vector.transfer_read %vt[%d, %c0]" not in mlir:
+        if "vector.transfer_read %vt[%d, %c0]" not in mlir and "vector.transfer_read %vt[%d, %start]" not in mlir:
             fail(f"{name} claims transposed V/no gather without row-contiguous Vt load")
     if "value_no_qk_score_generation" in tags:
         for marker in ("qk_score", "score_generation", "query_key", "vector.contract", "tt.dot", "tl.dot"):
@@ -386,7 +399,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase16_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase17_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -458,7 +471,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14", "phase15", "phase16"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11", "phase12", "phase13", "phase14", "phase15", "phase16", "phase17"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 
