@@ -82,6 +82,7 @@ constexpr llvm::StringLiteral kDirectionAttr("vc4value.direction");
 constexpr llvm::StringLiteral kScalarRoleAttr("vc4value.scalar_role");
 constexpr llvm::StringLiteral kFPDomainAttr("vc4value.fp_domain");
 constexpr llvm::StringLiteral kReductionPolicyAttr("vc4value.reduction_policy");
+constexpr llvm::StringLiteral kMaxPolicyAttr("vc4value.max_policy");
 constexpr llvm::StringLiteral kI32MulPolicyAttr("vc4value.i32_mul_policy");
 constexpr llvm::StringLiteral kF16StoragePolicyAttr("vc4value.f16_storage_policy");
 constexpr llvm::StringLiteral kShapeArgsAttr("vc4value.shape_args");
@@ -1075,45 +1076,75 @@ private:
     return {};
   }
 
-  Value lookupBranchOperand(Operation *op, Value value) {
+  Value lookupBranchOperand(Operation *op, Value value, Type targetType) {
     if (isVector16I1(value.getType()))
       return lookupPredicate(op, value);
     if (Value fragment = lookupReductionFragment(value))
       return fragment;
-    return lookupValue(op, value);
+    Value scalar = lookupValue(op, value);
+    if (!scalar)
+      return {};
+    if (targetType == getVector16F32(ctx) && value.getType().isF32() &&
+        scalar.getType().isF32())
+      return createSplat(builder, op->getLoc(), scalar, targetType);
+    return scalar;
   }
 
-  bool isReductionFragmentValue(Value value, DenseSet<Value> &visiting) {
-    if (isDotCompositeReductionValue(value))
+  bool isF32FragmentValue(Value value, DenseSet<Value> &visiting) {
+    if (!value.getType().isF32())
+      return false;
+    if (!visiting.insert(value).second)
       return true;
     if (auto arg = llvm::dyn_cast<BlockArgument>(value))
       return isReductionFragmentBlockArgument(arg, visiting);
 
     Operation *def = value.getDefiningOp();
-    if (!def || def->getName().getStringRef() != "arith.addf" ||
-        def->getNumOperands() != 2 ||
-        def->getNumResults() != 1 || !def->getResult(0).getType().isF32())
+    if (!def)
       return false;
 
-    Value lhs = def->getOperand(0);
-    Value rhs = def->getOperand(1);
-    if (isNonEntryBlockArgument(lhs) || isNonEntryBlockArgument(rhs))
+    if (llvm::isa<vector::ReductionOp>(def) || isDotCompositeReductionValue(value) ||
+        llvm::isa<math::ExpOp, math::LogOp, math::RsqrtOp, math::SqrtOp>(def) ||
+        llvm::isa<arith::DivFOp>(def))
+      return true;
+
+    StringRef name = def->getName().getStringRef();
+    if (name != "arith.addf" && name != "arith.subf" &&
+        name != "arith.mulf" && name != "arith.maxnumf" &&
+        name != "arith.maximumf")
       return false;
-    return isReductionFragmentValue(lhs, visiting) ||
-           isReductionFragmentValue(rhs, visiting);
+    if (def->getNumOperands() != 2 || def->getNumResults() != 1 ||
+        !def->getResult(0).getType().isF32())
+      return false;
+
+    return isF32FragmentValue(def->getOperand(0), visiting) ||
+           isF32FragmentValue(def->getOperand(1), visiting);
   }
 
-  bool isReductionFragmentBlockArgument(BlockArgument arg,
-                                        DenseSet<Value> &visiting) {
+  bool isReductionFragmentValue(Value value, DenseSet<Value> &visiting) {
+    return isF32FragmentValue(value, visiting);
+  }
+
+  bool isF32FragmentBlockArgument(BlockArgument arg,
+                                  DenseSet<Value> &visiting) {
     if (!arg || !arg.getOwner() || arg.getOwner()->isEntryBlock())
       return false;
     Value asValue = arg;
     if (!visiting.insert(asValue).second)
-      return false;
+      return true;
 
     bool sawIncoming = false;
+    bool sawFragmentIncoming = false;
     unsigned index = arg.getArgNumber();
     Block *block = arg.getOwner();
+    auto acceptsIncoming = [&](Value incoming) {
+      if (!incoming.getType().isF32())
+        return false;
+      if (incoming.getDefiningOp<arith::ConstantOp>())
+        return true;
+      bool fragment = isReductionFragmentValue(incoming, visiting);
+      sawFragmentIncoming |= fragment;
+      return fragment;
+    };
     for (Block *predecessor : block->getPredecessors()) {
       Operation *terminator = predecessor->getTerminator();
       if (auto branch = llvm::dyn_cast<cf::BranchOp>(terminator)) {
@@ -1121,7 +1152,7 @@ private:
           continue;
         OperandRange operands = branch.getDestOperands();
         if (index >= operands.size() ||
-            !isReductionFragmentValue(operands[index], visiting))
+            !acceptsIncoming(operands[index]))
           return false;
         sawIncoming = true;
         continue;
@@ -1131,14 +1162,14 @@ private:
         if (condBranch.getTrueDest() == block) {
           OperandRange operands = condBranch.getTrueDestOperands();
           if (index >= operands.size() ||
-              !isReductionFragmentValue(operands[index], visiting))
+              !acceptsIncoming(operands[index]))
             return false;
           matched = true;
         }
         if (condBranch.getFalseDest() == block) {
           OperandRange operands = condBranch.getFalseDestOperands();
           if (index >= operands.size() ||
-              !isReductionFragmentValue(operands[index], visiting))
+              !acceptsIncoming(operands[index]))
             return false;
           matched = true;
         }
@@ -1147,7 +1178,12 @@ private:
       }
       return false;
     }
-    return sawIncoming;
+    return sawIncoming && sawFragmentIncoming;
+  }
+
+  bool isReductionFragmentBlockArgument(BlockArgument arg,
+                                        DenseSet<Value> &visiting) {
+    return isF32FragmentBlockArgument(arg, visiting);
   }
 
   LogicalResult lowerBlockBody(Block &sourceBlock, Block &targetBlock) {
@@ -1204,7 +1240,7 @@ private:
 
     for (auto [operand, targetArg] :
          llvm::zip(operands, targetSuccessor->getArguments())) {
-      Value mapped = lookupBranchOperand(op, operand);
+      Value mapped = lookupBranchOperand(op, operand, targetArg.getType());
       if (!mapped)
         return failure();
       if (mapped.getType() != targetArg.getType()) {
@@ -1389,6 +1425,8 @@ private:
              << "fp-to-int numeric cast is staged. READY_FOR_TRITON remains NO";
     if (llvm::isa<arith::DivFOp>(op))
       return lowerApproxDivF(op);
+    if (name == "arith.maxnumf" || name == "arith.maximumf")
+      return lowerScalarF32Max(op);
     if (llvm::isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::ShLIOp,
                   arith::AddFOp, arith::SubFOp, arith::MulFOp>(op))
       return lowerBinaryArith(op);
@@ -1862,6 +1900,38 @@ private:
     return success();
   }
 
+  LogicalResult lowerScalarF32Max(Operation *op) {
+    if (op->getNumOperands() != 2 || op->getNumResults() != 1 ||
+        !op->getResult(0).getType().isF32())
+      return emitStagedDiagnostic(op, "scalar f32 max shape");
+    if (!hasFiniteMaxPolicy(op))
+      return op->emitOpError()
+             << "scalar f32 max requires vc4value.fp_domain = \"finite\" "
+             << "and vc4value.max_policy = \"finite\". READY_FOR_TRITON "
+             << "remains NO";
+
+    FailureOr<Value> lhs = getF32FragmentOperand(op, op->getOperand(0));
+    FailureOr<Value> rhs = getF32FragmentOperand(op, op->getOperand(1));
+    if (failed(lhs) || failed(rhs))
+      return failure();
+
+    Value pred = createOpWithResult(
+        builder, op->getLoc(), kFragmentCmpOpName, {*lhs, *rhs},
+        {builder.getNamedAttr("predicate",
+                              mlir::vc4kernel::CmpPredicateAttr::get(
+                                  ctx, mlir::vc4kernel::CmpPredicate::ogt)),
+         builder.getNamedAttr("fp_policy",
+                              mlir::vc4kernel::FPCmpPolicyAttr::get(
+                                  ctx,
+                                  mlir::vc4kernel::FPCmpPolicy::finite_only))},
+        getPred16(ctx));
+    Value selected =
+        createFragmentSelect(builder, op->getLoc(), pred, *lhs, *rhs,
+                             getVector16F32(ctx));
+    mapF32FragmentResult(op->getResult(0), selected);
+    return success();
+  }
+
   LogicalResult lowerBinaryArith(Operation *op) {
     if (op->getNumOperands() != 2 || op->getNumResults() != 1)
       return emitPhase5Diagnostic(op, "binary arith shape");
@@ -1913,12 +1983,51 @@ private:
       }
     }
 
-    Value lhs = lookupValue(op, op->getOperand(0));
-    Value rhs = lookupValue(op, op->getOperand(1));
-    if (!lhs || !rhs)
-      return failure();
-
     if (resultType.isSignlessInteger(32) || resultType.isF32()) {
+      if (resultType.isF32()) {
+        DenseSet<Value> lhsVisiting;
+        DenseSet<Value> rhsVisiting;
+        bool fragmentCarried =
+            lookupReductionFragment(op->getOperand(0)) ||
+            lookupReductionFragment(op->getOperand(1)) ||
+            isF32FragmentValue(op->getOperand(0), lhsVisiting) ||
+            isF32FragmentValue(op->getOperand(1), rhsVisiting);
+        if (fragmentCarried) {
+          FailureOr<Value> lhs = getF32FragmentOperand(op, op->getOperand(0));
+          FailureOr<Value> rhs = getF32FragmentOperand(op, op->getOperand(1));
+          if (failed(lhs) || failed(rhs))
+            return failure();
+          if (name == "arith.addf")
+            mapF32FragmentResult(
+                op->getResult(0),
+                createAddPipe(builder, op->getLoc(), {*lhs, *rhs},
+                              mlir::vc4kernel::AddALUOpcode::fadd,
+                              getVector16F32(ctx)));
+          else if (name == "arith.subf")
+            mapF32FragmentResult(
+                op->getResult(0),
+                createAddPipe(builder, op->getLoc(), {*lhs, *rhs},
+                              mlir::vc4kernel::AddALUOpcode::fsub,
+                              getVector16F32(ctx)));
+          else if (name == "arith.mulf")
+            mapF32FragmentResult(
+                op->getResult(0),
+                createMulPipe(builder, op->getLoc(), {*lhs, *rhs},
+                              mlir::vc4kernel::MulALUOpcode::fmul,
+                              getVector16F32(ctx)));
+          else
+            return emitPhase5Diagnostic(
+                op, Twine("unsupported fragment-carried scalar f32 arith op '") +
+                        name + "'");
+          return success();
+        }
+      }
+
+      Value lhs = lookupValue(op, op->getOperand(0));
+      Value rhs = lookupValue(op, op->getOperand(1));
+      if (!lhs || !rhs)
+        return failure();
+
       if (name == "arith.addi")
         state.values[op->getResult(0)] = builder.create<arith::AddIOp>(op->getLoc(), lhs, rhs);
       else if (name == "arith.subi")
@@ -1937,6 +2046,11 @@ private:
         return emitPhase5Diagnostic(op, Twine("unsupported scalar arith op '") + name + "'");
       return success();
     }
+
+    Value lhs = lookupValue(op, op->getOperand(0));
+    Value rhs = lookupValue(op, op->getOperand(1));
+    if (!lhs || !rhs)
+      return failure();
 
     if (isVector16I32(sourceType) || isVector16Index(sourceType)) {
       if (name == "arith.addi")
@@ -2126,6 +2240,13 @@ private:
            (hasStringAttr(op, kReductionPolicyAttr, "finite_tree") ||
             hasStringAttr(func.getOperation(), kReductionPolicyAttr,
                           "finite_tree"));
+  }
+
+  bool hasFiniteMaxPolicy(Operation *op) {
+    return (hasStringAttr(op, kFPDomainAttr, "finite") ||
+            hasStringAttr(func.getOperation(), kFPDomainAttr, "finite")) &&
+           (hasStringAttr(op, kMaxPolicyAttr, "finite") ||
+            hasStringAttr(func.getOperation(), kMaxPolicyAttr, "finite"));
   }
 
   static std::optional<mlir::vc4kernel::ReduceKind>

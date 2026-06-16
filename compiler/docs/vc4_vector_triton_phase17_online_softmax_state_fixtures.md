@@ -5,6 +5,10 @@ REAL_TTIR_ONLINE_SOFTMAX_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
 VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
 VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
+VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
+VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
+LOOP_CARRIED_F32_STATE_STATIC=PASS
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -14,6 +18,7 @@ SCALAR_GLOBAL_LOAD_STAGED=YES
 K_ZERO_ONLINE_SOFTMAX_STAGED=YES
 READY_FOR_PHASE17_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 17 Online Softmax State Fixtures
@@ -27,7 +32,13 @@ Phase 17.3 locks the matching value-surface contract. Online softmax state is
 accepted as a structural standard value IR composite with loop-carried scalar
 f32 `m/l/acc` state; no `vc4value.online_softmax` or `vc4value.attention`
 operation is introduced. No Phase 17 metadata attribute is introduced.
-Executable lowering and static proof are deferred to Phase 17.4.
+
+Phase 17.4 statically proves the value composite through
+`value -> vc4kernel -> ssavc4 -> scheduled vc4`. The proof composes the locked
+control-flow, dynamic row-slice memory, scalar-store, reduction, f16-storage,
+and natural-exp SFU planners, with a narrow finite scalar f32 max helper for
+the online recurrence. It does not run hardware and does not broaden the
+accepted TTIR scope.
 
 Accepted Phase 17 scope is intentionally narrow:
 

@@ -18,6 +18,10 @@ VALUE_APPROX_MATH_SFU_CONTRACT=LOCKED
 VALUE_ATTENTION_APPLY_V0_SURFACE=ACCEPTED
 VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
 VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
+VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
+VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
+LOOP_CARRIED_F32_STATE_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_STATIC=PASS
 VALUE_ATTENTION_APPLY_V0_COMPOSITE=YES
 VALUE_ATTENTION_APPLY_V0_STATIC_PLANNED=YES
@@ -154,6 +158,7 @@ READY_FOR_PHASE15_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE16_4_VALUE_ATTENTION_APPLY_STATIC=YES
 READY_FOR_PHASE16_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE12_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -285,6 +290,10 @@ Staged/static negative coverage:
 PHASE17_VALUE_ONLINE_SOFTMAX_STATE_CONTRACT=LOCKED
 VALUE_ONLINE_SOFTMAX_STATE_SURFACE=ACCEPTED
 VALUE_ONLINE_ATTENTION_APPLY_SURFACE=ACCEPTED
+VALUE_ONLINE_SOFTMAX_STATE_STATIC=PASS
+VALUE_ONLINE_ATTENTION_APPLY_STATIC=PASS
+VALUE_ONLINE_SOFTMAX_COMPOSITE=YES
+LOOP_CARRIED_F32_STATE_STATIC=PASS
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -292,12 +301,14 @@ K_ZERO_STAGED=YES
 SCALAR_GLOBAL_LOAD_STAGED=YES
 NONTRANSPOSED_V_GATHER_STAGED=YES
 READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
-Phase 17.3 is a planning and verifier contract only. Phase 17.4 must prove
-static value-to-VC4Kernel lowering for the accepted structural value forms
-below by composing already locked control-flow, row-slice memory, scalar-store,
-reduction, f16-storage, and natural-exp SFU planning.
+Phase 17.3 was a planning and verifier contract only. Phase 17.4 proves static
+value-to-VC4Kernel lowering for the accepted structural value forms below by
+composing already locked control-flow, row-slice memory, scalar-store,
+reduction, f16-storage, and natural-exp SFU planning, plus a narrow central
+scalar finite f32 max helper needed by the online recurrence.
 
 Accepted planned coverage:
 
@@ -325,6 +336,19 @@ Staged/static negative coverage:
 - `tl.dot`, `tt.dot`, `vector.contract`, block pointers, tensor descriptors,
   cooperative/VPM tiling, full attention, and FlashAttention remain out of
   scope.
+
+Phase 17.4 static proof covers:
+
+- online softmax normalizer f32;
+- online precomputed-score attention-apply f32;
+- scalar-argument scaled online attention-apply f32;
+- f16 score/Vt storage inputs promoted to f32 compute;
+- loop-carried scalar f32 online state represented in VC4Kernel as f32
+  fragments across CFG block arguments;
+- lowering through `value -> vc4kernel -> ssavc4 -> scheduled vc4` for
+  static CodeGen/VC4Value candidates.
+
+No hardware is run in Phase 17.4. Hardware isolation is Phase 17.5.
 
 ## 2. Planning boundary
 
