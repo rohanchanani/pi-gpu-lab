@@ -1,0 +1,165 @@
+{
+  "manifest_schema_version": 1,
+  "phase": "Phase17.2",
+  "feature": "VALUE_AND_TTIR_ONLINE_MULTIBLOCK_SOFTMAX_STATE",
+  "ready_for_triton": "NO",
+  "triton_version": "3.7.0",
+  "generator": {
+    "wrapper": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+    "target": "cuda:80:32",
+    "num_warps": 1,
+    "num_stages": 3
+  },
+  "global_contract": {
+    "block_size": 16,
+    "hardware_k_range": "1..64",
+    "precomputed_scores_only": true,
+    "transposed_v_layout_required": true,
+    "natural_exp_sfu_policy_caveat": "math.exp is natural exp in TTIR; VC4 execution is expected to use explicit approximate SFU policy.",
+    "approximate_sfu_tolerance_caveat": "Hardware acceptance must use approximate-SFU-aware tolerances when Phase 17 reaches hardware proof.",
+    "excluded_from_accepted_fixtures": [
+      "scalar_global_load",
+      "nontransposed_v_gather",
+      "tl.dot",
+      "tt.dot",
+      "vector.contract",
+      "block_pointers",
+      "atomics",
+      "qk_score_generation",
+      "full_attention",
+      "flashattention"
+    ]
+  },
+  "fixtures": [
+    {
+      "name": "ttir_online_softmax_normalizer_f32_b16",
+      "classification": "ACCEPTED_LOWERABLE",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_softmax_normalizer_f32_b16.py",
+      "source_sha256": "8ed6e4d7cc7a42094c0d88afe2cf64b3392598e56e5ef1dc8fa84d8955006062",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_softmax_normalizer_f32_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_softmax_normalizer_f32_b16.py ttir_online_softmax_normalizer_f32_b16_kernel '*fp32,*fp32,i32,i32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_softmax_normalizer_f32_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "expected_feature_claims": [
+        "tl.range over runtime K in blocks of 16",
+        "loop-carried scalar f32 m/l state",
+        "natural-exp online softmax denominator recurrence",
+        "masked precomputed score loads",
+        "scalar f32 output store"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_apply_v0_f32_b16",
+      "classification": "ACCEPTED_LOWERABLE",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_f32_b16.py",
+      "source_sha256": "5dfd0a67dd9012799b799a29adfcadcf5fc8d32f854e30648d041a774b8fe9d8",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_f32_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_f32_b16.py ttir_online_attention_apply_v0_f32_b16_kernel '*fp32,*fp32,*fp32,i32,i32,i32,i32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_f32_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,i32,16",
+      "expected_feature_claims": [
+        "precomputed scores only",
+        "transposed V lane-contiguous load",
+        "loop-carried scalar f32 m/l/acc state",
+        "natural-exp online attention-apply recurrence",
+        "scalar f32 output store"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_apply_v0_scaled_f32_b16",
+      "classification": "ACCEPTED_LOWERABLE",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_scaled_f32_b16.py",
+      "source_sha256": "cd8f46a9ee4aa09a488de03f1685610efbb5a62319e2eff58319acdc6fa394c3",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_scaled_f32_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_scaled_f32_b16.py ttir_online_attention_apply_v0_scaled_f32_b16_kernel '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_scaled_f32_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16",
+      "expected_feature_claims": [
+        "scalar f32 scale argument",
+        "tt.splat scale broadcast",
+        "precomputed scores only",
+        "transposed V lane-contiguous load",
+        "loop-carried scalar f32 m/l/acc state"
+      ]
+    },
+    {
+      "name": "mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16",
+      "classification": "ACCEPTED_LOWERABLE",
+      "source": "examples/triton/phase17_online_softmax_state/sources/mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16.py",
+      "source_sha256": "e349527e7847b4ca22bf54e0051a4e267ffe4f15e471a988a8da9db50e79021a",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16.py mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16_kernel '*fp16,*fp16,*fp32,*fp32,i32,i32,i32,i32,fp32,16' examples/triton/phase17_online_softmax_state/generated/mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16.ttir.mlir",
+      "signature": "*fp16,*fp16,*fp32,*fp32,i32,i32,i32,i32,fp32,16",
+      "expected_feature_claims": [
+        "multi-axis program ids",
+        "structured control-flow guard",
+        "masked f16 storage loads promoted to f32 compute",
+        "scalar scale argument",
+        "loop-carried scalar f32 m/l/acc state",
+        "transposed V lane-contiguous load"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_nontransposed_v_reject_b16",
+      "classification": "STAGED_LANE_VARYING_STRIDE",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_nontransposed_v_reject_b16.py",
+      "source_sha256": "d40c8a056b5b45a4154341979f1820fd01df7f6071372d9d18248acc1a22a096",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_nontransposed_v_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_nontransposed_v_reject_b16.py ttir_online_attention_nontransposed_v_reject_b16_kernel '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_nontransposed_v_reject_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16",
+      "expected_feature_claims": [
+        "non-transposed V pointer contains lane-varying offs * LDV stride",
+        "requires future gather or layout support"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_scalar_scale_load_reject_b16",
+      "classification": "STAGED_SCALAR_TT_LOAD",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_scalar_scale_load_reject_b16.py",
+      "source_sha256": "df58ca5af4960ad78c3479a5d7be8a8b80e41e447d809341afa3c711fba843fb",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_scalar_scale_load_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_scalar_scale_load_reject_b16.py ttir_online_attention_scalar_scale_load_reject_b16_kernel '*fp32,*fp32,*fp32,*fp32,i32,i32,i32,i32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_scalar_scale_load_reject_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,*fp32,i32,i32,i32,i32,16",
+      "expected_feature_claims": [
+        "scalar tt.load of scale pointer before loop",
+        "scalar global load remains staged"
+      ]
+    },
+    {
+      "name": "ttir_online_softmax_k_zero_reject_b16",
+      "classification": "STAGED_K_ZERO_ONLINE_SOFTMAX",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_softmax_k_zero_reject_b16.py",
+      "source_sha256": "c7eae08dce93774541ba79cbf398bf483c9fcb5a69b30cc9b32bd50456009611",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_softmax_k_zero_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_softmax_k_zero_reject_b16.py ttir_online_softmax_k_zero_reject_b16_kernel '*fp32,*fp32,*fp32,i32,i32,i32,fp32,0,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_softmax_k_zero_reject_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,fp32,0,16",
+      "expected_feature_claims": [
+        "static K zero inventory form",
+        "requires future explicit finite no-op or deterministic reject contract"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_qk_score_generation_reject_b16",
+      "classification": "STAGED_QK_SCORE_GENERATION",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_qk_score_generation_reject_b16.py",
+      "source_sha256": "421be965ae46b58e14ae3d9ea30346c59e1afff4146f2b39017fd7456cc5513f",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_qk_score_generation_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_qk_score_generation_reject_b16.py ttir_online_attention_qk_score_generation_reject_b16_kernel '*fp32,*fp32,*fp32,*fp32,i32,i32,i32,i32,i32,fp32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_qk_score_generation_reject_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,*fp32,i32,i32,i32,i32,i32,fp32,16",
+      "expected_feature_claims": [
+        "generated QK score from Q and KT loads",
+        "QK score generation remains outside Phase 17 accepted scope"
+      ]
+    },
+    {
+      "name": "ttir_online_attention_tl_dot_reject_b16",
+      "classification": "STAGED_TT_DOT",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_tl_dot_reject_b16.py",
+      "source_sha256": "bfdd3d279fbe4223454c2748ccfc68db8e42d1e659671491a174da603fac35ee",
+      "generated_ttir": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_tl_dot_reject_b16.ttir.mlir",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_tl_dot_reject_b16.py ttir_online_attention_tl_dot_reject_b16_kernel '*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16' examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_tl_dot_reject_b16.ttir.mlir",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,i32,fp32,16",
+      "expected_feature_claims": [
+        "explicit tl.dot emitted as tt.dot",
+        "dot and vector.contract remain outside Phase 17 accepted scope"
+      ]
+    }
+  ]
+}
