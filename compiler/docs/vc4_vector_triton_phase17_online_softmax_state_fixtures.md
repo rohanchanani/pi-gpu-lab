@@ -17,6 +17,11 @@ VALUE_ONLINE_ATTENTION_APPLY_F16_STORAGE_HARDWARE=NOT_REQUIRED_FOR_PHASE17_CORE
 VALUE_ONLINE_SOFTMAX_TOLERANCE_POLICY=LOCKED
 VALUE_ONLINE_SOFTMAX_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
+TTIR_ONLINE_SOFTMAX_HARDWARE_ISOLATION=PASS
+TTIR_ONLINE_ATTENTION_APPLY_HARDWARE_ISOLATION=PASS
+TTIR_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
+TTIR_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
+TTIR_ONLINE_SOFTMAX_TTIR_HARNESS_BLOCK_X=16
 PRECOMPUTED_SCORES_ONLY=YES
 TRANSPOSED_V_LAYOUT_REQUIRED=YES
 K_RANGE_ACCEPTED=1_TO_64
@@ -29,6 +34,8 @@ READY_FOR_PHASE17_4_VALUE_ONLINE_SOFTMAX_STATIC=YES
 READY_FOR_PHASE17_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE17_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE17_7_TTIR_IMPORTER_ONLINE_SOFTMAX_STATIC=YES
+READY_FOR_PHASE17_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_PHASE17_9_TTIR_MIXED_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 17 Online Softmax State Fixtures
@@ -79,6 +86,17 @@ f32 scale arguments, and scalar output stores. The accepted snapshots then pass
 the full static pipeline through value verification, `vc4kernel`, `ssavc4`, and
 scheduled `vc4`. Scalar `tt.load`, non-transposed V gather/lane-varying stride,
 K=0 without guard, QK score generation, and `tt.dot` remain staged.
+
+Phase 17.8 proves the accepted controlled real TTIR online softmax and online
+attention-apply snapshots on real VC4 hardware. The TTIR hardware fixtures use
+the source-controlled snapshots, the C++ TTIR importer, `active_qpus=12`, and
+TTIR harness geometry with `block.x=16` lanes. The proof covers the normalizer
+`m/l` state, f32 attention `m/l/acc` state, scaled f32 attention, K values
+greater than one block, precomputed scores, transposed V layout, natural-exp
+recurrent softmax, weighted sum reductions, scalar result stores, strict
+sentinels, nonzero output hashes, and checked expected JSON. Staged scalar
+load, non-transposed V, K=0, QK, dot, block-pointer, and cooperative/VPM
+snapshots are not hardware-run acceptance fixtures.
 
 Accepted Phase 17 scope is intentionally narrow:
 
@@ -176,6 +194,12 @@ TTIR_SCALAR_GLOBAL_LOAD_REJECT=PASS
 TTIR_QK_SCORE_GENERATION_REJECT=PASS
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE17_8_TTIR_HARDWARE_ISOLATION=YES
+TTIR_ONLINE_SOFTMAX_HARDWARE_ISOLATION=PASS
+TTIR_ONLINE_ATTENTION_APPLY_HARDWARE_ISOLATION=PASS
+TTIR_ONLINE_ATTENTION_APPLY_F32_HARDWARE=PASS
+TTIR_ONLINE_ATTENTION_APPLY_SCALED_HARDWARE=PASS
+TTIR_ONLINE_SOFTMAX_TTIR_HARNESS_BLOCK_X=16
+READY_FOR_PHASE17_9_TTIR_MIXED_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
 
 `READY_FOR_TRITON` remains `NO`.

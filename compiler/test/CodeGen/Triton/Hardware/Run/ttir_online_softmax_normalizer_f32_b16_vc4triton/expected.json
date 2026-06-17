@@ -1,0 +1,35 @@
+{
+  "name": "ttir_online_softmax_normalizer_f32_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 120,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "block_x": 16,
+    "max_rows": 7,
+    "max_k": 64,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 120,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_online_softmax_state": 1,
+    "saw_ttir_loop_carried_m_l_state": 1,
+    "saw_ttir_k_gt_16": 1,
+    "saw_softmax_uses_natural_exp": 1,
+    "saw_ttir_finite_f32_max_reduction": 1,
+    "saw_ttir_reduction_f32_finite_add": 1,
+    "saw_ttir_scalar_result_store": 1,
+    "saw_no_scalar_global_load": 1,
+    "saw_no_nontransposed_v_gather": 1,
+    "saw_no_qk_score_generation": 1,
+    "saw_no_full_attention": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.12,
+    "max_rel_diff": 0.025
+  }
+}

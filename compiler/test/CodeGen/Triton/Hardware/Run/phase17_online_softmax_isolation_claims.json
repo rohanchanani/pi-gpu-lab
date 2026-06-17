@@ -1,0 +1,110 @@
+{
+  "fixtures": [
+    {
+      "name": "ttir_online_softmax_normalizer_f32_b16_vc4triton",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_softmax_normalizer_f32_b16.py",
+      "snapshot": "examples/triton/phase17_online_softmax_state/generated/ttir_online_softmax_normalizer_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.func", "tt.load", "tt.store", "tt.reduce", "math.exp", "scf.for"],
+      "expected_result_fields": [
+        "saw_ttir_loop_carried_m_l_state",
+        "saw_ttir_finite_f32_max_reduction",
+        "saw_ttir_reduction_f32_finite_add"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "online_softmax_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "loop_carried_m_l_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "k_gt_16", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "natural_exp_recurrent_softmax", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "staged_scalar_load", "claim_kind": "PHASE_GUARD"},
+        {"claim": "staged_nontransposed_v", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_qk_dot_full_attention", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_online_attention_apply_v0_f32_b16_vc4triton",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_f32_b16.py",
+      "snapshot": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.func", "tt.load", "tt.store", "tt.reduce", "math.exp", "scf.for"],
+      "expected_result_fields": [
+        "saw_ttir_online_attention_apply",
+        "saw_ttir_loop_carried_m_l_acc_state",
+        "saw_ttir_precomputed_scores",
+        "saw_ttir_transposed_v_layout",
+        "saw_ttir_weighted_sum_reduction"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "online_softmax_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "online_attention_apply", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "loop_carried_m_l_acc_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "k_gt_16", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "precomputed_scores", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "transposed_v_layout", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "natural_exp_recurrent_softmax", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "weighted_sum_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "staged_scalar_load", "claim_kind": "PHASE_GUARD"},
+        {"claim": "staged_nontransposed_v", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_qk_dot_full_attention", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_online_attention_apply_v0_scaled_f32_b16_vc4triton",
+      "source": "examples/triton/phase17_online_softmax_state/sources/ttir_online_attention_apply_v0_scaled_f32_b16.py",
+      "snapshot": "examples/triton/phase17_online_softmax_state/generated/ttir_online_attention_apply_v0_scaled_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.func", "tt.load", "tt.store", "tt.reduce", "math.exp", "scf.for"],
+      "expected_result_fields": [
+        "saw_ttir_online_attention_apply",
+        "saw_ttir_attention_apply_scaled_scores",
+        "saw_scalar_scale_arg",
+        "saw_ttir_loop_carried_m_l_acc_state",
+        "saw_ttir_precomputed_scores",
+        "saw_ttir_transposed_v_layout",
+        "saw_ttir_weighted_sum_reduction"
+      ],
+      "claims": [
+        {"claim": "real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "online_softmax_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "online_attention_apply", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_scale_arg", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "loop_carried_m_l_acc_state", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "k_gt_16", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "precomputed_scores", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "transposed_v_layout", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "natural_exp_recurrent_softmax", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "weighted_sum_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_result_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "staged_scalar_load", "claim_kind": "PHASE_GUARD"},
+        {"claim": "staged_nontransposed_v", "claim_kind": "PHASE_GUARD"},
+        {"claim": "no_qk_dot_full_attention", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/OnlineSoftmax/invalid-ttir-online-attention-scalar-load.mlir",
+      "diagnostic": "scalar tt.load"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/OnlineSoftmax/invalid-ttir-online-attention-nontransposed-v-gather.mlir",
+      "diagnostic": "non-contiguous column slice pointer expression staged"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/OnlineSoftmax/invalid-ttir-online-softmax-k-zero.mlir",
+      "diagnostic": "sparse or unknown tt.load memory mask"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/OnlineSoftmax/invalid-ttir-online-attention-qk-score-generation.mlir",
+      "diagnostic": "QK score generation is staged"
+    },
+    {
+      "path": "compiler/test/Conversion/TritonToVC4Value/OnlineSoftmax/invalid-ttir-online-attention-tt-dot.mlir",
+      "diagnostic": "tt.dot / contract staged by body feature"
+    }
+  ]
+}

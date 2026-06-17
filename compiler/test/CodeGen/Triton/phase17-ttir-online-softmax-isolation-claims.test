@@ -1,0 +1,8 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/audit_phase17_online_softmax_isolation_claims.py" "%vc4_repo_root" | FileCheck %s
+
+# CHECK: TTIR_ONLINE_SOFTMAX_CLAIM_AUDIT=PASS
+# CHECK: fixtures=3
+# CHECK: static_negative=5
+# CHECK: ACTIVE_QPUS=12
+# CHECK: TTIR_HARNESS_BLOCK_X=16
+# CHECK: READY_FOR_TRITON=NO
