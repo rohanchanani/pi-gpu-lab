@@ -44,6 +44,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_f16_storage_gemv_axes_mask_cf_reduction_b16_vc4triton",
     "mixed_ttir_sfu_softmax_axes_mask_cf_f16_storage_b16_vc4triton",
     "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+    "mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -113,6 +114,10 @@ REQUIRED_FEATURES = {
     "approx_math_policy",
     "softmax_natural_exp",
     "ttir_attention_apply_v0",
+    "ttir_loop_carried_f32_state",
+    "ttir_online_softmax_state",
+    "ttir_online_attention_apply",
+    "ttir_k_gt_16",
     "ttir_precomputed_scores",
     "ttir_transposed_v_layout",
     "ttir_weighted_sum_reduction",
@@ -305,7 +310,11 @@ def validate_fixture(repo_root, fixture, lock_mode):
             and "!tt.ptr<f16>" in ttir_text
         )
         has_phase16_attention_stride = (
-            name == "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton"
+            name
+            in {
+                "mixed_ttir_attention_apply_v0_axes_mask_cf_f16_storage_b16_vc4triton",
+                "mixed_ttir_online_attention_apply_axes_mask_cf_f16_storage_b16_vc4triton",
+            }
             and "arith.muli %q, %LDS" in ttir_text
             and "arith.muli %d, %LDV" in ttir_text
             and "!tt.ptr<f16>" in ttir_text
@@ -370,6 +379,13 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_approx_sfu_recip_div but TTIR lacks arith.divf")
     if "ttir_finite_f32_max_reduction" in tags and "arith.maxnumf" not in ttir_text:
         fail(f"{name} claims ttir_finite_f32_max_reduction but TTIR lacks arith.maxnumf")
+    if "ttir_loop_carried_f32_state" in tags and (
+        "scf.for" not in ttir_text
+        or "iter_args" not in ttir_text
+        or "scf.yield" not in ttir_text
+        or "f32, f32, f32" not in ttir_text
+    ):
+        fail(f"{name} claims ttir_loop_carried_f32_state but TTIR lacks f32 loop-carried state")
     if "ttir_softmax_v0" in tags:
         for marker in ("arith.maxnumf", "math.exp", "arith.addf", "arith.divf", "tt.store"):
             if marker not in ttir_text:
@@ -378,16 +394,30 @@ def validate_fixture(repo_root, fixture, lock_mode):
         for marker in ("math.exp", "arith.divf", "arith.mulf", "tt.reduce", "tt.store"):
             if marker not in ttir_text:
                 fail(f"{name} claims ttir_attention_apply_v0 but TTIR lacks {marker}")
+    if "ttir_online_softmax_state" in tags:
+        for marker in ("scf.for", "iter_args", "arith.maxnumf", "math.exp", "scf.yield"):
+            if marker not in ttir_text:
+                fail(f"{name} claims ttir_online_softmax_state but TTIR lacks {marker}")
+    if "ttir_online_attention_apply" in tags:
+        for marker in ("scf.for", "tt.reduce", "arith.mulf %e_", "arith.divf", "tt.store"):
+            if marker not in ttir_text:
+                fail(f"{name} claims ttir_online_attention_apply but TTIR lacks {marker}")
+    if "ttir_k_gt_16" in tags:
+        harness_text = (repo_root / fixture["path"] / "candidate" / f"{name}_candidate_harness.c").read_text()
+        if "MAX_K 64u" not in harness_text or "17u" not in harness_text:
+            fail(f"{name} claims ttir_k_gt_16 but harness lacks K>16 cases")
     if "ttir_precomputed_scores" in tags and "!tt.ptr<f16>" not in ttir_text:
         fail(f"{name} claims ttir_precomputed_scores but TTIR lacks precomputed score pointer input")
-    if "ttir_transposed_v_layout" in tags and (
-        "arith.muli %d, %LDV" not in ttir_text or "tt.addptr %v_36, %offs" not in ttir_text
-    ):
-        fail(f"{name} claims ttir_transposed_v_layout but TTIR lacks Vt[d, offs] pointer form")
-    if "ttir_weighted_sum_reduction" in tags and (
-        "arith.mulf %probs" not in ttir_text or "tt.reduce" not in ttir_text or "arith.addf" not in ttir_text
-    ):
-        fail(f"{name} claims ttir_weighted_sum_reduction but TTIR lacks weighted add reduction")
+    if "ttir_transposed_v_layout" in tags:
+        has_one_block_vt = "tt.addptr %v_36, %offs" in ttir_text
+        has_online_vt = "tt.addptr %v_54, %offs_16" in ttir_text
+        if "arith.muli %d, %LDV" not in ttir_text or not (has_one_block_vt or has_online_vt):
+            fail(f"{name} claims ttir_transposed_v_layout but TTIR lacks Vt[d, offs] pointer form")
+    if "ttir_weighted_sum_reduction" in tags:
+        has_one_block_weight = "arith.mulf %probs" in ttir_text
+        has_online_weight = "arith.mulf %e_" in ttir_text
+        if not (has_one_block_weight or has_online_weight) or "tt.reduce" not in ttir_text or "arith.addf" not in ttir_text:
+            fail(f"{name} claims ttir_weighted_sum_reduction but TTIR lacks weighted add reduction")
     if "ttir_scalar_result_store" in tags and "tt.store" not in ttir_text:
         fail(f"{name} claims ttir_scalar_result_store but TTIR lacks scalar result store")
     if "no_scalar_global_load" in tags and re.search(r"tt\.load %[A-Za-z0-9_]+ : !tt\.ptr<", ttir_text):
@@ -419,6 +449,7 @@ def validate_manifest(repo_root, manifest, lock_mode):
         "vc4_triton_phase7_mixed_acceptance",
         "vc4_triton_phase15_mixed_acceptance",
         "vc4_triton_phase16_mixed_acceptance",
+        "vc4_triton_phase17_mixed_acceptance",
     }:
         fail("unexpected suite_name")
 
